@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import Try from '../Try';
+import Try from '../nextjs';
 
 // Mock Sentry SDK
 vi.mock('@sentry/nextjs', () => {
@@ -12,7 +12,12 @@ vi.mock('@sentry/nextjs', () => {
 
 const Sentry = await import('@sentry/nextjs');
 
+// Helper to silence console.error only when `throwingFunction` is executed
+const silenceConsoleError = () => vi.spyOn(console, 'error').mockImplementation(() => { });
+
 async function throwingFunction(_params: Record<string, unknown>): Promise<{ ok: boolean; }> {
+  // Prevent error logs for the intentional failure in this helper
+  silenceConsoleError();
   throw new Error('boom');
 }
 
@@ -32,9 +37,22 @@ class TestClass {
   }
 }
 
-describe('Try helper', () => {
+describe('Try', () => {
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should return default value', async () => {
+    const defaultVal = { value: 'fallback' };
+    const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
+
+    const result = await new Try(throwingFunction, params)
+      .default(defaultVal)
+      .value();
+
+    expect(result).toBe(defaultVal);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
 
   it('should return default value and report error', async () => {
@@ -43,31 +61,73 @@ describe('Try helper', () => {
 
     const result = await new Try(throwingFunction, params)
       .report('failed to get data')
-      .default(defaultVal);
+      .default(defaultVal)
+      .value();
 
     expect(result).toBe(defaultVal);
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
 
-  it('should rethrow error after reporting', async () => {
+  it('should rethrow error', async () => {
+    const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
+
+    const exec = new Try(throwingFunction, params)
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('boom');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it('should return undefined', async () => {
+    const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
+
+    const result = await new Try(throwingFunction, params)
+      .value();
+
+    expect(result).toBe(undefined);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it('should return the value', async () => {
+    const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
+
+    const result = await new Try(successfulFunction, params)
+      .value();
+
+    expect(result).toEqual({ ok: true, ...params });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error', async () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const exec = new Try(throwingFunction, params)
       .report('failed')
-      .rethrow()
       .unwrap();
 
-    await expect(exec).rejects.toThrow('boom');
+    await expect(exec).rejects.toThrow('failed');
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 
-  it('should send breadcrumbs when configured', async () => {
+  it('should throw the original error', async () => {
+    const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
+
+    const exec = new Try(throwingFunction, params)
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('boom');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('should send breadcrumbs', async () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     await new Try(throwingFunction, params)
-      .breadcrumbs(['parameterKey'])
-      .report('oops')
-      .default(null);
+      .breadcrumbs(['parameterKey']);
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({ data: { 'parameterKey': 'alpha' } })
@@ -93,13 +153,22 @@ describe('Try helper', () => {
 
   it('should add tags', async () => {
     const params = { parameterKey: 'alpha' };
-    const result = await new Try(successfulFunction, params)
+    const exec = new Try(throwingFunction, params)
+      .report('failed')
       .tag('name', 'value')
       .tag('test', 'true')
       .unwrap();
-    expect(result).toEqual({ ok: true, ...params });
+    await expect(exec).rejects.toThrow('failed');
     // captureException should not be called on success
-    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.captureException).toBeCalledWith(new Error('failed', {
+      cause: new Error('boom')
+    }), {
+      tags: {
+        library: '@power-rent/try-catch',
+        name: 'value',
+        test: 'true',
+      }
+    });
   });
 
   it('should returns the actual error', async () => {

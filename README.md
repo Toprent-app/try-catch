@@ -15,25 +15,26 @@ The `Try` class provides a fluent interface for handling async operations with a
 ### Basic Usage
 
 ```typescript
-import Try from '@power-rent/try-catch';
+import Try from '@power-rent/try-catch/nextjs';
 
 // Execute and get result (throws on error)
 const result = await new Try(asyncFunction, arg1, arg2).unwrap();
 
 // Execute with default value (never throws)
-const result = await new Try(asyncFunction, arg1, arg2).default('fallback');
+const result = await new Try(asyncFunction, arg1, arg2)
+  .default('fallback')
+  .value();
 
 // Execute and get error (returns Error or undefined)
 const error = await new Try(asyncFunction, arg1, arg2).error();
 
-// Re-throw errors after reporting to Sentry
+// Report to Sentry and let the error bubble up
 try {
   const result = await new Try(asyncFunction, arg1, arg2)
     .report('Failed to execute business logic')
-    .rethrow()
     .unwrap();
 } catch (error) {
-  // Handle the re-thrown error
+  // Handle the error
 }
 ```
 
@@ -46,7 +47,8 @@ const result = await new Try(processUser, { id: 123, name: 'John' })
   .report('Failed to process user')   // Custom error message
   .tag('operation', 'user-processing') // Add Sentry tag
   .tag('priority', 'high')            // Add another tag
-  .default(null);
+  .default(null)
+  .value();
 
 // Check for errors without throwing
 const error = await new Try(riskyOperation, data)
@@ -84,16 +86,16 @@ Record breadcrumbs for the provided parameter keys. Only works when the first ar
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
 
-#### `.rethrow(): Try<T, TArgs>`
-Configure to re-throw the exception after reporting to Sentry. Use with `.unwrap()`.
-
 ### Execution Methods
 
 #### `.unwrap(): Promise<Awaited<T>>`
 Execute the function and return the result. Throws the original error if one occurred.
 
-#### `.default<Return>(defaultValue: Return): Promise<Awaited<T> | Return>`
-Execute and return a default value when an exception occurs. Never throws.
+#### `.default<Return>(defaultValue: Return): Try<T, TArgs>`
+Set a default value that will be returned by `.value()` when an exception occurs.
+
+#### `.value(): Promise<Awaited<T> | Return | undefined>`
+Execute the function and return the result, the configured default value, or `undefined` if an error occurs.
 
 #### `.error(): Promise<Error | undefined>`
 Execute the function and return the error if one occurred, or `undefined` if successful.
@@ -107,7 +109,8 @@ Execute the function and return the error if one occurred, or `undefined` if suc
 const user = await new Try(fetchUser, userId)
   .report('Failed to fetch user')
   .breadcrumbs(['userId'])
-  .default(null);
+  .default(null)
+  .value();
 
 // Pattern 2: Check errors explicitly
 const error = await new Try(updateDatabase, data)
@@ -125,7 +128,6 @@ try {
   const result = await new Try(criticalOperation, params)
     .report('Critical operation failed')
     .tag('critical', 'true')
-    .rethrow()
     .unwrap();
 } catch (error) {
   // Handle critical failure
@@ -141,19 +143,18 @@ const result = await new Try(complexOperation, data)
   .tag('version', '2.0')
   .breadcrumbs(['transactionId', 'amount'])
   .report('Payment processing failed')
-  .default({ success: false });
+  .default({ success: false })
+  .value();
 ```
 
 ## Features
 
-- 🔗 **Fluent API** - Method chaining with immutable instances
 - 🚀 **Promise-like interface** - Can be awaited directly
 - 🔍 **Automatic Sentry integration** - Errors are automatically reported
 - 🍞 **Breadcrumb support** - Add context to error reports
 - 🏷️ **Tag support** - Add custom tags to Sentry reports
 - 🎯 **TypeScript support** - Full type safety
-- 🔄 **Flexible error handling** - Choose to ignore, use defaults, or re-throw
-- ⚡ **Declarative** - No side effects, immutable configuration
+- 🔄 **Flexible error handling** - Choose to ignore, use defaults, inspect errors, or let them bubble up
 
 ## Requirements
 
