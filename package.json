@@ -1,6 +1,6 @@
 {
   "name": "@power-rent/try-catch",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A TypeScript utility for simplified async error handling with Sentry integration",
   "main": "dist/nextjs/index.js",
   "module": "dist/nextjs/esm/index.js",
