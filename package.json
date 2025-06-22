@@ -1,0 +1,59 @@
+{
+  "name": "@power-rent/try-catch",
+  "version": "0.0.1",
+  "description": "A TypeScript utility for simplified async error handling with Sentry integration",
+  "main": "dist/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/esm/index.js"
+    }
+  },
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run test:run"
+  },
+  "keywords": [
+    "typescript",
+    "error-handling",
+    "async",
+    "sentry",
+    "try-catch",
+    "error-reporting"
+  ],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/power-rent/try-catch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/power-rent/try-catch/issues"
+  },
+  "homepage": "https://github.com/power-rent/try-catch#readme",
+  "dependencies": {
+    "@sentry/nextjs": "8.55.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19",
+    "@types/node": "^20.19.1",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
