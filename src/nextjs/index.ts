@@ -1,12 +1,4 @@
-const loadSentry = async () => {
-  try {
-    const sentry = await import('@sentry/nextjs');
-    return sentry;
-  } catch (error) {
-    console.warn('Missing peer dependency @sentry/nextjs. Please install it if you want error reporting to work');
-  }
-};
-const Sentry = await loadSentry();
+import * as Sentry from '@sentry/nextjs';
 
 /**
  * Configuration for Try execution
@@ -177,7 +169,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private async reportError(error: Error): Promise<void> {
     this.addBreadcrumbsIfConfigured();
 
-    Sentry?.captureException(this.createWrappedError(error), { tags: { ...this.config.tags, library: '@power-rent/try-catch' } });
+    Sentry.captureException(this.createWrappedError(error), { tags: { ...this.config.tags, library: '@power-rent/try-catch' } });
   }
 
   /**
@@ -194,7 +186,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     const breadcrumbData = this.extractBreadcrumbData(firstArg);
-    Sentry?.addBreadcrumb({ data: breadcrumbData });
+    Sentry.addBreadcrumb({ data: breadcrumbData });
   }
 
   /**
