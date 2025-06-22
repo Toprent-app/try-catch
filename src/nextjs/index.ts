@@ -1,4 +1,12 @@
-import * as Sentry from '@sentry/nextjs';
+const loadSentry = async () => {
+  try {
+    const sentry = await import('@sentry/nextjs');
+    return sentry;
+  } catch (error) {
+    console.warn('Missing peer dependency @sentry/nextjs. Please install it if you want error reporting to work');
+  }
+};
+const Sentry = await loadSentry();
 
 /**
  * Configuration for Try execution
@@ -7,6 +15,7 @@ interface TryConfig {
   readonly message?: string;
   readonly breadcrumbKeys?: readonly string[];
   readonly tags: Readonly<Record<string, string>>;
+  readonly defaultValue?: unknown;
 }
 
 /**
@@ -32,7 +41,9 @@ type TryResult<T> = {
 export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private readonly fn: (...args: TArgs) => T | Promise<T>;
   private readonly args: TArgs;
-  private readonly config: TryConfig;
+  private config: TryConfig;
+  private result?: TryResult<T>;
+  private state: 'pending' | 'executed';
 
   constructor(
     fn: (...args: TArgs) => T | Promise<T>,
@@ -41,24 +52,22 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
+    this.state = 'pending';
   }
 
   /**
    * Create a new Try instance with updated configuration
    */
-  private withConfig(newConfig: Partial<TryConfig>): Try<T, TArgs> {
-    const instance = Object.create(Try.prototype) as Try<T, TArgs>;
-    (instance as any).fn = this.fn;
-    (instance as any).args = this.args;
-    (instance as any).config = { ...this.config, ...newConfig };
-    return instance;
+  private setConfig(newConfig: Partial<TryConfig>): Try<T, TArgs> {
+    this.config = { ...this.config, ...newConfig };
+    return this;
   }
 
   /**
    * Attach a custom Sentry error message.
    */
   report(message: string): Try<T, TArgs> {
-    return this.withConfig({ message });
+    return this.setConfig({ message });
   }
 
   /**
@@ -66,34 +75,23 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Only works when the first argument is an object – useful for most cases.
    */
   breadcrumbs(keys: readonly string[]): Try<T, TArgs> {
-    return this.withConfig({ breadcrumbKeys: keys });
+    return this.setConfig({ breadcrumbKeys: keys });
   }
 
   /**
    * Add a tag for Sentry error reporting.
    */
   tag(name: string, value: string): Try<T, TArgs> {
-    return this.withConfig({
+    return this.setConfig({
       tags: { ...this.config.tags, [name]: value }
     });
   }
 
   /**
-   * Configure to re-throw the exception after reporting to Sentry.
-   * Returns this for chaining with .unwrap().
+   * Set default value
    */
-  rethrow(): this {
-    // This method exists for API compatibility and chaining
-    // The rethrow behavior is handled in unwrap()
-    return this;
-  }
-
-  /**
-   * Execute and return a default value when an exception occurs.
-   */
-  async default<Return>(defaultValue: Return): Promise<Awaited<T> | Return> {
-    const result = await this.execute();
-    return result.success ? result.value! : defaultValue;
+  default<Return>(defaultValue: Return): Try<T, TArgs> {
+    return this.setConfig({ defaultValue });
   }
 
   /**
@@ -103,10 +101,22 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     const result = await this.execute();
 
     if (!result.success) {
-      throw result.error!;
+      // Decide if we need to capture
+      const shouldCapture = this.config.message;
+
+      if (shouldCapture) {
+        await this.reportError(result.error);
+      }
+
+
+      // Throw a wrapped error with custom message when provided, otherwise re-throw original
+      if (this.config.message) {
+        throw new Error(this.config.message);
+      }
+      throw result.error;
     }
 
-    return result.value!;
+    return result.value;
   }
 
   /**
@@ -118,30 +128,56 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * Execute the function and return the value if successful, or undefined if there was an error.
+   */
+  async value(): Promise<Awaited<T> | undefined> {
+    const result = await this.execute();
+
+    if (result.success) {
+      return result.value;
+    }
+
+    // Add breadcrumbs when configured regardless of reporting strategy.
+    if (this.config.breadcrumbKeys?.length) {
+      await this.addBreadcrumbsIfConfigured();
+    }
+
+    // Report error only when the consumer has explicitly opted-in via `.report()`
+    if (this.config.message) {
+      await this.reportError(result.error);
+    }
+
+    // Return configured default when error occurs, otherwise undefined
+    return (this.config.defaultValue ?? undefined) as any;
+  }
+
+  /**
    * Execute the function and return a result object with success status, value, and error.
    */
   private async execute(): Promise<TryResult<T>> {
+    if (this.state === 'executed' && this.result) {
+      return this.result;
+    }
+
     try {
       const value = await this.fn(...this.args);
       return { success: true, value };
-    } catch (error) {
-      const capturedError = error as Error;
-      this.reportError(capturedError);
-      return { success: false, error: capturedError };
+    } catch (e) {
+      console.error(e);
+      const error = e as Error;
+      return { success: false, error };
+    } finally {
+      this.state = 'executed';
     }
   }
 
   /**
    * Report error to Sentry with configured context.
    */
-  private reportError(error: Error): void {
+  private async reportError(error: Error): Promise<void> {
     this.addBreadcrumbsIfConfigured();
 
-    const wrappedError = this.createWrappedError(error);
-    wrappedError.stack = error.stack;
-    const sentryTags = { ...this.config.tags, library: '@power-rent/try-catch' };
-
-    Sentry.captureException(wrappedError, { tags: sentryTags });
+    Sentry?.captureException(this.createWrappedError(error), { tags: { ...this.config.tags, library: '@power-rent/try-catch' } });
   }
 
   /**
@@ -158,7 +194,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     const breadcrumbData = this.extractBreadcrumbData(firstArg);
-    Sentry.addBreadcrumb({ data: breadcrumbData });
+    Sentry?.addBreadcrumb({ data: breadcrumbData });
   }
 
   /**
@@ -184,6 +220,18 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
 
     // @ts-ignore cause is missing in the definition
     return new Error(this.config.message, { cause: error });
+  }
+
+  /**
+   * Make the Try instance thenable so it can be `await`-ed directly. This executes
+   * the underlying function with the current configuration and resolves with the
+   * same result as calling `.value()`.
+   */
+  then<TResult1 = Awaited<T> | undefined, TResult2 = never>(
+    onfulfilled?: ((value: Awaited<T> | undefined) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): Promise<TResult1 | TResult2> {
+    return this.value().then(onfulfilled as any, onrejected as any);
   }
 }
 
