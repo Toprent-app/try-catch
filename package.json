@@ -45,7 +45,7 @@
   },
   "homepage": "https://github.com/power-rent/try-catch#readme",
   "peerDependencies": {
-    "@sentry/nextjs": "8.55.0"
+    "@sentry/nextjs": "9.30.0"
   },
   "peerDependenciesMeta": {
     "@sentry/nextjs": {
