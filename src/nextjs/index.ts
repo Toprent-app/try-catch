@@ -3,9 +3,9 @@ import * as Sentry from '@sentry/nextjs';
 /**
  * Configuration for Try execution
  */
-interface TryConfig {
+interface TryConfig<TArg extends Record<string, any>> {
   readonly message?: string;
-  readonly breadcrumbKeys?: readonly string[];
+  readonly breadcrumbKeys?: readonly (keyof TArg)[];
   readonly tags: Readonly<Record<string, string>>;
   readonly defaultValue?: unknown;
 }
@@ -30,10 +30,10 @@ type TryResult<T> = {
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
+export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string, any>[]> {
   private readonly fn: (...args: TArgs) => T | Promise<T>;
   private readonly args: TArgs;
-  private config: TryConfig;
+  private config: TryConfig<TArgs[0]>;
   private result?: TryResult<T>;
   private state: 'pending' | 'executed';
 
@@ -50,7 +50,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Create a new Try instance with updated configuration
    */
-  private setConfig(newConfig: Partial<TryConfig>): Try<T, TArgs> {
+  private setConfig(newConfig: Partial<TryConfig<TArgs[0]>>): Try<T, TArgs> {
     this.config = { ...this.config, ...newConfig };
     return this;
   }
@@ -66,7 +66,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Record breadcrumbs for the provided parameter keys.
    * Only works when the first argument is an object – useful for most cases.
    */
-  breadcrumbs(keys: readonly string[]): Try<T, TArgs> {
+  breadcrumbs(keys: readonly (keyof TArgs[0])[]): Try<T, TArgs> {
     return this.setConfig({ breadcrumbKeys: keys });
   }
 
@@ -180,7 +180,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       return;
     }
 
-    const firstArg = this.args[0] as Record<string, unknown> | undefined;
+    const firstArg = this.args[0];
     if (!firstArg || typeof firstArg !== 'object') {
       return;
     }
@@ -192,11 +192,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Extract breadcrumb data from the first argument using configured keys.
    */
-  private extractBreadcrumbData(firstArg: Record<string, unknown>): Record<string, unknown> {
+  private extractBreadcrumbData(firstArg: TArgs[0]): Record<string, any> {
     const breadcrumbData: Record<string, unknown> = {};
 
     this.config.breadcrumbKeys!.forEach((key) => {
-      breadcrumbData[key] = firstArg[key];
+      breadcrumbData[key as string] = firstArg[key];
     });
 
     return breadcrumbData;

@@ -32,7 +32,7 @@ class TestClass {
     this.name = name;
   }
 
-  greet(greeting: string) {
+  greet({ greeting }: { greeting: string }) {
     return `${greeting}, I'm ${this.name}`;
   }
 }
@@ -51,6 +51,18 @@ describe('Try', () => {
       .value();
 
     expect(result).toBe(defaultVal);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it('should work without parameters', async () => {
+    const defaultVal = { value: 'fallback' };
+
+    const result = await new Try(() => false)
+      .default(defaultVal)
+      .value();
+
+    expect(result).toBe(false);
     expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
@@ -143,10 +155,10 @@ describe('Try', () => {
   });
 
   it('should return a class method result', async () => {
-    const params = 'Hi!';
+    const greeting = 'Hi!';
     const newTest = new TestClass('newTest');
-    const result = await new Try(newTest.greet.bind(newTest), params).unwrap();
-    expect(result).toBe('Hi!, I\'m newTest');
+    const result = await new Try(newTest.greet.bind(newTest), { greeting }).unwrap();
+    expect(result).toEqual('Hi!, I\'m newTest');
     // captureException should not be called on success
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
