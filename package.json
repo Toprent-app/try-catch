@@ -43,12 +43,12 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/power-rent/try-catch.git"
+    "url": "git+https://github.com/Toprent-app/try-catch.git"
   },
   "bugs": {
-    "url": "https://github.com/power-rent/try-catch/issues"
+    "url": "https://github.com/Toprent-app/try-catch/issues"
   },
-  "homepage": "https://github.com/power-rent/try-catch#readme",
+  "homepage": "https://github.com/Toprent-app/try-catch#readme",
   "peerDependencies": {
     "@sentry/nextjs": "8.55.0"
   },
