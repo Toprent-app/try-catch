@@ -21,6 +21,15 @@ async function throwingFunction(_params: Record<string, unknown>): Promise<{ ok:
   throw new Error('boom');
 }
 
+class GraphQLError extends Error {
+  name = 'GraphQLError'
+}
+
+async function throwingCustomError(_params: Record<string, unknown>): Promise<{ ok: boolean; }> {
+  silenceConsoleError();
+  throw new GraphQLError('validation error');
+}
+
 async function successfulFunction(params: Record<string, unknown>): Promise<{ ok: boolean; }> {
   return { ok: true, ...params };
 }
@@ -40,6 +49,7 @@ class TestClass {
 describe('Try', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    Try.throwThroughErrorTypes([]);
   });
 
   it('should return default value', async () => {
@@ -148,30 +158,34 @@ describe('Try', () => {
 
   it('should return the function result', async () => {
     const params = { parameterKey: 'alpha' };
+
     const result = await new Try(successfulFunction, params).unwrap();
+
     expect(result).toEqual({ ok: true, ...params });
-    // captureException should not be called on success
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('should return a class method result', async () => {
     const greeting = 'Hi!';
     const newTest = new TestClass('newTest');
+
     const result = await new Try(newTest.greet.bind(newTest), { greeting }).unwrap();
+
     expect(result).toEqual('Hi!, I\'m newTest');
-    // captureException should not be called on success
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('should add tags', async () => {
     const params = { parameterKey: 'alpha' };
+
     const exec = new Try(throwingFunction, params)
       .report('failed')
       .tag('name', 'value')
       .tag('test', 'true')
       .unwrap();
+
     await expect(exec).rejects.toThrow('failed');
-    // captureException should not be called on success
+
     expect(Sentry.captureException).toBeCalledWith(new Error('failed', {
       cause: new Error('boom')
     }), {
@@ -183,10 +197,23 @@ describe('Try', () => {
     });
   });
 
-  it('should returns the actual error', async () => {
+  it('should return the actual error', async () => {
     const params = { parameterKey: 'alpha' };
+
     const result = await new Try(throwingFunction, params)
       .error();
+
     expect(result).toEqual(new Error('boom'));
+  });
+
+  it('should return the actual error', async () => {
+    Try.throwThroughErrorTypes(['GraphQLError']);
+    const params = { parameterKey: 'alpha' };
+
+    const exec = new Try(throwingCustomError, params)
+      .report('failed')
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('validation error');
   });
 });
