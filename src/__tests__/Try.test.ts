@@ -244,10 +244,10 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha' };
     const finallySpy = vi.fn();
 
-    await new Try(throwingFunction, params)
+    const exec = new Try(throwingFunction, params)
       .finally(finallySpy)
-      .value();
-
+      .unwrap();
+    await expect(exec).rejects.toThrow('boom');
     expect(finallySpy).toHaveBeenCalledTimes(1);
   });
 });
