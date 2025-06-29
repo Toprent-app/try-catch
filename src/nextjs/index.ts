@@ -42,8 +42,6 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
   private result?: TryResult<T>;
   private state: 'pending' | 'executed';
   private static ignoreErrorTypes: string[] = []
-  /** Tracks whether the user supplied `finally` callback has already been executed */
-  private finallyExecuted = false;
 
   /**
    * Creates a new Try instance for simplified async error handling.
