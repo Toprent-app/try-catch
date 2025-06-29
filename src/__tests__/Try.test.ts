@@ -228,4 +228,26 @@ describe('Try', () => {
     expect(() => result.ok).not.toThrow(TypeError);
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
+
+  it('should execute finally callback on success', async () => {
+    const params = { parameterKey: 'alpha' };
+    const finallySpy = vi.fn();
+
+    await new Try(successfulFunction, params)
+      .finally(finallySpy)
+      .unwrap();
+
+    expect(finallySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should execute finally callback on error', async () => {
+    const params = { parameterKey: 'alpha' };
+    const finallySpy = vi.fn();
+
+    await new Try(throwingFunction, params)
+      .finally(finallySpy)
+      .value();
+
+    expect(finallySpy).toHaveBeenCalledTimes(1);
+  });
 });

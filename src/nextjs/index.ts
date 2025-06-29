@@ -8,6 +8,11 @@ interface TryConfig<TArg extends Record<string, any>> {
   readonly breadcrumbKeys?: readonly (keyof TArg)[];
   readonly tags: Readonly<Record<string, string>>;
   readonly defaultValue?: unknown;
+  /**
+   * Callback that will always run after the wrapped function finishes
+   * executing, regardless of success or failure. Similar to `Promise.prototype.finally`.
+   */
+  readonly finallyCallback?: () => void;
 }
 
 /**
@@ -37,6 +42,8 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
   private result?: TryResult<T>;
   private state: 'pending' | 'executed';
   private static ignoreErrorTypes: string[] = []
+  /** Tracks whether the user supplied `finally` callback has already been executed */
+  private finallyExecuted = false;
 
   /**
    * Creates a new Try instance for simplified async error handling.
@@ -178,6 +185,23 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
     return this.setConfig({
       tags: { ...this.config.tags, [name]: value }
     });
+  }
+
+  /**
+   * Register a callback that will run after the wrapped function finishes
+   * executing (successfully or with an error). The callback runs exactly once
+   * per {@link Try} instance, mirroring the behaviour of
+   * `Promise.prototype.finally`.
+   *
+   * The callback is executed **after** the underlying function settles but
+   * before any error is re-thrown from {@link unwrap}. It is always executed
+   * asynchronously in the same tick as the function resolution.
+   *
+   * @param callback A function to invoke once the wrapped operation settles.
+   * @returns The `Try` instance for method chaining.
+   */
+  finally(callback: () => void): Try<T, TArgs> {
+    return this.setConfig({ finallyCallback: callback });
   }
 
   /**
@@ -352,14 +376,21 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
 
     try {
       const value = await this.fn(...this.args);
-      return { success: true, value };
+      this.result = { success: true, value };
     } catch (e) {
       console.error(e);
       const error = e as Error;
-      return { success: false, error };
+      this.result = { success: false, error };
     } finally {
       this.state = 'executed';
+      try {
+        this.config.finallyCallback?.();
+      } catch (err) {
+        console.error('Error in finally callback', err);
+      }
     }
+
+    return this.result;
   }
 
   /**

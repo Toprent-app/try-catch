@@ -110,6 +110,9 @@ const user = await new Try(fetchUser, userId)
   .report('Failed to fetch user')
   .breadcrumbs(['userId'])
   .default(null)
+  .finally(() => {
+    console.log('Completed fetching user')
+  })
   .value();
 
 // Pattern 2: Check errors explicitly
