@@ -202,8 +202,14 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<Return>(defaultValue: Return): Try<T, TArgs> {
-    return this.setConfig({ defaultValue });
+  default<D>(defaultValue: D): Omit<typeof this, 'value'> & { value(): Promise<Awaited<T> | D> } {
+    type WithGuaranteedValue = Omit<typeof this, 'value'> & {
+      value(): Promise<Awaited<T> | D>;
+    };
+
+    // Cast is safe: runtime shape is unchanged; this only narrows the static
+    // return type information for the `value` method.
+    return this.setConfig({ defaultValue }) as unknown as WithGuaranteedValue;
   }
 
   /**

@@ -216,4 +216,16 @@ describe('Try', () => {
 
     await expect(exec).rejects.toThrow('validation error');
   });
+
+  it('should not give typescript error', async () => {
+    const params = { parameterKey: 'alpha' };
+
+    const result = await new Try(throwingFunction, params)
+      .default({ ok: true })
+      .value();
+
+    expect(result).not.toBe(undefined);
+    expect(() => result.ok).not.toThrow(TypeError);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
 });
