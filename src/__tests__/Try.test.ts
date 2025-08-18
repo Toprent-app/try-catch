@@ -12,12 +12,7 @@ vi.mock('@sentry/nextjs', () => {
 
 const Sentry = await import('@sentry/nextjs');
 
-// Helper to silence console.error only when `throwingFunction` is executed
-const silenceConsoleError = () => vi.spyOn(console, 'error').mockImplementation(() => { });
-
 async function throwingFunction(_params: Record<string, unknown>): Promise<{ ok: boolean; }> {
-  // Prevent error logs for the intentional failure in this helper
-  silenceConsoleError();
   throw new Error('boom');
 }
 
@@ -26,7 +21,6 @@ class GraphQLError extends Error {
 }
 
 async function throwingCustomError(_params: Record<string, unknown>): Promise<{ ok: boolean; }> {
-  silenceConsoleError();
   throw new GraphQLError('validation error');
 }
 
@@ -57,6 +51,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const result = await new Try(throwingFunction, params)
+      .debug(false)
       .default(defaultVal)
       .value();
 
@@ -82,6 +77,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const result = await new Try(throwingFunction, params)
+      .debug(false)
       .report('failed to get data')
       .default(defaultVal)
       .value();
@@ -95,6 +91,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const exec = new Try(throwingFunction, params)
+      .debug(false)
       .unwrap();
 
     await expect(exec).rejects.toThrow('boom');
@@ -106,6 +103,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const result = await new Try(throwingFunction, params)
+      .debug(false)
       .value();
 
     expect(result).toBe(undefined);
@@ -128,6 +126,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const exec = new Try(throwingFunction, params)
+      .debug(false)
       .report('failed')
       .unwrap();
 
@@ -139,6 +138,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     const exec = new Try(throwingFunction, params)
+      .debug(false)
       .unwrap();
 
     await expect(exec).rejects.toThrow('boom');
@@ -149,6 +149,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
     await new Try(throwingFunction, params)
+      .debug(false)
       .breadcrumbs(['parameterKey']);
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
@@ -179,6 +180,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha' };
 
     const exec = new Try(throwingFunction, params)
+      .debug(false)
       .report('failed')
       .tag('name', 'value')
       .tag('test', 'true')
@@ -202,6 +204,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha' };
 
     const result = await new Try(throwingFunction, params)
+      .debug(false)
       .error();
 
     expect(result).toEqual(new Error('boom'));
@@ -212,6 +215,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha' };
 
     const exec = new Try(throwingCustomError, params)
+      .debug(false)
       .report('failed')
       .unwrap();
 
@@ -222,6 +226,7 @@ describe('Try', () => {
     const params = { parameterKey: 'alpha' };
 
     const result = await new Try(throwingFunction, params)
+      .debug(false)
       .default({ ok: true })
       .value();
 
@@ -246,6 +251,7 @@ describe('Try', () => {
     const finallySpy = vi.fn();
 
     const exec = new Try(throwingFunction, params)
+      .debug(false)
       .finally(finallySpy)
       .unwrap();
     await expect(exec).rejects.toThrow('boom');
@@ -305,5 +311,79 @@ describe('Try', () => {
       .value();
     
     expect(result).toBe('HELLO');
+  });
+
+  it('should not log errors by default', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+
+    await new Try(throwingFunction, params).debug(false).value();
+
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('should log errors when debug is enabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+
+    await new Try(throwingFunction, params)
+      .debug()
+      .value();
+
+    expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
+    consoleSpy.mockRestore();
+  });
+
+  it('should not log errors when debug is explicitly disabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+
+    await new Try(throwingFunction, params)
+      .debug(false)
+      .value();
+
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('should log finally callback errors when debug is enabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+    const throwingFinally = () => { throw new Error('finally error'); };
+
+    await new Try(successfulFunction, params)
+      .debug()
+      .finally(throwingFinally)
+      .value();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error in finally callback', new Error('finally error'));
+    consoleSpy.mockRestore();
+  });
+
+  it('should not log finally callback errors when debug is disabled', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+    const throwingFinally = () => { throw new Error('finally error'); };
+
+    await new Try(successfulFunction, params)
+      .finally(throwingFinally)
+      .value();
+
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('should support conditional debug logging', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const params = { parameterKey: 'alpha' };
+    const isDevelopment = true;
+
+    await new Try(throwingFunction, params)
+      .debug(isDevelopment)
+      .value();
+
+    expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
+    consoleSpy.mockRestore();
   });
 });

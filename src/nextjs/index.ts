@@ -13,6 +13,11 @@ interface TryConfig<TArg = unknown> {
    * executing, regardless of success or failure. Similar to `Promise.prototype.finally`.
    */
   readonly finallyCallback?: () => void;
+  /**
+   * Enable debug logging to console. When true, errors will be logged to console.error.
+   * Libraries should not log by default - this is an opt-in feature.
+   */
+  readonly debug?: boolean;
 }
 
 /**
@@ -228,6 +233,36 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * Enable debug logging to console. When enabled, errors will be logged to console.error.
+   * This is an opt-in feature since libraries should not log by default.
+   * 
+   * @param enabled Whether to enable debug logging (defaults to true)
+   * @returns The Try instance for method chaining
+   * 
+   * @example
+   * ```typescript
+   * // Enable debug logging
+   * await new Try(riskyOperation, data)
+   *   .debug()
+   *   .report('Operation failed')
+   *   .value();
+   * 
+   * // Explicitly disable debug logging
+   * await new Try(riskyOperation, data)
+   *   .debug(false)
+   *   .value();
+   * 
+   * // Conditional debug logging
+   * await new Try(riskyOperation, data)
+   *   .debug(process.env.NODE_ENV === 'development')
+   *   .value();
+   * ```
+   */
+  debug(enabled: boolean = true): Try<T, TArgs> {
+    return this.setConfig({ debug: enabled });
+  }
+
+  /**
    * Configure a default value to return when an error occurs.
    * This default value will be returned by `.value()` method if the function execution fails.
    * The `.unwrap()` method will still throw errors regardless of this setting.
@@ -402,7 +437,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       const value = await this.fn(...this.args);
       this.result = { success: true, value };
     } catch (e) {
-      console.error(e);
+      if (this.config.debug) {
+        console.error(e);
+      }
       const error = e as Error;
       this.result = { success: false, error };
     } finally {
@@ -410,7 +447,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       try {
         this.config.finallyCallback?.();
       } catch (err) {
-        console.error('Error in finally callback', err);
+        if (this.config.debug) {
+          console.error('Error in finally callback', err);
+        }
       }
     }
 

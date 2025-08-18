@@ -88,6 +88,19 @@ if (error) {
 } else {
   console.log('Operation succeeded');
 }
+
+// Enable debug logging (opt-in)
+const result = await new Try(problematicFunction, params)
+  .debug() // Logs errors to console.error
+  .report('Function failed')
+  .tag('environment', 'development')
+  .value();
+
+// Conditional debug logging
+const result = await new Try(apiCall, endpoint)
+  .debug(process.env.NODE_ENV === 'development')
+  .report('API call failed')
+  .value();
 ```
 
 ## API
@@ -115,6 +128,9 @@ Record breadcrumbs for the provided parameter keys. **Only available when the fi
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
+
+#### `.debug(enabled?: boolean): Try<T, TArgs>`
+Enable debug logging to console. When enabled, errors will be logged to console.error. This is an opt-in feature since libraries should not log by default.
 
 ### Execution Methods
 
