@@ -156,6 +156,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Configure Sentry breadcrumbs to be extracted from the first function argument.
    * Breadcrumbs provide additional context when errors are reported to Sentry.
+   * The function name is automatically included in all breadcrumbs for better traceability.
    * 
    * **Type Safety**: This method is only available when the first argument is an object.
    * TypeScript will prevent calling this method if the first parameter is a primitive type.
@@ -166,6 +167,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * @example
    * ```typescript
    * // ✅ Works with object first parameter
+   * // Breadcrumbs will include: { userId: 123, action: 'profile-update', functionName: 'updateUser' }
    * await new Try(updateUser, { userId: 123, name: 'John', action: 'profile-update' })
    *   .breadcrumbs(['userId', 'action'])
    *   .report('User update failed')
@@ -479,6 +481,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     const breadcrumbData = this.extractBreadcrumbData(firstArg);
+    
+    // Add function name to breadcrumbs for better context
+    const functionName = this.fn.name || 'anonymous';
+    breadcrumbData.functionName = functionName;
+    
     Sentry.addBreadcrumb({ data: breadcrumbData });
   }
 

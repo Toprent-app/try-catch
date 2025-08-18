@@ -124,7 +124,7 @@ All configuration methods return a new `Try` instance, enabling method chaining:
 Attach a custom Sentry error message.
 
 #### `.breadcrumbs(keys: readonly string[]): Try<T, TArgs>`
-Record breadcrumbs for the provided parameter keys. **Only available when the first argument is an object.** TypeScript will prevent calling this method with non-object first parameters.
+Record breadcrumbs for the provided parameter keys. **Only available when the first argument is an object.** TypeScript will prevent calling this method with non-object first parameters. The function name is automatically included in all breadcrumbs for better traceability.
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
@@ -181,6 +181,7 @@ function getCurrentTime(): number {
 const timestamp = await new Try(getCurrentTime).value();
 
 // Object parameters (breadcrumbs available)
+// Breadcrumbs will include: { userId: 123, functionName: 'fetchUser' }
 const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
   .breadcrumbs(['userId']) // ✅ Available with object parameter
   .report('Failed to fetch user')

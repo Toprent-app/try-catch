@@ -153,7 +153,12 @@ describe('Try', () => {
       .breadcrumbs(['parameterKey']);
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { 'parameterKey': 'alpha' } })
+      expect.objectContaining({
+        data: {
+          'parameterKey': 'alpha',
+          'functionName': 'throwingFunction'
+        }
+      })
     );
   });
 
@@ -303,18 +308,18 @@ describe('Try', () => {
 
     // This should show a TypeScript error if breadcrumbs is called with non-object parameter
     const tryInstance = new Try(processString, 'hello');
-    
+
     // Test that it still works without breadcrumbs
     const result = await tryInstance
       .report('String processing failed')
       .tag('operation', 'uppercase')
       .value();
-    
+
     expect(result).toBe('HELLO');
   });
 
   it('should not log errors by default', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
 
     await new Try(throwingFunction, params).debug(false).value();
@@ -324,7 +329,7 @@ describe('Try', () => {
   });
 
   it('should log errors when debug is enabled', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
 
     await new Try(throwingFunction, params)
@@ -336,7 +341,7 @@ describe('Try', () => {
   });
 
   it('should not log errors when debug is explicitly disabled', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
 
     await new Try(throwingFunction, params)
@@ -348,7 +353,7 @@ describe('Try', () => {
   });
 
   it('should log finally callback errors when debug is enabled', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
     const throwingFinally = () => { throw new Error('finally error'); };
 
@@ -362,7 +367,7 @@ describe('Try', () => {
   });
 
   it('should not log finally callback errors when debug is disabled', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
     const throwingFinally = () => { throw new Error('finally error'); };
 
@@ -375,7 +380,7 @@ describe('Try', () => {
   });
 
   it('should support conditional debug logging', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const params = { parameterKey: 'alpha' };
     const isDevelopment = true;
 
@@ -385,5 +390,23 @@ describe('Try', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
     consoleSpy.mockRestore();
+  });
+
+  it('should include function name in breadcrumbs for anonymous functions', async () => {
+    const params = { parameterKey: 'beta' };
+
+    await new Try(async (_data: Record<string, unknown>) => { throw new Error('anonymous error'); }, params)
+      .debug(false)
+      .breadcrumbs(['parameterKey'])
+      .value();
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          'parameterKey': 'beta',
+          'functionName': 'anonymous'
+        }
+      })
+    );
   });
 });
