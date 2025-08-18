@@ -26,13 +26,15 @@
   "sideEffects": false,
   "scripts": {
     "build": "npm run build:cjs && npm run build:esm",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "build:cjs": "tsc -p tsconfig.json",
     "build:esm": "tsc -p tsconfig.esm.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run build && npm run test"
+    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run format:check"
   },
   "keywords": [
     "typescript",
@@ -61,8 +63,10 @@
     }
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "@changesets/cli": "^2.29.6",
     "@types/node": "^20.19.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
   "engines": {

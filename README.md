@@ -45,7 +45,7 @@ npm install @power-rent/try-catch
 
 ## Usage
 
-The `Try` class provides a fluent interface for handling async operations with automatic error reporting to Sentry. Each method returns a new instance, making the API immutable and declarative.
+The `Try` class provides a fluent interface for handling async operations with automatic error reporting to Sentry. Each method returns a new instance.
 
 ### Basic Usage
 
@@ -156,29 +156,37 @@ The constructor accepts any number of arguments of any type. Breadcrumbs functio
 All configuration methods return a new `Try` instance, enabling method chaining:
 
 #### `.report(message: string): Try<T, TArgs>`
+
 Attach a custom Sentry error message.
 
 #### `.breadcrumbs(keys: readonly string[]): Try<T, TArgs>`
+
 Record breadcrumbs for the provided parameter keys. **Only available when the first argument is an object.** TypeScript will prevent calling this method with non-object first parameters. The function name is automatically included in all breadcrumbs for better traceability.
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
+
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
 
 #### `.debug(enabled?: boolean): Try<T, TArgs>`
+
 Enable debug logging to console. When enabled, errors will be logged to console.error. This is an opt-in feature since libraries should not log by default.
 
 ### Execution Methods
 
 #### `.unwrap(): Promise<Awaited<T>>`
+
 Execute the function and return the result. Throws the original error if one occurred.
 
 #### `.default<Return>(defaultValue: Return): Try<T, TArgs>`
+
 Set a default value that will be returned by `.value()` when an exception occurs.
 
 #### `.value(): Promise<Awaited<T> | Return | undefined>`
+
 Execute the function and return the result, the configured default value, or `undefined` if an error occurs.
 
 #### `.error(): Promise<Error | undefined>`
+
 Execute the function and return the error if one occurred, or `undefined` if successful.
 
 ## Examples
@@ -239,7 +247,7 @@ const user = await new Try(fetchUser, userId)
   .breadcrumbs(['userId'])
   .default(null)
   .finally(() => {
-    console.log('Completed fetching user')
+    console.log('Completed fetching user');
   })
   .value();
 
@@ -295,4 +303,4 @@ const result = await new Try(complexOperation, data)
 
 ## License
 
-ISC 
+ISC

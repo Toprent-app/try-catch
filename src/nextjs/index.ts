@@ -1,11 +1,53 @@
 import * as Sentry from '@sentry/nextjs';
 
 /**
+ * Breadcrumb transformation function type
+ */
+type BreadcrumbTransformer<T> = (value: T) => Record<string, unknown>;
+
+/**
+ * Breadcrumb extractor configuration for array syntax
+ */
+type BreadcrumbExtractor<TArgs extends readonly unknown[]> =
+  | {
+      // Extract from object parameters by key
+      readonly param: number;
+      readonly keys: readonly string[];
+    }
+  | {
+      // Transform any parameter to breadcrumbs
+      readonly param: number;
+      readonly transform: BreadcrumbTransformer<unknown>;
+    }
+  | {
+      // Predefined transformer for common types
+      readonly param: number;
+      readonly as: 'length' | 'type' | 'value' | 'toString';
+    };
+
+/**
+ * Object-style breadcrumb configuration
+ */
+type BreadcrumbConfig<TArgs extends readonly unknown[]> = {
+  readonly [K in number | string]?:
+    | readonly string[]
+    | BreadcrumbTransformer<unknown>;
+};
+
+/**
+ * Union type for all breadcrumb configuration options
+ */
+type BreadcrumbOptions<TArgs extends readonly unknown[]> =
+  | readonly BreadcrumbExtractor<TArgs>[] // Array syntax
+  | BreadcrumbConfig<TArgs> // Object syntax
+  | readonly (keyof TArgs[0])[]; // Backward compatibility
+
+/**
  * Configuration for Try execution
  */
-interface TryConfig<TArg = unknown> {
+interface TryConfig<TArgs extends readonly unknown[] = unknown[]> {
   readonly message?: string;
-  readonly breadcrumbKeys?: TArg extends Record<string, unknown> ? readonly (keyof TArg)[] : never;
+  readonly breadcrumbConfig?: BreadcrumbOptions<TArgs>;
   readonly tags: Readonly<Record<string, string>>;
   readonly defaultValue?: unknown;
   /**
@@ -23,13 +65,15 @@ interface TryConfig<TArg = unknown> {
 /**
  * Result of Try execution
  */
-export type TryResult<T> = {
-  readonly success: true;
-  readonly value: Awaited<T>;
-} | {
-  readonly success: false;
-  readonly error: Error;
-}
+export type TryResult<T> =
+  | {
+      readonly success: true;
+      readonly value: Awaited<T>;
+    }
+  | {
+      readonly success: false;
+      readonly error: Error;
+    };
 
 /**
  * Helper class for simplified async error handling with Sentry integration.
@@ -43,38 +87,40 @@ export type TryResult<T> = {
 export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private readonly fn: (...args: TArgs) => T | Promise<T>;
   private readonly args: TArgs;
-  private config: TryConfig<TArgs[0]>;
+  private config: TryConfig<TArgs>;
   private cachedResult?: TryResult<T>;
+  private cachedBreadcrumbData?: Record<string, unknown>;
+  private breadcrumbsAdded: boolean = false;
   private state: 'pending' | 'executed';
-  private static ignoreErrorTypes: string[] = []
+  private static ignoreErrorTypes: string[] = [];
 
   /**
    * Creates a new Try instance for simplified async error handling.
-   * 
+   *
    * @param fn The function to execute (can be sync or async)
    * @param args Arguments to pass to the function (any types: strings, numbers, objects, etc.)
-   * 
+   *
    * @example
    * ```typescript
    * // With string parameters
    * const result = new Try(greet, 'Alice', 'Hello');
-   * 
+   *
    * // With number parameters
    * const sum = new Try(add, 5, 3);
-   * 
+   *
    * // With object parameters (enables breadcrumbs)
    * const result = new Try(updateUser, { id: 1, name: 'John' }, { validateOnly: true });
-   * 
+   *
    * // With mixed parameter types
    * const result = new Try(formatMessage, 123, 'Error occurred', true);
-   * 
+   *
    * // Chain configuration methods (breadcrumbs only available with object parameters)
    * const value = await new Try(apiCall, { userId: 123, action: 'update' })
    *   .report('API call failed')
    *   .breadcrumbs(['userId', 'action'])  // Only works with object first parameter
    *   .tag('component', 'user-service')
    *   .unwrap();
-   * 
+   *
    * // Non-object parameters (breadcrumbs not available)
    * const value = await new Try(processString, 'hello world')
    *   .report('Processing failed')
@@ -82,10 +128,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  constructor(
-    fn: (...args: TArgs) => T | Promise<T>,
-    ...args: TArgs
-  ) {
+  constructor(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs) {
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
@@ -96,14 +139,14 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Configure error types that should be thrown through without being wrapped.
    * When using `.report()`, errors matching these types will be re-thrown as-is
    * instead of being wrapped with the custom message.
-   * 
+   *
    * @param ignoreErrorTypes Array of error type names (error.name) to throw through
-   * 
+   *
    * @example
    * ```typescript
    * // Configure to throw ValidationError and AuthError as-is
    * Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
-   * 
+   *
    * // Now these errors won't be wrapped:
    * await new Try(validateUser, userData)
    *   .report('User validation failed') // ValidationError will be thrown as-is
@@ -117,11 +160,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Create a new Try instance with updated configuration.
    * This method enables the fluent API by merging new configuration with existing settings.
-   * 
+   *
    * @param newConfig Partial configuration to merge with existing config
    * @returns The Try instance for method chaining
    */
-  private setConfig(newConfig: Partial<TryConfig<TArgs[0]>>): Try<T, TArgs> {
+  private setConfig(newConfig: Partial<TryConfig<TArgs>>): Try<T, TArgs> {
     this.config = { ...this.config, ...newConfig };
     return this;
   }
@@ -130,17 +173,17 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Configure error reporting to Sentry with a custom message.
    * When an error occurs and this method was called, the error will be captured
    * by Sentry with the provided message and configured context.
-   * 
+   *
    * @param message Custom error message to report to Sentry
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
    * // Basic error reporting
    * await new Try(riskyOperation, data)
    *   .report('Failed to process user data')
    *   .unwrap();
-   * 
+   *
    * // Combined with other configuration
    * await new Try(apiCall, params)
    *   .report('API call failed')
@@ -154,52 +197,76 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
-   * Configure Sentry breadcrumbs to be extracted from the first function argument.
+   * Configure Sentry breadcrumbs with flexible extraction from any function parameters.
    * Breadcrumbs provide additional context when errors are reported to Sentry.
    * The function name is automatically included in all breadcrumbs for better traceability.
-   * 
-   * **Type Safety**: This method is only available when the first argument is an object.
-   * TypeScript will prevent calling this method if the first parameter is a primitive type.
-   * 
-   * @param keys Array of property keys from the first argument to include as breadcrumbs
+   *
+   * **Flexible Usage**: Extract breadcrumbs from any parameter position, transform primitives,
+   * or combine data from multiple parameters.
+   *
+   * @param config Breadcrumb configuration - supports multiple syntax styles
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
-   * // ✅ Works with object first parameter
-   * // Breadcrumbs will include: { userId: 123, action: 'profile-update', functionName: 'updateUser' }
-   * await new Try(updateUser, { userId: 123, name: 'John', action: 'profile-update' })
-   *   .breadcrumbs(['userId', 'action'])
+   * // ✅ Backward compatibility - extract from first parameter (object)
+   * await new Try(updateUser, { userId: 123, name: 'John' })
+   *   .breadcrumbs(['userId', 'name'])
    *   .report('User update failed')
    *   .unwrap();
-   * 
-   * // ❌ TypeScript error with non-object first parameter
-   * await new Try(greet, 'Alice', 'Hello')
-   *   .breadcrumbs(['length'])  // TypeScript error!
+   *
+   * // ✅ Array syntax - extract from multiple parameters
+   * await new Try(processOrder, 'order-123', { customerId: 456 }, true)
+   *   .breadcrumbs([
+   *     { param: 0, as: 'value' },           // string -> { value: 'order-123' }
+   *     { param: 1, keys: ['customerId'] },  // object -> { customerId: 456 }
+   *     { param: 2, transform: (urgent) => ({ urgent }) } // boolean -> { urgent: true }
+   *   ])
    *   .unwrap();
-   * 
-   * // ✅ Other methods still work with non-object parameters
-   * await new Try(greet, 'Alice', 'Hello')
-   *   .report('Greeting failed')
-   *   .tag('operation', 'greet')
+   *
+   * // ✅ Object syntax - parameter index as keys
+   * await new Try(apiCall, endpoint, { userId: 123 }, headers)
+   *   .breadcrumbs({
+   *     0: (url) => ({ endpoint: url }),       // transform string
+   *     1: ['userId'],                        // extract from object
+   *     2: (h) => ({ headerCount: Object.keys(h).length })
+   *   })
+   *   .unwrap();
+   *
+   * // ✅ Predefined transformers
+   * await new Try(processString, 'hello world', 42)
+   *   .breadcrumbs([
+   *     { param: 0, as: 'length' },     // { length: 11 }
+   *     { param: 1, as: 'value' }       // { value: 42 }
+   *   ])
    *   .unwrap();
    * ```
    */
-  breadcrumbs<K extends TArgs[0] extends Record<string, unknown> ? keyof TArgs[0] : never>(
-    keys: readonly K[]
+  breadcrumbs(config: BreadcrumbOptions<TArgs>): Try<T, TArgs>;
+
+  /**
+   * @deprecated Use the flexible breadcrumbs(config) method instead.
+   * Backward compatibility overload for extracting keys from first parameter.
+   */
+  breadcrumbs<
+    K extends TArgs[0] extends Record<string, unknown> ? keyof TArgs[0] : never
+  >(keys: readonly K[]): Try<T, TArgs>;
+
+  breadcrumbs(
+    configOrKeys: BreadcrumbOptions<TArgs> | readonly (keyof TArgs[0])[]
   ): Try<T, TArgs> {
-    return this.setConfig({ breadcrumbKeys: keys as any });
+    return this.setConfig({ breadcrumbConfig: configOrKeys as any });
   }
 
   /**
    * Add a custom tag for Sentry error reporting.
    * Tags help categorize and filter errors in Sentry dashboards.
    * Multiple tags can be added by calling this method multiple times.
-   * 
+   *
    * @param name The tag name/key
    * @param value The tag value
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
    * // Add multiple tags for better error categorization
@@ -213,7 +280,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    */
   tag(name: string, value: string): Try<T, TArgs> {
     return this.setConfig({
-      tags: { ...this.config.tags, [name]: value }
+      tags: { ...this.config.tags, [name]: value },
     });
   }
 
@@ -221,10 +288,10 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Add multiple custom tags for Sentry error reporting at once.
    * This is a convenience method for setting many tags without chaining multiple .tag() calls.
    * Tags help categorize and filter errors in Sentry dashboards.
-   * 
+   *
    * @param tagRecord A record/object containing tag name-value pairs
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
    * // Set multiple tags at once
@@ -237,7 +304,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   })
    *   .report('Payment processing failed')
    *   .unwrap();
-   * 
+   *
    * // Can be combined with individual tag() calls
    * await new Try(processData, data)
    *   .tags({ module: 'data-processor', version: '1.0' })
@@ -248,7 +315,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    */
   tags(tagRecord: Record<string, string>): Try<T, TArgs> {
     return this.setConfig({
-      tags: { ...this.config.tags, ...tagRecord }
+      tags: { ...this.config.tags, ...tagRecord },
     });
   }
 
@@ -272,10 +339,10 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Enable debug logging to console. When enabled, errors will be logged to console.error.
    * This is an opt-in feature since libraries should not log by default.
-   * 
+   *
    * @param enabled Whether to enable debug logging (defaults to true)
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
    * // Enable debug logging
@@ -283,12 +350,12 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .debug()
    *   .report('Operation failed')
    *   .value();
-   * 
+   *
    * // Explicitly disable debug logging
    * await new Try(riskyOperation, data)
    *   .debug(false)
    *   .value();
-   * 
+   *
    * // Conditional debug logging
    * await new Try(riskyOperation, data)
    *   .debug(process.env.NODE_ENV === 'development')
@@ -303,17 +370,17 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Configure a default value to return when an error occurs.
    * This default value will be returned by `.value()` method if the function execution fails.
    * The `.unwrap()` method will still throw errors regardless of this setting.
-   * 
+   *
    * @param defaultValue The value to return when an error occurs
    * @returns The Try instance for method chaining
-   * 
+   *
    * @example
    * ```typescript
    * // Return empty array if fetching users fails
    * const users = await new Try(fetchUsers)
    *   .default([])
    *   .value(); // Returns [] if fetchUsers throws
-   * 
+   *
    * // Return null if user lookup fails
    * const user = await new Try(findUser, userId)
    *   .default(null)
@@ -321,7 +388,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<D>(defaultValue: D): Omit<typeof this, 'value'> & { value(): Promise<Awaited<T> | D> } {
+  default<D>(
+    defaultValue: D
+  ): Omit<typeof this, 'value'> & { value(): Promise<Awaited<T> | D> } {
     type WithGuaranteedValue = Omit<typeof this, 'value'> & {
       value(): Promise<Awaited<T> | D>;
     };
@@ -335,20 +404,20 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Execute the function and return the result, or throw if there was an error.
    * This method will always throw on errors, regardless of default value configuration.
    * If `.report()` was configured, errors will be reported to Sentry before throwing.
-   * 
+   *
    * @returns The successful result of the function execution
    * @throws The original error or a wrapped error with custom message (depending on configuration)
-   * 
+   *
    * @example
    * ```typescript
    * // Basic usage - throws on error
    * const result = await new Try(fetchUser, userId).unwrap();
-   * 
+   *
    * // With error reporting - reports to Sentry then throws
    * const result = await new Try(updateUser, userData)
    *   .report('User update failed')
    *   .unwrap();
-   * 
+   *
    * // With custom message - throws Error with custom message instead of original
    * try {
    *   await new Try(riskyOperation).report('Operation failed').unwrap();
@@ -369,7 +438,10 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       }
 
       // Throw a wrapped error with custom message when provided, otherwise re-throw original
-      if (this.config.message && !Try.ignoreErrorTypes.includes(result.error.name)) {
+      if (
+        this.config.message &&
+        !Try.ignoreErrorTypes.includes(result.error.name)
+      ) {
         const wrappedError = this.createWrappedError(result.error);
         throw wrappedError;
       }
@@ -383,9 +455,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Execute the function and return a result object containing either the value or error.
    * This method never throws - it returns a discriminated union that you can pattern match on.
    * Errors are not reported to Sentry when using this method.
-   * 
+   *
    * @returns A result object with success flag, value (on success), or error (on failure)
-   * 
+   *
    * @example
    * ```typescript
    * // Pattern matching on result
@@ -395,7 +467,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * } else {
    *   console.log('Error:', result.error.message);
    * }
-   * 
+   *
    * // Destructuring with type safety
    * const { success, value, error } = await new Try(fetchUser, userId).result();
    * if (success) {
@@ -403,13 +475,13 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * } else {
    *   handleError(error); // TypeScript knows error exists
    * }
-   * 
+   *
    * // Functional style with exhaustive matching
    * const message = await new Try(processData, input)
    *   .result()
-   *   .then(result => 
-   *     result.success 
-   *       ? `Processed: ${result.value}` 
+   *   .then(result =>
+   *     result.success
+   *       ? `Processed: ${result.value}`
    *       : `Failed: ${result.error.message}`
    *   );
    * ```
@@ -422,9 +494,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Execute the function and return the error if one occurred, or undefined if successful.
    * This method never throws - it returns the error as a value instead.
    * Errors are not reported to Sentry when using this method.
-   * 
+   *
    * @returns The error if execution failed, undefined if successful
-   * 
+   *
    * @example
    * ```typescript
    * // Check for errors without throwing
@@ -433,7 +505,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   console.log('Operation failed:', error.message);
    *   // Handle error gracefully
    * }
-   * 
+   *
    * // Conditional logic based on error type
    * const error = await new Try(validateInput, userInput).error();
    * if (error instanceof ValidationError) {
@@ -453,9 +525,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * This method never throws - it returns undefined (or configured default) on errors.
    * If `.report()` was configured, errors will be reported to Sentry.
    * If breadcrumbs were configured, they will be added to Sentry context.
-   * 
+   *
    * @returns The successful result, configured default value, or undefined if execution failed
-   * 
+   *
    * @example
    * ```typescript
    * // Basic usage - returns undefined on error
@@ -463,12 +535,12 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * if (user) {
    *   displayUser(user);
    * }
-   * 
+   *
    * // With default value - returns default on error
    * const users = await new Try(fetchUsers)
    *   .default([])
    *   .value(); // Returns [] if fetchUsers fails
-   * 
+   *
    * // With error reporting - reports to Sentry but still returns undefined
    * const result = await new Try(criticalOperation)
    *   .report('Critical operation failed')
@@ -483,25 +555,23 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       return result.value;
     }
 
-    // Add breadcrumbs when configured regardless of reporting strategy.
-    if (this.config.breadcrumbKeys?.length) {
-      this.addBreadcrumbsIfConfigured();
-    }
-
     // Report error only when the consumer has explicitly opted-in via `.report()`
     if (this.config.message) {
       await this.reportError(result.error);
+    } else if (this.config.breadcrumbConfig) {
+      // Add breadcrumbs when configured but not reporting
+      this.addBreadcrumbsIfConfigured();
     }
 
     // Return configured default when error occurs, otherwise undefined
-    return this.config.defaultValue as any ?? undefined;
+    return (this.config.defaultValue as any) ?? undefined;
   }
 
   /**
    * Execute the function and return a result object with success status, value, and error.
    * This is the core execution method that handles both sync and async functions.
    * Results are cached after first execution to avoid re-running the function.
-   * 
+   *
    * @returns Promise resolving to a result object indicating success/failure
    */
   private async execute(): Promise<TryResult<T>> {
@@ -538,41 +608,199 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private async reportError(error: Error): Promise<void> {
     this.addBreadcrumbsIfConfigured();
 
-    Sentry.captureException(this.createWrappedError(error), { tags: { ...this.config.tags, library: '@power-rent/try-catch' } });
+    Sentry.captureException(this.createWrappedError(error), {
+      tags: { ...this.config.tags, library: '@power-rent/try-catch' },
+    });
   }
 
   /**
    * Add breadcrumbs to Sentry if configured.
    */
   private addBreadcrumbsIfConfigured(): void {
-    if (!this.config.breadcrumbKeys?.length) {
+    if (!this.config.breadcrumbConfig || this.breadcrumbsAdded) {
       return;
     }
 
-    const firstArg = this.args[0];
-    if (!firstArg || typeof firstArg !== 'object') {
-      return;
+    // Cache breadcrumb data to avoid re-computation
+    if (!this.cachedBreadcrumbData) {
+      this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
     }
-
-    const breadcrumbData = this.extractBreadcrumbData(firstArg);
 
     // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
 
-    Sentry.addBreadcrumb({ message: `Calling ${functionName} function`, data: breadcrumbData });
+    Sentry.addBreadcrumb({
+      message: `Calling ${functionName} function`,
+      data: this.cachedBreadcrumbData,
+    });
+
+    this.breadcrumbsAdded = true;
   }
 
   /**
-   * Extract breadcrumb data from the first argument using configured keys.
+   * Extract breadcrumb data using the flexible configuration.
    */
-  private extractBreadcrumbData(firstArg: TArgs[0]): Record<string, any> {
+  private extractAllBreadcrumbData(): Record<string, unknown> {
+    const config = this.config.breadcrumbConfig!;
+    let breadcrumbData: Record<string, unknown> = {};
+
+    // Handle backward compatibility - array of keys from first parameter
+    if (
+      Array.isArray(config) &&
+      config.length > 0 &&
+      typeof config[0] === 'string'
+    ) {
+      const firstArg = this.args[0];
+      if (firstArg && typeof firstArg === 'object') {
+        breadcrumbData = this.extractBreadcrumbDataFromKeys(
+          firstArg,
+          config as readonly (keyof TArgs[0])[]
+        );
+      }
+    }
+    // Handle array syntax with extractor objects
+    else if (Array.isArray(config)) {
+      for (const extractor of config as readonly BreadcrumbExtractor<TArgs>[]) {
+        const paramData = this.extractFromParameter(extractor);
+        breadcrumbData = { ...breadcrumbData, ...paramData };
+      }
+    }
+    // Handle object syntax
+    else if (typeof config === 'object') {
+      const objConfig = config as BreadcrumbConfig<TArgs>;
+      for (const [paramIndex, paramConfig] of Object.entries(objConfig)) {
+        const index = parseInt(paramIndex, 10);
+        if (index >= 0 && index < this.args.length) {
+          const paramData = this.extractFromParameterConfig(
+            index,
+            paramConfig!
+          );
+          breadcrumbData = { ...breadcrumbData, ...paramData };
+        }
+      }
+    }
+
+    return breadcrumbData;
+  }
+
+  /**
+   * Extract breadcrumb data from a parameter using an extractor configuration.
+   */
+  private extractFromParameter(
+    extractor: BreadcrumbExtractor<TArgs>
+  ): Record<string, unknown> {
+    if (extractor.param < 0 || extractor.param >= this.args.length) {
+      return {};
+    }
+
+    const paramValue = this.args[extractor.param];
+
+    if ('keys' in extractor) {
+      // Extract specific keys from object
+      if (paramValue && typeof paramValue === 'object') {
+        return this.extractBreadcrumbDataFromKeys(paramValue, extractor.keys);
+      }
+    } else if ('transform' in extractor) {
+      // Apply custom transformer
+      try {
+        return extractor.transform(paramValue);
+      } catch (error) {
+        if (this.config.debug) {
+          console.error('Error in breadcrumb transformer:', error);
+        }
+      }
+    } else if ('as' in extractor) {
+      // Apply predefined transformer
+      return this.applyPredefinedTransformer(
+        paramValue,
+        extractor.as,
+        extractor.param
+      );
+    }
+
+    return {};
+  }
+
+  /**
+   * Extract breadcrumb data from a parameter using object-style configuration.
+   */
+  private extractFromParameterConfig(
+    paramIndex: number,
+    config: readonly (keyof any)[] | BreadcrumbTransformer<any>
+  ): Record<string, unknown> {
+    const paramValue = this.args[paramIndex];
+
+    if (Array.isArray(config)) {
+      // Extract keys from object
+      if (paramValue && typeof paramValue === 'object') {
+        return this.extractBreadcrumbDataFromKeys(paramValue, config);
+      }
+    } else if (typeof config === 'function') {
+      // Apply transformer function
+      try {
+        return config(paramValue);
+      } catch (error) {
+        if (this.config.debug) {
+          console.error('Error in breadcrumb transformer:', error);
+        }
+      }
+    }
+
+    return {};
+  }
+
+  /**
+   * Extract breadcrumb data from object using specified keys.
+   */
+  private extractBreadcrumbDataFromKeys(
+    obj: any,
+    keys: readonly (keyof any)[]
+  ): Record<string, unknown> {
     const breadcrumbData: Record<string, unknown> = {};
 
-    this.config.breadcrumbKeys!.forEach((key) => {
-      breadcrumbData[key as string] = (firstArg as Record<string, unknown>)[key];
+    keys.forEach((key) => {
+      const value = obj[key];
+      if (value !== undefined) {
+        breadcrumbData[key as string] = value;
+      }
     });
 
     return breadcrumbData;
+  }
+
+  /**
+   * Apply predefined transformers for common use cases.
+   */
+  private applyPredefinedTransformer(
+    value: unknown,
+    transformerType: 'length' | 'type' | 'value' | 'toString',
+    paramIndex: number
+  ): Record<string, unknown> {
+    const paramKey = `param${paramIndex}`;
+
+    try {
+      switch (transformerType) {
+        case 'length':
+          if (typeof value === 'string' || Array.isArray(value)) {
+            return { [`${paramKey}_length`]: value.length };
+          } else if (value && typeof value === 'object') {
+            return { [`${paramKey}_length`]: Object.keys(value).length };
+          }
+          break;
+        case 'type':
+          return { [`${paramKey}_type`]: typeof value };
+        case 'value':
+          return { [`${paramKey}_value`]: value };
+        case 'toString':
+          return { [`${paramKey}_string`]: String(value) };
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('Error in predefined transformer:', error);
+      }
+    }
+
+    return {};
   }
 
   /**
@@ -593,32 +821,38 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * Make the Try instance thenable so it can be `await`-ed directly.
    * This executes the underlying function with the current configuration and resolves
    * with the same result as calling `.value()` (never throws, returns undefined on error).
-   * 
+   *
    * @param onfulfilled Callback for successful resolution
    * @param onrejected Callback for rejection (rarely used since this doesn't reject)
    * @returns Promise that resolves with the result or undefined
-   * 
+   *
    * @example
    * ```typescript
    * // Direct await - equivalent to .value()
    * const user = await new Try(fetchUser, userId)
    *   .report('Failed to fetch user');
-   * 
+   *
    * // Can be used in Promise chains
    * const result = await new Try(processData, input)
    *   .default('fallback')
    *   .then(data => data?.toUpperCase() || 'NO DATA');
-   * 
+   *
    * // Behaves like .value() - never throws
    * const users = await new Try(fetchUsers); // undefined if error
    * ```
    */
   then<TResult1 = Awaited<T> | undefined, TResult2 = never>(
-    onfulfilled?: ((value: Awaited<T> | undefined) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+    onfulfilled?:
+      | ((value: Awaited<T> | undefined) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onrejected?:
+      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null
   ): Promise<TResult1 | TResult2> {
     return this.value().then(onfulfilled as any, onrejected as any);
   }
 }
 
-export default Try; 
+export default Try;
