@@ -23,7 +23,7 @@ interface TryConfig<TArg = unknown> {
 /**
  * Result of Try execution
  */
-type TryResult<T> = {
+export type TryResult<T> = {
   readonly success: true;
   readonly value: Awaited<T>;
 } | {
@@ -44,7 +44,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private readonly fn: (...args: TArgs) => T | Promise<T>;
   private readonly args: TArgs;
   private config: TryConfig<TArgs[0]>;
-  private result?: TryResult<T>;
+  private cachedResult?: TryResult<T>;
   private state: 'pending' | 'executed';
   private static ignoreErrorTypes: string[] = []
 
@@ -345,6 +345,45 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * Execute the function and return a result object containing either the value or error.
+   * This method never throws - it returns a discriminated union that you can pattern match on.
+   * Errors are not reported to Sentry when using this method.
+   * 
+   * @returns A result object with success flag, value (on success), or error (on failure)
+   * 
+   * @example
+   * ```typescript
+   * // Pattern matching on result
+   * const result = await new Try(riskyOperation, data).result();
+   * if (result.success) {
+   *   console.log('Success:', result.value);
+   * } else {
+   *   console.log('Error:', result.error.message);
+   * }
+   * 
+   * // Destructuring with type safety
+   * const { success, value, error } = await new Try(fetchUser, userId).result();
+   * if (success) {
+   *   displayUser(value); // TypeScript knows value exists
+   * } else {
+   *   handleError(error); // TypeScript knows error exists
+   * }
+   * 
+   * // Functional style with exhaustive matching
+   * const message = await new Try(processData, input)
+   *   .result()
+   *   .then(result => 
+   *     result.success 
+   *       ? `Processed: ${result.value}` 
+   *       : `Failed: ${result.error.message}`
+   *   );
+   * ```
+   */
+  async result(): Promise<TryResult<T>> {
+    return this.execute();
+  }
+
+  /**
    * Execute the function and return the error if one occurred, or undefined if successful.
    * This method never throws - it returns the error as a value instead.
    * Errors are not reported to Sentry when using this method.
@@ -431,19 +470,19 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * @returns Promise resolving to a result object indicating success/failure
    */
   private async execute(): Promise<TryResult<T>> {
-    if (this.state === 'executed' && this.result) {
-      return this.result;
+    if (this.state === 'executed' && this.cachedResult) {
+      return this.cachedResult;
     }
 
     try {
       const value = await this.fn(...this.args);
-      this.result = { success: true, value };
+      this.cachedResult = { success: true, value };
     } catch (e) {
       if (this.config.debug) {
         console.error(e);
       }
       const error = e as Error;
-      this.result = { success: false, error };
+      this.cachedResult = { success: false, error };
     } finally {
       this.state = 'executed';
       try {
@@ -455,7 +494,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       }
     }
 
-    return this.result;
+    return this.cachedResult;
   }
 
   /**

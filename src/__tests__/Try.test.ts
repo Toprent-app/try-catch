@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import Try from '../nextjs';
+import Try, { TryResult } from '../nextjs';
 
 // Mock Sentry SDK
 vi.mock('@sentry/nextjs', () => {
@@ -484,5 +484,134 @@ describe('Try', () => {
 
     expect(consoleSpy).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  describe('.result() method', () => {
+    it('should return success result object', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(successfulFunction, params).result();
+
+      expect(result).toEqual({
+        success: true,
+        value: { ok: true, ...params }
+      });
+    });
+
+    it('should return error result object', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(throwingFunction, params)
+        .debug(false)
+        .result();
+
+      expect(result).toEqual({
+        success: false,
+        error: new Error('boom')
+      });
+    });
+
+    it('should not report errors to Sentry when using result()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params)
+        .debug(false)
+        .report('should not be reported')
+        .result();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should work with type guards for discriminated union', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(successfulFunction, params).result();
+
+      if (result.success) {
+        expect(result.value).toEqual({ ok: true, ...params });
+        // TypeScript should know that result.error doesn't exist here
+        expect('error' in result).toBe(false);
+      } else {
+        // This branch shouldn't execute for successful function
+        expect(true).toBe(false);
+      }
+    });
+
+    it('should work with destructuring', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(throwingFunction, params)
+        .debug(false)
+        .result();
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toBe('boom');
+        // TypeScript should know that result.value doesn't exist here
+        expect('value' in result).toBe(false);
+      }
+    });
+
+    it('should execute finally callbacks when using result()', async () => {
+      const params = { parameterKey: 'alpha' };
+      const finallySpy = vi.fn();
+
+      const result = await new Try(successfulFunction, params)
+        .finally(finallySpy)
+        .result();
+
+      expect(result.success).toBe(true);
+      expect(finallySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should cache results on subsequent calls', async () => {
+      const params = { parameterKey: 'alpha' };
+      const fnSpy = vi.fn().mockResolvedValue({ cached: true });
+
+      const tryInstance = new Try(fnSpy, params);
+      
+      const result1 = await tryInstance.result();
+      const result2 = await tryInstance.result();
+
+      expect(fnSpy).toHaveBeenCalledTimes(1);
+      expect(result1).toBe(result2); // Same object reference
+      expect(result1.success).toBe(true);
+      if (result1.success) {
+        expect(result1.value).toEqual({ cached: true });
+      }
+    });
+
+    it('should work with async finally callbacks', async () => {
+      const params = { parameterKey: 'alpha' };
+      const finallySpy = vi.fn();
+      let asyncCallbackResolved = false;
+      
+      const asyncFinally = async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        asyncCallbackResolved = true;
+        finallySpy();
+      };
+
+      const result = await new Try(successfulFunction, params)
+        .finally(asyncFinally)
+        .result();
+
+      expect(result.success).toBe(true);
+      expect(asyncCallbackResolved).toBe(true);
+      expect(finallySpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should export TryResult type for TypeScript users', async () => {
+      const params = { parameterKey: 'alpha' };
+      
+      // This test verifies that TryResult type is properly exported
+      const result: TryResult<{ ok: boolean; }> = await new Try(successfulFunction, params).result();
+      
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.value).toEqual({ ok: true, ...params });
+      }
+    });
   });
 });
