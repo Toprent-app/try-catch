@@ -154,9 +154,9 @@ describe('Try', () => {
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({
+        message: 'Calling throwingFunction function',
         data: {
-          'parameterKey': 'alpha',
-          'functionName': 'throwingFunction'
+          'parameterKey': 'alpha'
         }
       })
     );
@@ -402,9 +402,9 @@ describe('Try', () => {
 
     expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
       expect.objectContaining({
+        message: 'Calling anonymous function',
         data: {
-          'parameterKey': 'beta',
-          'functionName': 'anonymous'
+          'parameterKey': 'beta'
         }
       })
     );

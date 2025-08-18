@@ -481,12 +481,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     const breadcrumbData = this.extractBreadcrumbData(firstArg);
-    
+
     // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
-    breadcrumbData.functionName = functionName;
-    
-    Sentry.addBreadcrumb({ data: breadcrumbData });
+
+    Sentry.addBreadcrumb({ message: `Calling ${functionName} function`, data: breadcrumbData });
   }
 
   /**
