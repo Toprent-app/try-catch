@@ -218,6 +218,41 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * Add multiple custom tags for Sentry error reporting at once.
+   * This is a convenience method for setting many tags without chaining multiple .tag() calls.
+   * Tags help categorize and filter errors in Sentry dashboards.
+   * 
+   * @param tagRecord A record/object containing tag name-value pairs
+   * @returns The Try instance for method chaining
+   * 
+   * @example
+   * ```typescript
+   * // Set multiple tags at once
+   * await new Try(processPayment, paymentData)
+   *   .tags({
+   *     component: 'payment-service',
+   *     operation: 'charge-card',
+   *     gateway: 'stripe',
+   *     version: '2.1.0'
+   *   })
+   *   .report('Payment processing failed')
+   *   .unwrap();
+   * 
+   * // Can be combined with individual tag() calls
+   * await new Try(processData, data)
+   *   .tags({ module: 'data-processor', version: '1.0' })
+   *   .tag('requestId', generateId())
+   *   .report('Processing failed')
+   *   .value();
+   * ```
+   */
+  tags(tagRecord: Record<string, string>): Try<T, TArgs> {
+    return this.setConfig({
+      tags: { ...this.config.tags, ...tagRecord }
+    });
+  }
+
+  /**
    * Register a callback that will run after the wrapped function finishes
    * executing (successfully or with an error). The callback runs exactly once
    * per {@link Try} instance, mirroring the behaviour of

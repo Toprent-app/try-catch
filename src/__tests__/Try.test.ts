@@ -205,6 +205,111 @@ describe('Try', () => {
     });
   });
 
+  it('should add multiple tags at once', async () => {
+    const params = { parameterKey: 'alpha' };
+
+    const exec = new Try(throwingFunction, params)
+      .debug(false)
+      .report('failed')
+      .tags({
+        component: 'payment-service',
+        operation: 'charge-card',
+        gateway: 'stripe',
+        version: '2.1.0'
+      })
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('failed');
+
+    const expectedError = new Error('failed');
+    expectedError.cause = new Error('boom');
+
+    expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      tags: {
+        library: '@power-rent/try-catch',
+        component: 'payment-service',
+        operation: 'charge-card',
+        gateway: 'stripe',
+        version: '2.1.0'
+      }
+    });
+  });
+
+  it('should combine tags() with individual tag() calls', async () => {
+    const params = { parameterKey: 'alpha' };
+
+    const exec = new Try(throwingFunction, params)
+      .debug(false)
+      .report('failed')
+      .tags({ module: 'data-processor', version: '1.0' })
+      .tag('requestId', 'req-123')
+      .tag('userId', 'user-456')
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('failed');
+
+    const expectedError = new Error('failed');
+    expectedError.cause = new Error('boom');
+
+    expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      tags: {
+        library: '@power-rent/try-catch',
+        module: 'data-processor',
+        version: '1.0',
+        requestId: 'req-123',
+        userId: 'user-456'
+      }
+    });
+  });
+
+  it('should override tags when using tags() multiple times', async () => {
+    const params = { parameterKey: 'alpha' };
+
+    const exec = new Try(throwingFunction, params)
+      .debug(false)
+      .report('failed')
+      .tags({ version: '1.0', env: 'prod' })
+      .tags({ version: '2.0', component: 'api' }) // version should be overridden
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('failed');
+
+    const expectedError = new Error('failed');
+    expectedError.cause = new Error('boom');
+
+    expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      tags: {
+        library: '@power-rent/try-catch',
+        version: '2.0', // overridden value
+        env: 'prod',
+        component: 'api'
+      }
+    });
+  });
+
+  it('should handle empty tags object', async () => {
+    const params = { parameterKey: 'alpha' };
+
+    const exec = new Try(throwingFunction, params)
+      .debug(false)
+      .report('failed')
+      .tags({}) // empty object should work
+      .tag('single', 'tag')
+      .unwrap();
+
+    await expect(exec).rejects.toThrow('failed');
+
+    const expectedError = new Error('failed');
+    expectedError.cause = new Error('boom');
+
+    expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      tags: {
+        library: '@power-rent/try-catch',
+        single: 'tag'
+      }
+    });
+  });
+
   it('should return the actual error', async () => {
     const params = { parameterKey: 'alpha' };
 
@@ -612,6 +717,73 @@ describe('Try', () => {
       if (result.success) {
         expect(result.value).toEqual({ ok: true, ...params });
       }
+    });
+  });
+
+  describe('tags() method with different execution modes', () => {
+    it('should work with .value() method', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(throwingFunction, params)
+        .debug(false)
+        .report('failed')
+        .tags({ component: 'test', version: '1.0' })
+        .value();
+
+      expect(result).toBe(undefined);
+      
+      const expectedError = new Error('failed');
+      expectedError.cause = new Error('boom');
+
+      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        tags: {
+          library: '@power-rent/try-catch',
+          component: 'test',
+          version: '1.0'
+        }
+      });
+    });
+
+    it('should work with .result() method', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(successfulFunction, params)
+        .tags({ component: 'test', version: '1.0' })
+        .result();
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.value).toEqual({ ok: true, ...params });
+      }
+      
+      // tags() with .result() should not report to Sentry
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should support method chaining in any order', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const exec = new Try(throwingFunction, params)
+        .tags({ component: 'payment' })
+        .debug(false)
+        .tag('operation', 'charge')
+        .report('failed')
+        .tags({ version: '2.0' })
+        .unwrap();
+
+      await expect(exec).rejects.toThrow('failed');
+
+      const expectedError = new Error('failed');
+      expectedError.cause = new Error('boom');
+
+      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        tags: {
+          library: '@power-rent/try-catch',
+          component: 'payment',
+          operation: 'charge',
+          version: '2.0'
+        }
+      });
     });
   });
 });

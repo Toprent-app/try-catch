@@ -20,8 +20,10 @@
       "types": "./dist/nextjs/index.d.ts",
       "require": "./dist/nextjs/index.js",
       "import": "./dist/esm/nextjs/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "scripts": {
     "build": "npm run build:cjs && npm run build:esm",
     "build:cjs": "tsc -p tsconfig.json",
@@ -64,6 +66,16 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
+  },
+  "typesVersions": {
+    "*": {
+      "nextjs": [
+        "dist/nextjs/index.d.ts"
+      ],
+      "*": [
+        "dist/index.d.ts"
+      ]
+    }
   }
 }
