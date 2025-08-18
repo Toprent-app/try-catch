@@ -409,4 +409,80 @@ describe('Try', () => {
       })
     );
   });
+
+  it('should await async finally callbacks', async () => {
+    const params = { parameterKey: 'alpha' };
+    const finallySpy = vi.fn();
+    let asyncCallbackResolved = false;
+    
+    const asyncFinally = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      asyncCallbackResolved = true;
+      finallySpy();
+    };
+
+    await new Try(successfulFunction, params)
+      .finally(asyncFinally)
+      .unwrap();
+
+    expect(asyncCallbackResolved).toBe(true);
+    expect(finallySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should await async finally callbacks on error', async () => {
+    const params = { parameterKey: 'alpha' };
+    const finallySpy = vi.fn();
+    let asyncCallbackResolved = false;
+    
+    const asyncFinally = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      asyncCallbackResolved = true;
+      finallySpy();
+    };
+
+    const exec = new Try(throwingFunction, params)
+      .debug(false)
+      .finally(asyncFinally)
+      .unwrap();
+      
+    await expect(exec).rejects.toThrow('boom');
+    expect(asyncCallbackResolved).toBe(true);
+    expect(finallySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle async finally callback errors', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+    const params = { parameterKey: 'alpha' };
+    
+    const throwingAsyncFinally = async () => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      throw new Error('async finally error');
+    };
+
+    await new Try(successfulFunction, params)
+      .debug()
+      .finally(throwingAsyncFinally)
+      .value();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error in finally callback', new Error('async finally error'));
+    consoleSpy.mockRestore();
+  });
+
+  it('should handle async finally callback errors without debug', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+    const params = { parameterKey: 'alpha' };
+    
+    const throwingAsyncFinally = async () => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      throw new Error('async finally error');
+    };
+
+    await new Try(successfulFunction, params)
+      .debug(false)
+      .finally(throwingAsyncFinally)
+      .value();
+
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
 });

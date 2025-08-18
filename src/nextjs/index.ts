@@ -12,7 +12,7 @@ interface TryConfig<TArg = unknown> {
    * Callback that will always run after the wrapped function finishes
    * executing, regardless of success or failure. Similar to `Promise.prototype.finally`.
    */
-  readonly finallyCallback?: () => void;
+  readonly finallyCallback?: () => void | Promise<void>;
   /**
    * Enable debug logging to console. When true, errors will be logged to console.error.
    * Libraries should not log by default - this is an opt-in feature.
@@ -227,10 +227,10 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * before any error is re-thrown from {@link unwrap}. It is always executed
    * asynchronously in the same tick as the function resolution.
    *
-   * @param callback A function to invoke once the wrapped operation settles.
+   * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
    */
-  finally(callback: () => void): Try<T, TArgs> {
+  finally(callback: () => void | Promise<void>): Try<T, TArgs> {
     return this.setConfig({ finallyCallback: callback });
   }
 
@@ -447,7 +447,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     } finally {
       this.state = 'executed';
       try {
-        this.config.finallyCallback?.();
+        await Promise.resolve(this.config.finallyCallback?.());
       } catch (err) {
         if (this.config.debug) {
           console.error('Error in finally callback', err);
