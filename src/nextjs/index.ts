@@ -3,9 +3,9 @@ import * as Sentry from '@sentry/nextjs';
 /**
  * Configuration for Try execution
  */
-interface TryConfig<TArg extends Record<string, any>> {
+interface TryConfig<TArg = unknown> {
   readonly message?: string;
-  readonly breadcrumbKeys?: readonly (keyof TArg)[];
+  readonly breadcrumbKeys?: TArg extends Record<string, unknown> ? readonly (keyof TArg)[] : never;
   readonly tags: Readonly<Record<string, string>>;
   readonly defaultValue?: unknown;
   /**
@@ -35,7 +35,7 @@ type TryResult<T> = {
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string, any>[]> {
+export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private readonly fn: (...args: TArgs) => T | Promise<T>;
   private readonly args: TArgs;
   private config: TryConfig<TArgs[0]>;
@@ -47,21 +47,33 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
    * Creates a new Try instance for simplified async error handling.
    * 
    * @param fn The function to execute (can be sync or async)
-   * @param args Arguments to pass to the function
+   * @param args Arguments to pass to the function (any types: strings, numbers, objects, etc.)
    * 
    * @example
    * ```typescript
-   * // With async function
-   * const result = new Try(fetchUser, userId);
+   * // With string parameters
+   * const result = new Try(greet, 'Alice', 'Hello');
    * 
-   * // With multiple arguments
+   * // With number parameters
+   * const sum = new Try(add, 5, 3);
+   * 
+   * // With object parameters (enables breadcrumbs)
    * const result = new Try(updateUser, { id: 1, name: 'John' }, { validateOnly: true });
    * 
-   * // Chain configuration methods
-   * const value = await new Try(apiCall, params)
+   * // With mixed parameter types
+   * const result = new Try(formatMessage, 123, 'Error occurred', true);
+   * 
+   * // Chain configuration methods (breadcrumbs only available with object parameters)
+   * const value = await new Try(apiCall, { userId: 123, action: 'update' })
    *   .report('API call failed')
-   *   .breadcrumbs(['userId', 'action'])
+   *   .breadcrumbs(['userId', 'action'])  // Only works with object first parameter
    *   .tag('component', 'user-service')
+   *   .unwrap();
+   * 
+   * // Non-object parameters (breadcrumbs not available)
+   * const value = await new Try(processString, 'hello world')
+   *   .report('Processing failed')
+   *   .tag('operation', 'string-process')
    *   .unwrap();
    * ```
    */
@@ -139,24 +151,37 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
   /**
    * Configure Sentry breadcrumbs to be extracted from the first function argument.
    * Breadcrumbs provide additional context when errors are reported to Sentry.
-   * Only works when the first argument is an object.
+   * 
+   * **Type Safety**: This method is only available when the first argument is an object.
+   * TypeScript will prevent calling this method if the first parameter is a primitive type.
    * 
    * @param keys Array of property keys from the first argument to include as breadcrumbs
    * @returns The Try instance for method chaining
    * 
    * @example
    * ```typescript
-   * // Extract userId and action as breadcrumbs
+   * // ✅ Works with object first parameter
    * await new Try(updateUser, { userId: 123, name: 'John', action: 'profile-update' })
    *   .breadcrumbs(['userId', 'action'])
    *   .report('User update failed')
    *   .unwrap();
    * 
-   * // Breadcrumbs will be added to Sentry context if an error occurs
+   * // ❌ TypeScript error with non-object first parameter
+   * await new Try(greet, 'Alice', 'Hello')
+   *   .breadcrumbs(['length'])  // TypeScript error!
+   *   .unwrap();
+   * 
+   * // ✅ Other methods still work with non-object parameters
+   * await new Try(greet, 'Alice', 'Hello')
+   *   .report('Greeting failed')
+   *   .tag('operation', 'greet')
+   *   .unwrap();
    * ```
    */
-  breadcrumbs(keys: readonly (keyof TArgs[0])[]): Try<T, TArgs> {
-    return this.setConfig({ breadcrumbKeys: keys });
+  breadcrumbs<K extends TArgs[0] extends Record<string, unknown> ? keyof TArgs[0] : never>(
+    keys: readonly K[]
+  ): Try<T, TArgs> {
+    return this.setConfig({ breadcrumbKeys: keys as any });
   }
 
   /**
@@ -273,7 +298,8 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
 
       // Throw a wrapped error with custom message when provided, otherwise re-throw original
       if (this.config.message && !Try.ignoreErrorTypes.includes(result.error.name)) {
-        throw new Error(this.config.message);
+        const wrappedError = this.createWrappedError(result.error);
+        throw wrappedError;
       }
       throw result.error;
     }
@@ -348,7 +374,7 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
 
     // Add breadcrumbs when configured regardless of reporting strategy.
     if (this.config.breadcrumbKeys?.length) {
-      await this.addBreadcrumbsIfConfigured();
+      this.addBreadcrumbsIfConfigured();
     }
 
     // Report error only when the consumer has explicitly opted-in via `.report()`
@@ -357,7 +383,7 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
     }
 
     // Return configured default when error occurs, otherwise undefined
-    return (this.config.defaultValue ?? undefined) as any;
+    return this.config.defaultValue as any ?? undefined;
   }
 
   /**
@@ -424,7 +450,7 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
     const breadcrumbData: Record<string, unknown> = {};
 
     this.config.breadcrumbKeys!.forEach((key) => {
-      breadcrumbData[key as string] = firstArg[key];
+      breadcrumbData[key as string] = (firstArg as Record<string, unknown>)[key];
     });
 
     return breadcrumbData;
@@ -438,8 +464,10 @@ export class Try<T, TArgs extends readonly Record<string, any>[] = Record<string
       return error;
     }
 
-    // @ts-ignore cause is missing in the definition
-    return new Error(this.config.message, { cause: error });
+    const wrappedError = new Error(this.config.message);
+    wrappedError.cause = error;
+    wrappedError.stack = error.stack;
+    return wrappedError;
   }
 
   /**

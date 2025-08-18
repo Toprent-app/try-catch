@@ -38,16 +38,44 @@ try {
 }
 ```
 
+### Parameter Types
+
+The library accepts any parameter types, not just objects:
+
+```typescript
+// String parameters
+const greeting = await new Try(greet, 'Alice', 'Hi').value();
+
+// Number parameters
+const sum = await new Try(add, 5, 3).unwrap();
+
+// Mixed parameter types
+const message = await new Try(formatMessage, 123, 'Test message', true).value();
+
+// No parameters
+const timestamp = await new Try(getCurrentTime).value();
+
+// Boolean and other primitive types
+const isValid = await new Try(validateInput, 'email@test.com', true).value();
+```
+
 ### Advanced Usage
 
 ```typescript
-// Chain multiple configuration methods
+// Chain multiple configuration methods (with object parameters)
 const result = await new Try(processUser, { id: 123, name: 'John' })
   .breadcrumbs(['id', 'name'])        // Add these fields as breadcrumbs
   .report('Failed to process user')   // Custom error message
   .tag('operation', 'user-processing') // Add Sentry tag
   .tag('priority', 'high')            // Add another tag
   .default(null)
+  .value();
+
+// Works with any parameter types (breadcrumbs only for objects)
+const result = await new Try(calculateDistance, 10, 20, 'meters')
+  .report('Distance calculation failed')
+  .tag('operation', 'calculation')
+  .default(0)
   .value();
 
 // Check for errors without throwing
@@ -71,7 +99,9 @@ new Try<T, TArgs>(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs)
 ```
 
 - `fn`: The function to execute (can be sync or async)
-- `args`: Arguments to pass to the function
+- `args`: Arguments to pass to the function (any types: strings, numbers, objects, etc.)
+
+The constructor accepts any number of arguments of any type. Breadcrumbs functionality is only available when the first argument is an object.
 
 ### Configuration Methods
 
@@ -81,7 +111,7 @@ All configuration methods return a new `Try` instance, enabling method chaining:
 Attach a custom Sentry error message.
 
 #### `.breadcrumbs(keys: readonly string[]): Try<T, TArgs>`
-Record breadcrumbs for the provided parameter keys. Only works when the first argument is an object.
+Record breadcrumbs for the provided parameter keys. **Only available when the first argument is an object.** TypeScript will prevent calling this method with non-object first parameters.
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
@@ -101,6 +131,52 @@ Execute the function and return the result, the configured default value, or `un
 Execute the function and return the error if one occurred, or `undefined` if successful.
 
 ## Examples
+
+### Different Parameter Types
+
+```typescript
+// String parameters
+function greet(name: string, greeting: string = 'Hello'): string {
+  return `${greeting}, ${name}!`;
+}
+const greeting = await new Try(greet, 'Alice', 'Hi').value();
+
+// Number parameters
+function add(a: number, b: number): number {
+  return a + b;
+}
+const sum = await new Try(add, 5, 3).unwrap();
+
+// Mixed parameter types
+function formatMessage(id: number, message: string, urgent: boolean): string {
+  const prefix = urgent ? '[URGENT]' : '[INFO]';
+  return `${prefix} #${id}: ${message}`;
+}
+const formatted = await new Try(formatMessage, 123, 'System error', true)
+  .report('Message formatting failed')
+  .tag('component', 'notification')
+  .default('')
+  .value();
+
+// No parameters
+function getCurrentTime(): number {
+  return Date.now();
+}
+const timestamp = await new Try(getCurrentTime).value();
+
+// Object parameters (breadcrumbs available)
+const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
+  .breadcrumbs(['userId']) // ✅ Available with object parameter
+  .report('Failed to fetch user')
+  .value();
+
+// Non-object parameters (breadcrumbs not available)
+const result = await new Try(processString, 'hello world')
+  // .breadcrumbs(['length']) // ❌ TypeScript error
+  .report('String processing failed') // ✅ Other methods work fine
+  .tag('operation', 'process')
+  .value();
+```
 
 ### Error Handling Patterns
 

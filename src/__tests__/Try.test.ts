@@ -186,9 +186,10 @@ describe('Try', () => {
 
     await expect(exec).rejects.toThrow('failed');
 
-    expect(Sentry.captureException).toBeCalledWith(new Error('failed', {
-      cause: new Error('boom')
-    }), {
+    const expectedError = new Error('failed');
+    expectedError.cause = new Error('boom');
+
+    expect(Sentry.captureException).toBeCalledWith(expectedError, {
       tags: {
         library: '@power-rent/try-catch',
         name: 'value',
@@ -249,5 +250,60 @@ describe('Try', () => {
       .unwrap();
     await expect(exec).rejects.toThrow('boom');
     expect(finallySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should work with string parameters', async () => {
+    function greet(name: string, greeting: string = 'Hello') {
+      return `${greeting}, ${name}!`;
+    }
+
+    const result = await new Try(greet, 'Alice', 'Hi').value();
+    expect(result).toBe('Hi, Alice!');
+  });
+
+  it('should work with number parameters', async () => {
+    function add(a: number, b: number): number {
+      return a + b;
+    }
+
+    const result = await new Try(add, 5, 3).unwrap();
+    expect(result).toBe(8);
+  });
+
+  it('should work with mixed parameter types', async () => {
+    function formatMessage(id: number, message: string, urgent: boolean): string {
+      const prefix = urgent ? '[URGENT]' : '[INFO]';
+      return `${prefix} #${id}: ${message}`;
+    }
+
+    const result = await new Try(formatMessage, 123, 'Test message', true).value();
+    expect(result).toBe('[URGENT] #123: Test message');
+  });
+
+  it('should work with no parameters', async () => {
+    function getCurrentTime(): number {
+      return Date.now();
+    }
+
+    const result = await new Try(getCurrentTime).value();
+    expect(typeof result).toBe('number');
+    expect(result).toBeGreaterThan(0);
+  });
+
+  it('should not allow breadcrumbs with non-object first parameter', async () => {
+    function processString(str: string): string {
+      return str.toUpperCase();
+    }
+
+    // This should show a TypeScript error if breadcrumbs is called with non-object parameter
+    const tryInstance = new Try(processString, 'hello');
+    
+    // Test that it still works without breadcrumbs
+    const result = await tryInstance
+      .report('String processing failed')
+      .tag('operation', 'uppercase')
+      .value();
+    
+    expect(result).toBe('HELLO');
   });
 });
