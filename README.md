@@ -2,6 +2,41 @@
 
 A TypeScript utility for simplified async error handling with Sentry integration.
 
+## Think and write in plain English
+
+This library lets you write what you mean, almost like English:
+
+- **Try to run a function with arguments.**
+- **If it fails, choose the behavior:**
+  - **return a default** with `.default(...).value()`
+  - **report to Sentry** with `.report('message')`
+  - **get the error as a value** with `.error()`
+  - **or let it throw** with `.unwrap()`
+
+Examples that read like a sentence:
+
+```ts
+// Try to get a user; if it fails, report and return null
+const user = await new Try(fetchUser, { id: 123 })
+  .report('Failed to fetch user')
+  .default(null)
+  .value();
+
+// Try to charge a card; if it fails, throw with a custom message (and report)
+const receipt = await new Try(chargeCard, { amount: 1000, currency: 'USD' })
+  .report('Payment failed')
+  .unwrap();
+
+// Try to parse JSON; if it fails, give me the error instead of throwing
+const error = await new Try(JSON.parse, raw)
+  .error();
+
+// Or try to parse JSON; if it fails, give me the default value instead of throwing
+const value = await new Try(JSON.parse, raw)
+  .default([])
+  .value();
+```
+
 ## Installation
 
 ```bash
