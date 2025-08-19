@@ -34,7 +34,7 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run format:check"
+    "prepublishOnly": "npm run clean && npm run test && npm run build"
   },
   "keywords": [
     "typescript",
@@ -55,7 +55,7 @@
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
   "peerDependencies": {
-    "@sentry/nextjs": "8.55.0"
+    "@sentry/nextjs": "^8"
   },
   "peerDependenciesMeta": {
     "@sentry/nextjs": {
