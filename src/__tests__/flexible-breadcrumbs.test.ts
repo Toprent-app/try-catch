@@ -9,7 +9,7 @@ vi.mock('@sentry/nextjs', () => {
   };
 });
 
-const Sentry = await import('@sentry/nextjs');
+import * as Sentry from '@sentry/nextjs';
 
 async function throwingFunction(_params: any): Promise<{ ok: boolean }> {
   throw new Error('boom');
@@ -20,12 +20,11 @@ describe('Flexible Breadcrumbs System', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Backward Compatibility', () => {
+  describe('Array of keys', () => {
     it('should work with existing breadcrumbs API (object first parameter)', async () => {
       const params = { userId: 123, action: 'update' };
 
       await new Try(throwingFunction, params)
-        .debug(false)
         .breadcrumbs(['userId', 'action'])
         .value();
 
@@ -36,23 +35,20 @@ describe('Flexible Breadcrumbs System', () => {
             userId: 123,
             action: 'update',
           },
-        })
+        }),
       );
     });
 
     it('should handle empty breadcrumbs array', async () => {
       const params = { userId: 123 };
 
-      await new Try(throwingFunction, params)
-        .debug(false)
-        .breadcrumbs([])
-        .value();
+      await new Try(throwingFunction, params).breadcrumbs([]).value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Calling throwingFunction function',
           data: {},
-        })
+        }),
       );
     });
   });
@@ -62,13 +58,12 @@ describe('Flexible Breadcrumbs System', () => {
       function testFunction(
         order: string,
         customer: { id: number; name: string },
-        priority: boolean
+        priority: boolean,
       ) {
         throw new Error('test');
       }
 
       await new Try(testFunction, 'order-123', { id: 456, name: 'John' }, true)
-        .debug(false)
         .breadcrumbs([
           { param: 1, keys: ['id', 'name'] },
           { param: 2, as: 'value' },
@@ -83,7 +78,7 @@ describe('Flexible Breadcrumbs System', () => {
             name: 'John',
             param2_value: true,
           },
-        })
+        }),
       );
     });
 
@@ -95,22 +90,15 @@ describe('Flexible Breadcrumbs System', () => {
       await new Try(processOrder, 'order-123', 99.99, {
         tags: ['urgent', 'vip'],
       })
-        .debug(false)
-        .breadcrumbs([
-          { param: 0, transform: (id: string) => ({ orderId: id }) },
-          {
-            param: 1,
-            transform: (amount: number) => ({
-              amountCategory: amount > 100 ? 'large' : 'small',
-            }),
-          },
-          {
-            param: 2,
-            transform: (meta: { tags: string[] }) => ({
-              tagCount: meta.tags.length,
-            }),
-          },
-        ])
+        .breadcrumbs(
+          (id: unknown) => ({ orderId: String(id) }),
+          (amount: unknown) => ({
+            amountCategory: (amount as number) > 100 ? 'large' : 'small',
+          }),
+          (meta: unknown) => ({
+            tagCount: (meta as { tags: string[] }).tags.length,
+          }),
+        )
         .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
@@ -121,7 +109,7 @@ describe('Flexible Breadcrumbs System', () => {
             amountCategory: 'small',
             tagCount: 2,
           },
-        })
+        }),
       );
     });
 
@@ -134,7 +122,6 @@ describe('Flexible Breadcrumbs System', () => {
         enabled: true,
         timeout: 5000,
       })
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'length' },
           { param: 0, as: 'value' },
@@ -152,23 +139,22 @@ describe('Flexible Breadcrumbs System', () => {
             param1_length: 5,
             param2_length: 2,
           },
-        })
+        }),
       );
     });
 
     it('should handle type transformer', async () => {
       function mixedTypes(
-        str: string,
-        num: number,
-        bool: boolean,
-        obj: object,
-        arr: any[]
+        _str: string,
+        _num: number,
+        _bool: boolean,
+        _obj: object,
+        _arr: any[],
       ) {
         throw new Error('test');
       }
 
       await new Try(mixedTypes, 'test', 42, true, {}, [])
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'type' },
           { param: 1, as: 'type' },
@@ -188,7 +174,7 @@ describe('Flexible Breadcrumbs System', () => {
             param3_type: 'object',
             param4_type: 'object',
           },
-        })
+        }),
       );
     });
 
@@ -198,7 +184,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(processValues, 42, true, { name: 'test' })
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'toString' },
           { param: 1, as: 'toString' },
@@ -214,7 +199,7 @@ describe('Flexible Breadcrumbs System', () => {
             param1_string: 'true',
             param2_string: '[object Object]',
           },
-        })
+        }),
       );
     });
 
@@ -224,7 +209,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(twoParams, 'hello', 42)
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'value' },
           { param: 5, as: 'value' }, // Invalid index
@@ -239,7 +223,7 @@ describe('Flexible Breadcrumbs System', () => {
             param0_value: 'hello',
             // Invalid indices should be ignored
           },
-        })
+        }),
       );
     });
   });
@@ -249,7 +233,7 @@ describe('Flexible Breadcrumbs System', () => {
       function processRequest(
         endpoint: string,
         payload: { userId: number; data: string },
-        headers: any
+        headers: any,
       ) {
         throw new Error('test');
       }
@@ -258,13 +242,12 @@ describe('Flexible Breadcrumbs System', () => {
         processRequest,
         '/api/users',
         { userId: 123, data: 'test' },
-        { 'Content-Type': 'application/json' }
+        { 'Content-Type': 'application/json' },
       )
-        .debug(false)
         .breadcrumbs({
-          0: (url) => ({ endpoint: url }),
+          0: (url: string) => ({ endpoint: url }),
           1: ['userId'],
-          2: (headers) => ({ headerCount: Object.keys(headers).length }),
+          2: (headers: Record<string, string>) => ({ headerCount: Object.keys(headers).length }),
         })
         .value();
 
@@ -276,7 +259,7 @@ describe('Flexible Breadcrumbs System', () => {
             userId: 123,
             headerCount: 1,
           },
-        })
+        }),
       );
     });
 
@@ -284,7 +267,7 @@ describe('Flexible Breadcrumbs System', () => {
       function complexFunction(
         id: string,
         user: { name: string; age: number },
-        settings: any
+        settings: any,
       ) {
         throw new Error('test');
       }
@@ -293,13 +276,12 @@ describe('Flexible Breadcrumbs System', () => {
         complexFunction,
         'user-123',
         { name: 'Alice', age: 30 },
-        { theme: 'dark', notifications: true }
+        { theme: 'dark', notifications: true },
       )
-        .debug(false)
         .breadcrumbs({
-          0: (id) => ({ identifier: id.toUpperCase() }),
+          0: (id: string) => ({ identifier: id.toUpperCase() }),
           1: ['name', 'age'],
-          2: (settings) => ({ settingsCount: Object.keys(settings).length }),
+          2: (settings: { theme: string; notifications: boolean }) => ({ settingsCount: Object.keys(settings).length }),
         })
         .value();
 
@@ -312,7 +294,7 @@ describe('Flexible Breadcrumbs System', () => {
             age: 30,
             settingsCount: 2,
           },
-        })
+        }),
       );
     });
   });
@@ -321,7 +303,7 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle transformer errors gracefully with debug enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
 
       function testFunction(data: string) {
         throw new Error('test');
@@ -341,13 +323,13 @@ describe('Flexible Breadcrumbs System', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error in breadcrumb transformer:',
-        expect.any(Error)
+        expect.any(Error),
       );
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Calling testFunction function',
           data: {}, // Empty data due to transformer error
-        })
+        }),
       );
 
       consoleSpy.mockRestore();
@@ -356,14 +338,13 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle transformer errors gracefully with debug disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
 
       function testFunction(data: string) {
         throw new Error('test');
       }
 
       await new Try(testFunction, 'test-data')
-        .debug(false)
         .breadcrumbs([
           {
             param: 0,
@@ -379,7 +360,7 @@ describe('Flexible Breadcrumbs System', () => {
         expect.objectContaining({
           message: 'Calling testFunction function',
           data: {}, // Empty data due to transformer error
-        })
+        }),
       );
 
       consoleSpy.mockRestore();
@@ -388,7 +369,7 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle predefined transformer errors gracefully', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
 
       function testFunction(data: any) {
         throw new Error('test');
@@ -407,7 +388,7 @@ describe('Flexible Breadcrumbs System', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error in predefined transformer:',
-        expect.any(Error)
+        expect.any(Error),
       );
       consoleSpy.mockRestore();
     });
@@ -418,7 +399,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(testFunction, 'not-an-object')
-        .debug(false)
         .breadcrumbs([{ param: 0, keys: ['nonExistentKey'] }])
         .value();
 
@@ -426,7 +406,7 @@ describe('Flexible Breadcrumbs System', () => {
         expect.objectContaining({
           message: 'Calling testFunction function',
           data: {}, // Empty because param 0 is not an object
-        })
+        }),
       );
     });
   });
@@ -438,7 +418,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(testFunction, undefined, null, '')
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'value' },
           { param: 1, as: 'value' },
@@ -454,7 +433,7 @@ describe('Flexible Breadcrumbs System', () => {
             param1_value: null,
             param2_length: 0,
           },
-        })
+        }),
       );
     });
 
@@ -469,7 +448,7 @@ describe('Flexible Breadcrumbs System', () => {
         expect.objectContaining({
           message: 'Calling testFunction function',
           data: {},
-        })
+        }),
       );
     });
 
@@ -479,7 +458,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(testFunction, 'valid', { key: 'value' })
-        .debug(false)
         .breadcrumbs([
           { param: 0, as: 'value' }, // Valid
           { param: 10, as: 'value' }, // Invalid param index
@@ -496,7 +474,7 @@ describe('Flexible Breadcrumbs System', () => {
             key: 'value',
             // Invalid entries should be ignored
           },
-        })
+        }),
       );
     });
 
@@ -506,7 +484,6 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(testFunction, { a: 'defined', c: undefined })
-        .debug(false)
         .breadcrumbs([{ param: 0, keys: ['a', 'b', 'c'] }])
         .value();
 
@@ -517,7 +494,7 @@ describe('Flexible Breadcrumbs System', () => {
             a: 'defined',
             // b and c should be filtered out (missing and undefined)
           },
-        })
+        }),
       );
     });
 
@@ -532,27 +509,26 @@ describe('Flexible Breadcrumbs System', () => {
         expect.objectContaining({
           message: 'Calling noParams function',
           data: {},
-        })
+        }),
       );
     });
 
     it('should handle anonymous functions properly', async () => {
-      const anonymousFunc = (data: string) => {
-        throw new Error('test');
-      };
-
-      await new Try(anonymousFunc, 'test')
-        .debug(false)
+      /* prettier-ignore */
+      await new Try(
+        (_data: string) => { throw new Error('test'); },
+        'test'
+      )
         .breadcrumbs([{ param: 0, as: 'value' }])
         .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'Calling anonymousFunc function',
+          message: 'Calling anonymous function',
           data: {
             param0_value: 'test',
           },
-        })
+        }),
       );
     });
   });
@@ -565,9 +541,9 @@ describe('Flexible Breadcrumbs System', () => {
         throw new Error('test');
       }
 
-      const tryInstance = new Try(testFunction, 'test-data')
-        .debug(false)
-        .breadcrumbs([{ param: 0, transform: transformSpy }]);
+      const tryInstance = new Try(testFunction, 'test-data').breadcrumbs([
+        { param: 0, transform: transformSpy },
+      ]);
 
       // Execute multiple times
       await tryInstance.value();

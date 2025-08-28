@@ -1,6 +1,7 @@
 # @power-rent/try-catch
 
 A TypeScript utility for simplified async error handling with Sentry integration.
+This library enforces you to actually handle errors.
 
 ## Think and write in plain English
 
@@ -33,8 +34,22 @@ const error = await new Try(JSON.parse, raw)
 
 // Or try to parse JSON; if it fails, give me the default value instead of throwing
 const value = await new Try(JSON.parse, raw)
-  .default([])
+  .default({ initial: 'value' })
   .value();
+
+// Or try to parse JSON; if it fails, give me value or undefined instead of throwing
+const value = await new Try(JSON.parse, raw)
+  .value();
+
+// Try with flexible logic, the function will be executed once
+const shouldThrow = someCustomLogic();
+const attempt = await new Try(chargeCard, { amount: 1000, currency: 'USD' })
+const result = attempt.value();
+const error = attempt.error();
+if (shouldThrow) {
+  throw error;
+}
+return result;
 ```
 
 ## Installation
@@ -50,17 +65,26 @@ The `Try` class provides a fluent interface for handling async operations with a
 ### Basic Usage
 
 ```typescript
+// With Sentry for Next.js
 import Try from '@power-rent/try-catch/nextjs';
+// With Sentry for Node
+import Try from '@power-rent/try-catch/node';
+// With Sentry for Browser
+import Try from '@power-rent/try-catch/browser';
+// For custom error reporting service
+import Try from '@power-rent/try-catch';
 
-// Execute and get result (throws on error)
-const result = await new Try(asyncFunction, arg1, arg2).unwrap();
+// Execute, get result or undefined, and report errors (never throws)
+const result = await new Try(asyncFunction, arg1, arg2)
+  .report('Failed to execute asyncFunction')
+  .value();
 
-// Execute with default value (never throws)
+// Execute, get result or default value (never throws)
 const result = await new Try(asyncFunction, arg1, arg2)
   .default('fallback')
   .value();
 
-// Execute and get error (returns Error or undefined)
+// Execute and get error (returns Error or undefined, never throws)
 const error = await new Try(asyncFunction, arg1, arg2).error();
 
 // Report to Sentry and let the error bubble up
@@ -70,12 +94,14 @@ try {
     .unwrap();
 } catch (error) {
   // Handle the error
+  // error.message will be 'Failed to execute business logic'
+  // error.cause will be the original error
 }
 ```
 
 ### Parameter Types
 
-The library accepts any parameter types, not just objects:
+The library accepts any parameter types as function arguments:
 
 ```typescript
 // String parameters
@@ -89,25 +115,31 @@ const message = await new Try(formatMessage, 123, 'Test message', true).value();
 
 // No parameters
 const timestamp = await new Try(getCurrentTime).value();
-
-// Boolean and other primitive types
-const isValid = await new Try(validateInput, 'email@test.com', true).value();
 ```
 
 ### Advanced Usage
 
 ```typescript
-// Chain multiple configuration methods (with object parameters)
-const result = await new Try(processUser, { id: 123, name: 'John' })
-  .breadcrumbs(['id', 'name'])        // Add these fields as breadcrumbs
-  .report('Failed to process user')   // Custom error message
-  .tag('operation', 'user-processing') // Add Sentry tag
+// Chain multiple configuration methods with flexible breadcrumbs
+const result = await new Try(processOrder, 'order-123', { customerId: 456, amount: 99.50 }, { isUrgent: true, retryCount: 3, sensitiveData: {} })
+  .breadcrumbs(
+    'orderId', // add to breadcrumbs as { orderId: 'order-123' }
+    (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
+    ['isUrgent', 'retryCount'] // add to breadcrumbs as { isUrgent: true, retryCount: 3 }
+  )
+  .report('Failed to process order')   // Custom error message
+  .tag('operation', 'order-processing') // Add Sentry tag
   .tag('priority', 'high')            // Add another tag
   .default(null)
   .value();
 
-// Works with any parameter types (breadcrumbs only for objects)
+// Custom transformers work with any parameter types
 const result = await new Try(calculateDistance, 10, 20, 'meters')
+  .breadcrumbs(
+    (x: number) => ({ startX: x }),
+    (y: number) => ({ startY: y }),
+    (unit: string) => ({ measurementUnit: unit })
+  )
   .report('Distance calculation failed')
   .tag('operation', 'calculation')
   .default(0)
@@ -133,7 +165,7 @@ const result = await new Try(problematicFunction, params)
 
 // Conditional debug logging
 const result = await new Try(apiCall, endpoint)
-  .debug(process.env.NODE_ENV === 'development')
+  .debug(process.env.NODE_ENV !== 'production')
   .report('API call failed')
   .value();
 ```
@@ -149,7 +181,7 @@ new Try<T, TArgs>(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs)
 - `fn`: The function to execute (can be sync or async)
 - `args`: Arguments to pass to the function (any types: strings, numbers, objects, etc.)
 
-The constructor accepts any number of arguments of any type. Breadcrumbs functionality is only available when the first argument is an object.
+The constructor accepts any number of arguments of any type. Breadcrumbs functionality supports all parameter types through custom transformer functions.
 
 ### Configuration Methods
 
@@ -157,25 +189,53 @@ All configuration methods return a new `Try` instance, enabling method chaining:
 
 #### `.report(message: string): Try<T, TArgs>`
 
-Attach a custom Sentry error message.
+Report to Sentry with a custom error message, attach the original error as a cause
 
-#### `.breadcrumbs(keys: readonly string[]): Try<T, TArgs>`
+#### `.breadcrumbs(config): Try<T, TArgs>`
 
-Record breadcrumbs for the provided parameter keys. **Only available when the first argument is an object.** TypeScript will prevent calling this method with non-object first parameters. The function name is automatically included in all breadcrumbs for better traceability.
+Record breadcrumbs with flexible extraction from any function parameters. The function name is automatically included in all breadcrumbs for better traceability.
+
+**Supports multiple syntax styles:**
+
+```typescript
+// Variadic transformer functions - transform each parameter
+.breadcrumbs(
+  (id: string) => ({ orderId: id }),
+  (amount: number) => ({ amountCategory: amount > 100 ? 'large' : 'small' }),
+  (meta: object) => ({ metaKeys: Object.keys(meta).length })
+)
+
+// Array syntax - positional entries
+.breadcrumbs([
+  'value',        // { value: arg0 }
+  ['customerId'], // extract keys from arg1 object
+  'urgent'        // { urgent: arg2 }
+])
+
+// Object syntax - parameter index as keys
+.breadcrumbs({
+  0: (url) => ({ endpoint: url }),
+  1: ['userId'],
+  2: (headers) => ({ headerCount: Object.keys(headers).length })
+})
+```
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
+#### `.tags({ name1: 'value1', name2: 'value2' }): Try<T, TArgs>`
+
+Add multiple tags for Sentry error reporting. Each call overrides previous tags.
 
 #### `.debug(enabled?: boolean): Try<T, TArgs>`
 
-Enable debug logging to console. When enabled, errors will be logged to console.error. This is an opt-in feature since libraries should not log by default.
+Enable debug logging to console. When enabled, errors will be logged to console.error.
 
 ### Execution Methods
 
 #### `.unwrap(): Promise<Awaited<T>>`
 
-Execute the function and return the result. Throws the original error if one occurred.
+Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
 
 #### `.default<Return>(defaultValue: Return): Try<T, TArgs>`
 
@@ -204,7 +264,7 @@ const greeting = await new Try(greet, 'Alice', 'Hi').value();
 function add(a: number, b: number): number {
   return a + b;
 }
-const sum = await new Try(add, 5, 3).unwrap();
+const sum = await new Try(add, 5, 3).value();
 
 // Mixed parameter types
 function formatMessage(id: number, message: string, urgent: boolean): string {
@@ -214,7 +274,7 @@ function formatMessage(id: number, message: string, urgent: boolean): string {
 const formatted = await new Try(formatMessage, 123, 'System error', true)
   .report('Message formatting failed')
   .tag('component', 'notification')
-  .default('')
+  .default('Unexpected error')
   .value();
 
 // No parameters
@@ -223,18 +283,30 @@ function getCurrentTime(): number {
 }
 const timestamp = await new Try(getCurrentTime).value();
 
-// Object parameters (breadcrumbs available)
-// Breadcrumbs will include: { userId: 123, functionName: 'fetchUser' }
+// Object parameters (key extraction available)
 const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
-  .breadcrumbs(['userId']) // ✅ Available with object parameter
+  .breadcrumbs(['userId']) // ✅ Extract keys from object parameter
   .report('Failed to fetch user')
   .value();
 
-// Non-object parameters (breadcrumbs not available)
+// Any parameter types (custom transformers available)
 const result = await new Try(processString, 'hello world')
-  // .breadcrumbs(['length']) // ❌ TypeScript error
-  .report('String processing failed') // ✅ Other methods work fine
+  .breadcrumbs((str: string) => ({
+    length: str.length,
+    firstWord: str.split(' ')[0]
+  }))
+  .report('String processing failed')
   .tag('operation', 'process')
+  .value();
+
+// Mixed parameter types with transformers
+const result = await new Try(processOrder, 'order-123', 99.50, true)
+  .breadcrumbs(
+    (id: string) => ({ orderId: id }),
+    (amount: number) => ({ priceCategory: amount > 100 ? 'high' : 'low' }),
+    (urgent: boolean) => ({ priority: urgent ? 'high' : 'normal' })
+  )
+  .report('Order processing failed')
   .value();
 ```
 
@@ -290,7 +362,7 @@ const result = await new Try(complexOperation, data)
 
 - 🚀 **Promise-like interface** - Can be awaited directly
 - 🔍 **Automatic Sentry integration** - Errors are automatically reported
-- 🍞 **Breadcrumb support** - Add context to error reports
+- 🍞 **Flexible breadcrumb support** - Extract context from any parameter types using transformers
 - 🏷️ **Tag support** - Add custom tags to Sentry reports
 - 🎯 **TypeScript support** - Full type safety
 - 🔄 **Flexible error handling** - Choose to ignore, use defaults, inspect errors, or let them bubble up
@@ -299,7 +371,7 @@ const result = await new Try(complexOperation, data)
 
 - Node.js >= 20
 - TypeScript >= 4.5 (if using TypeScript)
-- Sentry project configured
+- Sentry or an alternative error reporting service
 
 ## License
 

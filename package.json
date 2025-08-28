@@ -21,9 +21,26 @@
       "require": "./dist/nextjs/index.js",
       "import": "./dist/esm/nextjs/index.js"
     },
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "require": "./dist/node/index.js",
+      "import": "./dist/esm/node/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "require": "./dist/browser/index.js",
+      "import": "./dist/esm/browser/index.js"
+    },
     "./package.json": "./package.json"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/nextjs/index.js",
+    "./dist/esm/nextjs/index.js",
+    "./dist/node/index.js",
+    "./dist/esm/node/index.js",
+    "./dist/browser/index.js",
+    "./dist/esm/browser/index.js"
+  ],
   "scripts": {
     "build": "npm run build:cjs && npm run build:esm",
     "format": "prettier --write .",
@@ -55,10 +72,18 @@
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
   "peerDependencies": {
-    "@sentry/nextjs": "^8"
+    "@sentry/browser": "^8",
+    "@sentry/nextjs": "^8",
+    "@sentry/node": "^8"
   },
   "peerDependenciesMeta": {
     "@sentry/nextjs": {
+      "optional": true
+    },
+    "@sentry/node": {
+      "optional": true
+    },
+    "@sentry/browser": {
       "optional": true
     }
   },
@@ -66,16 +91,22 @@
     "@changesets/cli": "^2.29.6",
     "@types/node": "^20.19.1",
     "prettier": "^3.6.2",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "typesVersions": {
     "*": {
       "nextjs": [
         "dist/nextjs/index.d.ts"
+      ],
+      "node": [
+        "dist/node/index.d.ts"
+      ],
+      "browser": [
+        "dist/browser/index.d.ts"
       ],
       "*": [
         "dist/index.d.ts"
