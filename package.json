@@ -72,9 +72,9 @@
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
   "peerDependencies": {
-    "@sentry/browser": "^8",
-    "@sentry/nextjs": "^8",
-    "@sentry/node": "^8"
+    "@sentry/browser": "^8 || ^10.0.0",
+    "@sentry/nextjs": "^8 || ^10.0.0",
+    "@sentry/node": "^8 || ^10.0.0"
   },
   "peerDependenciesMeta": {
     "@sentry/nextjs": {
