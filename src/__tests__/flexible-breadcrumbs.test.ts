@@ -17,6 +17,7 @@ async function throwingFunction(_params: any): Promise<{ ok: boolean }> {
 
 describe('Flexible Breadcrumbs System', () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 

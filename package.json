@@ -71,16 +71,16 @@
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
   "devDependencies": {
-    "@changesets/cli": "^2.29.6",
+    "@changesets/cli": "^2.29.7",
     "@sentry/browser": ">=8.0.0 <11.0.0",
     "@sentry/nextjs": ">=8.0.0 <11.0.0",
     "@sentry/node": ">=8.0.0 <11.0.0",
     "@types/node": "^20.19.1",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
-    "type-fest": "^5.0.0",
-    "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "type-fest": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.3"
   },
   "engines": {
     "node": ">=20"

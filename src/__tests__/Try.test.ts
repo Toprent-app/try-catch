@@ -48,6 +48,7 @@ class TestClass {
 
 describe('Try', () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
     Try.throwThroughErrorTypes([]);
   });
