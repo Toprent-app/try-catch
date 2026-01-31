@@ -20,6 +20,14 @@ const formatMessage = (id: number, message: string, urgent: boolean) => {
   return urgent ? `[URGENT] #${id}: ${message}` : `[INFO] #${id}: ${message}`;
 };
 
+function processRequest(
+  endpoint: string,
+  payload: { userId: number; data: string },
+  headers: any,
+) {
+  throw new Error('test');
+}
+
 describe('Try README type safety', () => {
   it('preserves value() types for sync/async functions', () => {
     const asyncValue = new Try(fetchUser, { id: 123 }).value();
@@ -52,10 +60,31 @@ describe('Try README type safety', () => {
   });
 
   it('validates breadcrumbs keys against object parameter types', () => {
-    new Try(fetchUser, { id: 123 }).breadcrumbs(['id'] as const);
+    new Try(fetchUser, { id: 123 }).breadcrumbs(['id']);
 
     // @ts-expect-error - breadcrumb keys must exist on parameter object
-    new Try(fetchUser, { id: 123 }).breadcrumbs<['missingKey']>(['missingKey']);
+    new Try(fetchUser, { id: 123 }).breadcrumbs(['missingKey']);
+  });
+
+  it('validates breadcrumbs functions parameters against object parameter types', () => {
+    new Try(
+      processRequest,
+      '/api/users',
+      { userId: 123, data: 'test' },
+      { 'Content-Type': 'application/json' },
+    ).breadcrumbs({
+      0: (url) => {
+        expectTypeOf(url).toEqualTypeOf<string>();
+        return { url };
+      },
+      1: ['userId', 'data'],
+      2: (headers) => {
+        expectTypeOf(headers).toEqualTypeOf<Record<'Content-Type', string>>();
+        return {
+          headerCount: Object.keys(headers).length,
+        };
+      },
+    });
   });
 
   it('rejects invalid argument types', () => {
@@ -64,5 +93,25 @@ describe('Try README type safety', () => {
 
     // @ts-expect-error - invalid argument types for chargeCard
     new Try(chargeCard, { amount: '1000', currency: 'USD' });
+  });
+
+  it('should extract from multiple parameters using keys', async () => {
+    function testFunction(
+      _order: string,
+      _customer: { id: number; name: string },
+      _priority: boolean,
+    ) {
+      throw new Error('test');
+    }
+
+    const customer = { id: 456, name: 'John' };
+
+    await new Try(testFunction, 'order-123', customer, true)
+      .breadcrumbs([
+        // @ts-expect-error name is not a valid key of the customer object
+        { param: 1, keys: ['id', 'nam'] },
+        { param: 2, transform: (priority: boolean) => ({ priority }) },
+      ])
+      .value();
   });
 });

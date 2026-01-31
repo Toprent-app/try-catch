@@ -131,10 +131,11 @@ export type BreadcrumbExtractor<TArgs extends readonly unknown[]> =
 
 // Positional breadcrumb syntax where each entry corresponds to the argument position
 // - string => maps the argument value to the given breadcrumb key
+// - string[] => extract keys from an object argument
 // - BreadcrumbExtractor => advanced per-entry extractor (still supported)
-// Note: string[] is intentionally excluded here to force key validation through ValidateKeys
 export type PositionalBreadcrumbs<TArgs extends readonly unknown[]> = readonly (
   | string
+  | readonly string[]
   | BreadcrumbExtractor<TArgs>
 )[];
 
