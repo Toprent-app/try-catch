@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **SENT-01**: User can call `.report(message)` to capture the error via Sentry
 - [ ] **SENT-02**: User can attach tags and breadcrumbs to reported events via fluent chain
-- [ ] **SENT-03**: Reporting defaults avoid noisy handled errors unless explicitly requested
+- [ ] **SENT-03**: Errors are reported only when `.report()` is explicitly called, but breadcrumbs are always recorded when `.breadcrumbs()` is used
 
 ### Entry Points
 
@@ -61,24 +61,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TRY-01 | Phase [N] | Pending |
-| TRY-02 | Phase [N] | Pending |
-| TRY-03 | Phase [N] | Pending |
-| TRY-04 | Phase [N] | Pending |
-| SENT-01 | Phase [N] | Pending |
-| SENT-02 | Phase [N] | Pending |
-| SENT-03 | Phase [N] | Pending |
-| ENTRY-01 | Phase [N] | Pending |
-| ENTRY-02 | Phase [N] | Pending |
-| ENTRY-03 | Phase [N] | Pending |
-| DIAG-01 | Phase [N] | Pending |
-| DIAG-02 | Phase [N] | Pending |
-| DX-01 | Phase [N] | Pending |
+| TRY-01 | Phase 1 | Pending |
+| TRY-02 | Phase 1 | Pending |
+| TRY-03 | Phase 1 | Pending |
+| TRY-04 | Phase 1 | Pending |
+| SENT-01 | Phase 2 | Pending |
+| SENT-02 | Phase 2 | Pending |
+| SENT-03 | Phase 2 | Pending |
+| ENTRY-01 | Phase 2 | Pending |
+| ENTRY-02 | Phase 2 | Pending |
+| ENTRY-03 | Phase 2 | Pending |
+| DIAG-01 | Phase 2 | Pending |
+| DIAG-02 | Phase 2 | Pending |
+| DX-01 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-31*
