@@ -19,6 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SENT-01**: User can call `.report(message)` to capture the error via Sentry
 - [ ] **SENT-02**: User can attach tags and breadcrumbs to reported events via fluent chain
 - [ ] **SENT-03**: Errors are reported only when `.report()` is explicitly called, but breadcrumbs are always recorded when `.breadcrumbs()` is used
+- [ ] **SENT-04**: Breadcrumbs configuration is type-safe and matches README examples
 
 ### Entry Points
 
@@ -41,8 +42,8 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Sentry Reporting
 
-- **SENT-04**: Scoped metadata isolation per call to prevent cross-request bleed
-- **SENT-05**: Zero runtime dependency when Sentry is unused
+- **SENT-05**: Scoped metadata isolation per call to prevent cross-request bleed
+- **SENT-06**: Zero runtime dependency when Sentry is unused
 
 ## Out of Scope
 
@@ -68,6 +69,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SENT-01 | Phase 2 | Pending |
 | SENT-02 | Phase 2 | Pending |
 | SENT-03 | Phase 2 | Pending |
+| SENT-04 | Phase 2 | Pending |
 | ENTRY-01 | Phase 2 | Pending |
 | ENTRY-02 | Phase 2 | Pending |
 | ENTRY-03 | Phase 2 | Pending |
@@ -76,8 +78,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DX-01 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 13 total
-- Mapped to phases: 13
+- v1 requirements: 14 total
+- Mapped to phases: 14
 - Unmapped: 0
 
 ---
