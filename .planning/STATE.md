@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-01-31)
 Phase: 1 of 3 (Core Try Semantics)
 Plan: 0 of TBD in current phase
 Status: Ready to plan
-Last activity: 2026-01-31 — Completed quick-001 type-safety-tests plan 001
+Last activity: 2026-01-31 - Completed quick task 001: write tests that verify type safety accoriding to the use cases covered in Readme.md
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,12 @@ None yet.
 [Issues that affect future work]
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 001 | write tests that verify type safety accoriding to the use cases covered in Readme.md | 2026-01-31 | 9595583 | [001-write-tests-that-verify-type-safety-acco](./quick/001-write-tests-that-verify-type-safety-acco/) |
 
 ## Session Continuity
 
