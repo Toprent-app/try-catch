@@ -1,6 +1,8 @@
 import {
   BreadcrumbOptions,
+  BreadcrumbConfig,
   BreadcrumbTransformer,
+  PositionalBreadcrumbs,
   VariadicBreadcrumbTransformers,
   ValidateKeys,
   BreadcrumbExtractor as BreadcrumbExtractorType,
@@ -218,15 +220,21 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  breadcrumbs<Keys extends readonly (keyof TArgs[0])[]>(
-    keys: Keys,
+  breadcrumbs<const Keys extends readonly string[]>(
+    keys: ValidateKeys<TArgs, Keys>,
   ): Try<T, TArgs>;
 
   breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(
     ...transformers: T
   ): Try<T, TArgs>;
 
-  breadcrumbs(config: BreadcrumbOptions<TArgs>): Try<T, TArgs>;
+  breadcrumbs(config: readonly BreadcrumbExtractorType<TArgs>[]): Try<T, TArgs>;
+
+  breadcrumbs(config: BreadcrumbConfig<TArgs>): Try<T, TArgs>;
+
+  breadcrumbs<const Config extends PositionalBreadcrumbs<TArgs>>(
+    config: Config extends readonly string[] ? never : Config,
+  ): Try<T, TArgs>;
 
   breadcrumbs(
     configOrFirstTransformer?:
