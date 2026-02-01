@@ -164,7 +164,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * @param newConfig Partial configuration to merge with existing config
    * @returns The Try instance for method chaining
    */
-  private setConfig(newConfig: Partial<TryConfig<TArgs>>): Try<TReturn, TArgs> {
+  private setConfig(newConfig: Partial<TryConfig<TArgs>>): this {
     this.config = { ...this.config, ...newConfig };
     return this;
   }
@@ -452,7 +452,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return (result as Promise<TryResult<TReturn>>).then((resolved) => {
+      return result.then((resolved) => {
         if (!resolved.success) {
           const shouldCapture = this.config.message;
 
@@ -477,29 +477,27 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       }) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
     }
 
-    const resolvedResult = result as TryResult<TReturn>;
-
-    if (!resolvedResult.success) {
+    if (!result.success) {
       const shouldCapture = this.config.message;
 
       if (shouldCapture) {
-        this.reportError(resolvedResult.error);
+        this.reportError(result.error);
       }
 
       if (
         this.config.message &&
-        !Try.ignoreErrorTypes.includes(resolvedResult.error.name)
+        !Try.ignoreErrorTypes.includes(result.error.name)
       ) {
         const wrappedError = Try.defaultReporter.createWrappedError(
-          resolvedResult.error,
+          result.error,
           this.config.message,
         );
         throw wrappedError;
       }
-      throw resolvedResult.error;
+      throw result.error;
     }
 
-    return resolvedResult.value as IfPromise<
+    return result.value as IfPromise<
       TReturn,
       Promise<Awaited<TReturn>>,
       Awaited<TReturn>
@@ -582,16 +580,16 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return (result as Promise<TryResult<TReturn>>).then((resolved) =>
+      return result.then((resolved) =>
         resolved.success ? undefined : resolved.error,
       ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
-    const resolvedResult = result as TryResult<TReturn>;
-
-    return (
-      resolvedResult.success ? undefined : resolvedResult.error
-    ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+    return (result.success ? undefined : result.error) as IfPromise<
+      TReturn,
+      Promise<Error | undefined>,
+      Error | undefined
+    >;
   }
 
   /**
@@ -630,7 +628,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return (result as Promise<TryResult<TReturn>>).then((resolved) => {
+      return result.then((resolved) => {
         if (resolved.success) {
           return resolved.value;
         }
@@ -641,7 +639,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
           this.addBreadcrumbsIfConfigured();
         }
 
-        return (this.config.defaultValue as unknown) ?? undefined;
+        return this.config.defaultValue;
       }) as IfPromise<
         TReturn,
         Promise<Awaited<TReturn> | undefined>,
@@ -649,10 +647,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       >;
     }
 
-    const resolvedResult = result as TryResult<TReturn>;
-
-    if (resolvedResult.success) {
-      return resolvedResult.value as IfPromise<
+    if (result.success) {
+      return result.value as IfPromise<
         TReturn,
         Promise<Awaited<TReturn> | undefined>,
         Awaited<TReturn> | undefined
@@ -660,12 +656,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     if (this.config.message) {
-      this.reportError(resolvedResult.error);
+      this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
     }
 
-    return ((this.config.defaultValue as unknown) ?? undefined) as IfPromise<
+    return this.config.defaultValue as IfPromise<
       TReturn,
       Promise<Awaited<TReturn> | undefined>,
       Awaited<TReturn> | undefined
@@ -716,7 +712,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
             return this.runFinallyCallback();
           });
 
-        return this.cachedPromise as Promise<TryResult<TReturn>>;
+        return this.cachedPromise;
       }
 
       this.isAsync = false;

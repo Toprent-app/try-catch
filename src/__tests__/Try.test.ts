@@ -35,6 +35,14 @@ async function successfulFunction(
   return { ok: true, ...params };
 }
 
+async function returnsPromiseOrThrows(shouldThrow: boolean): Promise<string> {
+  if (shouldThrow) {
+    throw new Error('boom');
+  }
+
+  return Promise.resolve('ok');
+}
+
 class TestClass {
   private name: string;
 
@@ -177,6 +185,20 @@ describe('Try', () => {
       expect(value).toBe('ok');
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('treats promise-returning functions as async even when they throw', async () => {
+    const valuePromise = new Try(returnsPromiseOrThrows, true).value();
+
+    expect(valuePromise).toBeInstanceOf(Promise);
+    await expect(valuePromise).resolves.toBeUndefined();
+
+    const errorPromise = new Try(returnsPromiseOrThrows, true).error();
+
+    expect(errorPromise).toBeInstanceOf(Promise);
+    const error = await errorPromise;
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).toBe('boom');
   });
 
   it('should throw an error', async () => {
