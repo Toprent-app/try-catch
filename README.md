@@ -117,7 +117,7 @@ const message = new Try(formatMessage, 123, 'Test message', true).value();
 const timestamp = new Try(getCurrentTime).value();
 ```
 
-Sync functions return values immediately; async functions requires `await`.
+Sync functions return values immediately; async functions require `await`.
 
 ### Advanced Usage
 
