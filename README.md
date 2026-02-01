@@ -117,7 +117,7 @@ const message = new Try(formatMessage, 123, 'Test message', true).value();
 const timestamp = new Try(getCurrentTime).value();
 ```
 
-Sync functions return values immediately; async functions still require `await`.
+Sync functions return values immediately; async functions requires `await`.
 
 ### Advanced Usage
 
@@ -235,7 +235,7 @@ Enable debug logging to console. When enabled, errors will be logged to console.
 
 ### Execution Methods
 
-#### `.unwrap(): Awaited<T> | Promise<Awaited<T>>`
+#### `.unwrap(): T | Promise<Awaited<T>>`
 
 Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
 
@@ -243,7 +243,7 @@ Execute the function and return the result. Throws the original error if one occ
 
 Set a default value that will be returned by `.value()` when an exception occurs.
 
-#### `.value(): Awaited<T> | Return | undefined | Promise<Awaited<T> | Return | undefined>`
+#### `.value(): T | undefined | Promise<Awaited<T> | undefined>`
 
 Execute the function and return the result, the configured default value, or `undefined` if an error occurs.
 
