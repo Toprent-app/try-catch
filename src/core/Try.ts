@@ -197,7 +197,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  report(message: string): Try<TReturn, TArgs> {
+  report(message: string): this {
     return this.setConfig({ message });
   }
 
@@ -241,28 +241,26 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    */
   breadcrumbs<const Keys extends readonly string[]>(
     keys: ValidateKeys<TArgs, Keys>,
-  ): Try<TReturn, TArgs>;
+  ): this;
 
   breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(
     ...transformers: T
-  ): Try<TReturn, TArgs>;
+  ): this;
 
-  breadcrumbs(
-    config: readonly BreadcrumbExtractorType<TArgs>[],
-  ): Try<TReturn, TArgs>;
+  breadcrumbs(config: readonly BreadcrumbExtractorType<TArgs>[]): this;
 
-  breadcrumbs(config: BreadcrumbConfig<TArgs>): Try<TReturn, TArgs>;
+  breadcrumbs(config: BreadcrumbConfig<TArgs>): this;
 
   breadcrumbs<const Config extends PositionalBreadcrumbs<TArgs>>(
     config: Config extends readonly string[] ? never : Config,
-  ): Try<TReturn, TArgs>;
+  ): this;
 
   breadcrumbs(
     configOrFirstTransformer?:
       | BreadcrumbOptions<TArgs>
       | BreadcrumbTransformer<any>,
     ...restTransformers: BreadcrumbTransformer<any>[]
-  ): Try<TReturn, TArgs> {
+  ): this {
     // Handle variadic transformer functions
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
@@ -297,7 +295,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  tag(name: string, value: string): Try<TReturn, TArgs> {
+  tag(name: string, value: string): this {
     return this.setConfig({
       tags: { ...this.config.tags, [name]: value },
     });
@@ -332,7 +330,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  tags(tagRecord: Record<string, string>): Try<TReturn, TArgs> {
+  tags(tagRecord: Record<string, string>): this {
     return this.setConfig({
       tags: { ...this.config.tags, ...tagRecord },
     });
@@ -351,7 +349,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
    */
-  finally(callback: () => void | Promise<void>): Try<TReturn, TArgs> {
+  finally(callback: () => void | Promise<void>): this {
     return this.setConfig({ finallyCallback: callback });
   }
 
@@ -381,7 +379,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  debug(enabled: boolean = true): Try<TReturn, TArgs> {
+  debug(enabled: boolean = true): this {
     return this.setConfig({ debug: enabled });
   }
 
