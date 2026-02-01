@@ -34,29 +34,37 @@ describe('Try README type safety', () => {
     const syncValue = new Try(formatMessage, 1, 'Test', true).value();
 
     expectTypeOf(asyncValue).toEqualTypeOf<Promise<User | undefined>>();
-    expectTypeOf(syncValue).toEqualTypeOf<Promise<string | undefined>>();
+    expectTypeOf(syncValue).toEqualTypeOf<string | undefined>();
   });
 
   it('narrows value() return when default() is provided', () => {
     const withDefault = new Try(fetchUser, { id: 123 }).default(null).value();
+    const syncDefault = new Try(formatMessage, 1, 'Test', true)
+      .default('fallback')
+      .value();
 
     expectTypeOf(withDefault).toEqualTypeOf<Promise<User | null>>();
+    expectTypeOf(syncDefault).toEqualTypeOf<string>();
   });
 
   it('keeps error() typed as Error | undefined', () => {
     const errorValue = new Try(fetchUser, { id: 123 })
       .report('Failed to fetch user')
       .error();
+    const syncError = new Try(formatMessage, 1, 'Test', true).error();
 
     expectTypeOf(errorValue).toEqualTypeOf<Promise<Error | undefined>>();
+    expectTypeOf(syncError).toEqualTypeOf<Error | undefined>();
   });
 
   it('keeps unwrap() typed as Awaited<T>', () => {
     const receipt = new Try(chargeCard, { amount: 1000, currency: 'USD' })
       .report('Payment failed')
       .unwrap();
+    const syncUnwrap = new Try(formatMessage, 1, 'Test', true).unwrap();
 
     expectTypeOf(receipt).toEqualTypeOf<Promise<Receipt>>();
+    expectTypeOf(syncUnwrap).toEqualTypeOf<string>();
   });
 
   it('validates breadcrumbs keys against object parameter types', () => {
