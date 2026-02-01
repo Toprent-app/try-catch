@@ -49,11 +49,16 @@ function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
   return !!value && typeof (value as PromiseLikeValue).then === 'function';
 }
 
+/**
+ * Resolves to True when T is or may be a Promise (so callers must handle async).
+ * For Promise<T> | T (mixed return type), resolves to True so value()/unwrap()
+ * are typed as returning Promise<...> and the value is handled via await.
+ */
 type IfPromise<T, True, False> = [T] extends [never]
   ? False
-  : [T] extends [PromiseLike<unknown>]
-    ? True
-    : False;
+  : (T extends PromiseLike<unknown> ? True : False) extends False
+    ? False
+    : True;
 
 /**
  * Core Try class for simplified async error handling.

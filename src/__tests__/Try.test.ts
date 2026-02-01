@@ -24,11 +24,11 @@ class TestClass {
     this.name = name;
   }
 
-  async greet({ greeting }: { greeting: string }) {
+  async greet({ greeting }: { greeting: string; }) {
     return `${greeting}, I'm ${this.name}`;
   }
 
-  greetSync({ greeting }: { greeting: string }) {
+  greetSync({ greeting }: { greeting: string; }) {
     return `${greeting}, I'm ${this.name}`;
   }
 }
@@ -43,27 +43,27 @@ describe('Try', () => {
   describe('async', () => {
     async function throwingFunction(
       _params: Record<string, unknown>,
-    ): Promise<{ ok: boolean }> {
+    ): Promise<{ ok: boolean; }> {
       throw new Error('boom');
     }
 
     async function throwingCustomError(
       _params: Record<string, unknown>,
-    ): Promise<{ ok: boolean }> {
+    ): Promise<{ ok: boolean; }> {
       throw new GraphQLError('validation error');
     }
 
     async function successfulFunction(
       params: Record<string, unknown>,
-    ): Promise<{ ok: boolean }> {
+    ): Promise<{ ok: boolean; }> {
       return { ok: true, ...params };
     }
 
-    async function returnsPromiseOrThrows(
+    function returnsPromiseOrThrows(
       shouldThrow: boolean,
     ): Promise<string> {
       if (shouldThrow) {
-        throw new Error('boom');
+        return Promise.reject(new Error('boom'));
       }
 
       return Promise.resolve('ok');
@@ -251,7 +251,7 @@ describe('Try', () => {
       const greeting = 'Hi!';
       const newTest = new TestClass('newTest');
 
-      const result = new Try(newTest.greet.bind(newTest), {
+      const result = await new Try(newTest.greet.bind(newTest), {
         greeting,
       }).unwrap();
 
@@ -511,7 +511,7 @@ describe('Try', () => {
     it('should not log errors by default', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug(false).value();
@@ -523,7 +523,7 @@ describe('Try', () => {
     it('should log errors when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug().value();
@@ -535,7 +535,7 @@ describe('Try', () => {
     it('should not log errors when debug is explicitly disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug(false).value();
@@ -547,7 +547,7 @@ describe('Try', () => {
     it('should log finally callback errors when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -568,7 +568,7 @@ describe('Try', () => {
     it('should not log finally callback errors when debug is disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -585,7 +585,7 @@ describe('Try', () => {
     it('should support conditional debug logging', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const isDevelopment = true;
 
@@ -656,7 +656,7 @@ describe('Try', () => {
     it('should handle async finally callback errors', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = async () => {
@@ -679,7 +679,7 @@ describe('Try', () => {
     it('should handle async finally callback errors without debug', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = async () => {
@@ -816,7 +816,7 @@ describe('Try', () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
-        const result: TryResult<{ ok: boolean }> = await new Try(
+        const result: TryResult<{ ok: boolean; }> = await new Try(
           successfulFunction,
           params,
         ).result();
@@ -957,9 +957,9 @@ describe('Try', () => {
     it('should rethrow error', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
-      const exec = new Try(throwingFunction, params).debug(false).unwrap();
-
-      expect(exec).rejects.toThrow('boom');
+      expect(() => {
+        new Try(throwingFunction, params).debug(false).unwrap();
+      }).toThrow('boom');
       expect(Sentry.captureException).not.toHaveBeenCalled();
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
@@ -1043,21 +1043,20 @@ describe('Try', () => {
     it('should throw an error', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .report('failed')
+          .unwrap();
+      }).toThrow('failed');
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
     it('should throw the original error', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
-      const exec = new Try(throwingFunction, params).debug(false).unwrap();
-
-      expect(exec).rejects.toThrow('boom');
+      expect(() => {
+        new Try(throwingFunction, params).unwrap();
+      }).toThrow('boom');
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
@@ -1066,7 +1065,8 @@ describe('Try', () => {
 
       new Try(throwingFunction, params)
         .debug(false)
-        .breadcrumbs(['parameterKey']);
+        .breadcrumbs(['parameterKey'])
+        .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1091,7 +1091,7 @@ describe('Try', () => {
       const greeting = 'Hi!';
       const newTest = new TestClass('newTest');
 
-      const result = new Try(newTest.greet.bind(newTest), {
+      const result = new Try(newTest.greetSync.bind(newTest), {
         greeting,
       }).unwrap();
 
@@ -1102,14 +1102,14 @@ describe('Try', () => {
     it('should add tags', () => {
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .tag('name', 'value')
-        .tag('test', 'true')
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .tag('name', 'value')
+          .tag('test', 'true')
+          .unwrap();
+      }).toThrow('failed');
 
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
@@ -1126,18 +1126,18 @@ describe('Try', () => {
     it('should add multiple tags at once', () => {
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .tags({
-          component: 'payment-service',
-          operation: 'charge-card',
-          gateway: 'stripe',
-          version: '2.1.0',
-        })
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .tags({
+            component: 'payment-service',
+            operation: 'charge-card',
+            gateway: 'stripe',
+            version: '2.1.0',
+          })
+          .unwrap();
+      }).toThrow('failed');
 
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
@@ -1156,15 +1156,15 @@ describe('Try', () => {
     it('should combine tags() with individual tag() calls', () => {
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .tags({ module: 'data-processor', version: '1.0' })
-        .tag('requestId', 'req-123')
-        .tag('userId', 'user-456')
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .tags({ module: 'data-processor', version: '1.0' })
+          .tag('requestId', 'req-123')
+          .tag('userId', 'user-456')
+          .unwrap();
+      }).toThrow('failed');
 
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
@@ -1183,14 +1183,14 @@ describe('Try', () => {
     it('should override tags when using tags() multiple times', () => {
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .tags({ version: '1.0', env: 'prod' })
-        .tags({ version: '2.0', component: 'api' }) // version should be overridden
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .tags({ version: '1.0', env: 'prod' })
+          .tags({ version: '2.0', component: 'api' }) // version should be overridden
+          .unwrap();
+      }).toThrow('failed');
 
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
@@ -1208,14 +1208,14 @@ describe('Try', () => {
     it('should handle empty tags object', () => {
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .tags({}) // empty object should work
-        .tag('single', 'tag')
-        .unwrap();
-
-      expect(exec).rejects.toThrow('failed');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .tags({}) // empty object should work
+          .tag('single', 'tag')
+          .unwrap();
+      }).toThrow('failed');
 
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
@@ -1240,12 +1240,12 @@ describe('Try', () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
 
-      const exec = new Try(throwingCustomError, params)
-        .debug(false)
-        .report('failed')
-        .unwrap();
-
-      expect(exec).rejects.toThrow('validation error');
+      expect(() => {
+        new Try(throwingCustomError, params)
+          .debug(false)
+          .report('failed')
+          .unwrap();
+      }).toThrow('validation error');
     });
 
     it('should not give typescript error', () => {
@@ -1274,11 +1274,12 @@ describe('Try', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .finally(finallySpy)
-        .unwrap();
-      expect(exec).rejects.toThrow('boom');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .finally(finallySpy)
+          .unwrap();
+      }).toThrow('boom');
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
@@ -1344,7 +1345,7 @@ describe('Try', () => {
     it('should not log errors by default', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug(false).value();
@@ -1356,7 +1357,7 @@ describe('Try', () => {
     it('should log errors when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug().value();
@@ -1368,7 +1369,7 @@ describe('Try', () => {
     it('should not log errors when debug is explicitly disabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug(false).value();
@@ -1380,7 +1381,7 @@ describe('Try', () => {
     it('should log finally callback errors when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -1401,7 +1402,7 @@ describe('Try', () => {
     it('should not log finally callback errors when debug is disabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -1416,7 +1417,7 @@ describe('Try', () => {
     it('should support conditional debug logging', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
       const isDevelopment = true;
 
@@ -1429,7 +1430,7 @@ describe('Try', () => {
     it('should include function name in breadcrumbs for anonymous functions', () => {
       const params = { parameterKey: 'beta' };
 
-      new Try(async (_data: Record<string, unknown>) => {
+      new Try((_data: Record<string, unknown>) => {
         throw new Error('anonymous error');
       }, params)
         .debug(false)
@@ -1474,12 +1475,12 @@ describe('Try', () => {
         finallySpy();
       };
 
-      const exec = new Try(throwingFunction, params)
-        .debug(false)
-        .finally(asyncFinally)
-        .unwrap();
-
-      expect(exec).rejects.toThrow('boom');
+      expect(() => {
+        new Try(throwingFunction, params)
+          .debug(false)
+          .finally(asyncFinally)
+          .unwrap();
+      }).toThrow('boom');
       expect(asyncCallbackResolved).toBe(true);
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
@@ -1487,7 +1488,7 @@ describe('Try', () => {
     it('should handle async finally callback errors', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = () => {
@@ -1510,7 +1511,7 @@ describe('Try', () => {
     it('should handle async finally callback errors without debug', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(() => { });
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = () => {
@@ -1643,7 +1644,7 @@ describe('Try', () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
-        const result: TryResult<{ ok: boolean }> = new Try(
+        const result: TryResult<{ ok: boolean; }> = new Try(
           successfulFunction,
           params,
         ).result();
@@ -1698,15 +1699,15 @@ describe('Try', () => {
       it('should support method chaining in any order', () => {
         const params = { parameterKey: 'alpha' };
 
-        const exec = new Try(throwingFunction, params)
-          .tags({ component: 'payment' })
-          .debug(false)
-          .tag('operation', 'charge')
-          .report('failed')
-          .tags({ version: '2.0' })
-          .unwrap();
-
-        expect(exec).rejects.toThrow('failed');
+        expect(() => {
+          new Try(throwingFunction, params)
+            .tags({ component: 'payment' })
+            .debug(false)
+            .tag('operation', 'charge')
+            .report('failed')
+            .tags({ version: '2.0' })
+            .unwrap();
+        }).toThrow('failed');
 
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
