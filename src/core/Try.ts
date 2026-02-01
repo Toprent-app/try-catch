@@ -43,13 +43,17 @@ export type TryResult<T> =
       readonly error: Error;
     };
 
-type PromiseLikeValue = { then: (...args: unknown[]) => unknown };
+type PromiseLikeValue<TValue = unknown> = { then: (value: TValue) => unknown };
 
-function isPromiseLike(value: unknown): value is PromiseLikeValue {
+function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
   return !!value && typeof (value as PromiseLikeValue).then === 'function';
 }
 
-type IfPromise<T, True, False> = T extends PromiseLike<unknown> ? True : False;
+type IfPromise<T, True, False> = [T] extends [never]
+  ? False
+  : [T] extends [PromiseLike<unknown>]
+    ? True
+    : False;
 
 /**
  * Core Try class for simplified async error handling.
@@ -62,12 +66,12 @@ type IfPromise<T, True, False> = T extends PromiseLike<unknown> ? True : False;
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
-  private readonly fn: (...args: TArgs) => T | Promise<T>;
+export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
+  private readonly fn: (...args: TArgs) => TReturn;
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
-  private cachedResult?: TryResult<T>;
-  private cachedPromise?: Promise<TryResult<T>>;
+  private cachedResult?: TryResult<TReturn>;
+  private cachedPromise?: Promise<TryResult<TReturn>>;
   private isAsync?: boolean;
   private cachedBreadcrumbData?: Record<string, unknown>;
   private breadcrumbsAdded: boolean = false;
@@ -124,7 +128,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  constructor(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs) {
+  constructor(fn: (...args: TArgs) => TReturn, ...args: TArgs) {
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
@@ -160,7 +164,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * @param newConfig Partial configuration to merge with existing config
    * @returns The Try instance for method chaining
    */
-  private setConfig(newConfig: Partial<TryConfig<TArgs>>): Try<T, TArgs> {
+  private setConfig(newConfig: Partial<TryConfig<TArgs>>): Try<TReturn, TArgs> {
     this.config = { ...this.config, ...newConfig };
     return this;
   }
@@ -188,7 +192,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  report(message: string): Try<T, TArgs> {
+  report(message: string): Try<TReturn, TArgs> {
     return this.setConfig({ message });
   }
 
@@ -232,26 +236,28 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    */
   breadcrumbs<const Keys extends readonly string[]>(
     keys: ValidateKeys<TArgs, Keys>,
-  ): Try<T, TArgs>;
+  ): Try<TReturn, TArgs>;
 
   breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(
     ...transformers: T
-  ): Try<T, TArgs>;
+  ): Try<TReturn, TArgs>;
 
-  breadcrumbs(config: readonly BreadcrumbExtractorType<TArgs>[]): Try<T, TArgs>;
+  breadcrumbs(
+    config: readonly BreadcrumbExtractorType<TArgs>[],
+  ): Try<TReturn, TArgs>;
 
-  breadcrumbs(config: BreadcrumbConfig<TArgs>): Try<T, TArgs>;
+  breadcrumbs(config: BreadcrumbConfig<TArgs>): Try<TReturn, TArgs>;
 
   breadcrumbs<const Config extends PositionalBreadcrumbs<TArgs>>(
     config: Config extends readonly string[] ? never : Config,
-  ): Try<T, TArgs>;
+  ): Try<TReturn, TArgs>;
 
   breadcrumbs(
     configOrFirstTransformer?:
       | BreadcrumbOptions<TArgs>
       | BreadcrumbTransformer<any>,
     ...restTransformers: BreadcrumbTransformer<any>[]
-  ): Try<T, TArgs> {
+  ): Try<TReturn, TArgs> {
     // Handle variadic transformer functions
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
@@ -286,7 +292,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  tag(name: string, value: string): Try<T, TArgs> {
+  tag(name: string, value: string): Try<TReturn, TArgs> {
     return this.setConfig({
       tags: { ...this.config.tags, [name]: value },
     });
@@ -321,7 +327,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  tags(tagRecord: Record<string, string>): Try<T, TArgs> {
+  tags(tagRecord: Record<string, string>): Try<TReturn, TArgs> {
     return this.setConfig({
       tags: { ...this.config.tags, ...tagRecord },
     });
@@ -340,7 +346,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
    */
-  finally(callback: () => void | Promise<void>): Try<T, TArgs> {
+  finally(callback: () => void | Promise<void>): Try<TReturn, TArgs> {
     return this.setConfig({ finallyCallback: callback });
   }
 
@@ -370,7 +376,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  debug(enabled: boolean = true): Try<T, TArgs> {
+  debug(enabled: boolean = true): Try<TReturn, TArgs> {
     return this.setConfig({ debug: enabled });
   }
 
@@ -396,13 +402,19 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<D>(
-    defaultValue: D,
-  ): Omit<typeof this, 'value'> & {
-    value(): IfPromise<T, Promise<Awaited<T> | D>, Awaited<T> | D>;
+  default<D>(defaultValue: D): Omit<typeof this, 'value'> & {
+    value(): IfPromise<
+      TReturn,
+      Promise<Awaited<TReturn> | D>,
+      Awaited<TReturn> | D
+    >;
   } {
     type WithGuaranteedValue = Omit<typeof this, 'value'> & {
-      value(): IfPromise<T, Promise<Awaited<T> | D>, Awaited<T> | D>;
+      value(): IfPromise<
+        TReturn,
+        Promise<Awaited<TReturn> | D>,
+        Awaited<TReturn> | D
+      >;
     };
 
     // Cast is safe: runtime shape is unchanged; this only narrows the static
@@ -436,11 +448,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  unwrap(): IfPromise<T, Promise<Awaited<T>>, Awaited<T>> {
+  unwrap(): IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>> {
     const result = this.execute();
 
-    if (isPromiseLike(result)) {
-      return result.then((resolved) => {
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return (result as Promise<TryResult<TReturn>>).then((resolved) => {
         if (!resolved.success) {
           const shouldCapture = this.config.message;
 
@@ -462,30 +474,36 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
         }
 
         return resolved.value;
-      }) as IfPromise<T, Promise<Awaited<T>>, Awaited<T>>;
+      }) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
     }
 
-    if (!result.success) {
+    const resolvedResult = result as TryResult<TReturn>;
+
+    if (!resolvedResult.success) {
       const shouldCapture = this.config.message;
 
       if (shouldCapture) {
-        this.reportError(result.error);
+        this.reportError(resolvedResult.error);
       }
 
       if (
         this.config.message &&
-        !Try.ignoreErrorTypes.includes(result.error.name)
+        !Try.ignoreErrorTypes.includes(resolvedResult.error.name)
       ) {
         const wrappedError = Try.defaultReporter.createWrappedError(
-          result.error,
+          resolvedResult.error,
           this.config.message,
         );
         throw wrappedError;
       }
-      throw result.error;
+      throw resolvedResult.error;
     }
 
-    return result.value;
+    return resolvedResult.value as IfPromise<
+      TReturn,
+      Promise<Awaited<TReturn>>,
+      Awaited<TReturn>
+    >;
   }
 
   /**
@@ -523,8 +541,16 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   );
    * ```
    */
-  result(): IfPromise<T, Promise<TryResult<T>>, TryResult<T>> {
-    return this.execute() as IfPromise<T, Promise<TryResult<T>>, TryResult<T>>;
+  result(): IfPromise<
+    TReturn,
+    Promise<TryResult<TReturn>>,
+    TryResult<TReturn>
+  > {
+    return this.execute() as IfPromise<
+      TReturn,
+      Promise<TryResult<TReturn>>,
+      TryResult<TReturn>
+    >;
   }
 
   /**
@@ -552,16 +578,20 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  error(): IfPromise<T, Promise<Error | undefined>, Error | undefined> {
+  error(): IfPromise<TReturn, Promise<Error | undefined>, Error | undefined> {
     const result = this.execute();
 
-    if (isPromiseLike(result)) {
-      return result.then((resolved) =>
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return (result as Promise<TryResult<TReturn>>).then((resolved) =>
         resolved.success ? undefined : resolved.error,
-      ) as IfPromise<T, Promise<Error | undefined>, Error | undefined>;
+      ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
-    return result.success ? undefined : result.error;
+    const resolvedResult = result as TryResult<TReturn>;
+
+    return (
+      resolvedResult.success ? undefined : resolvedResult.error
+    ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
   }
 
   /**
@@ -592,11 +622,15 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // undefined if failed, but error is reported
    * ```
    */
-  value(): IfPromise<T, Promise<Awaited<T> | undefined>, Awaited<T> | undefined> {
+  value(): IfPromise<
+    TReturn,
+    Promise<Awaited<TReturn> | undefined>,
+    Awaited<TReturn> | undefined
+  > {
     const result = this.execute();
 
-    if (isPromiseLike(result)) {
-      return result.then((resolved) => {
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return (result as Promise<TryResult<TReturn>>).then((resolved) => {
         if (resolved.success) {
           return resolved.value;
         }
@@ -609,23 +643,33 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
 
         return (this.config.defaultValue as unknown) ?? undefined;
       }) as IfPromise<
-        T,
-        Promise<Awaited<T> | undefined>,
-        Awaited<T> | undefined
+        TReturn,
+        Promise<Awaited<TReturn> | undefined>,
+        Awaited<TReturn> | undefined
       >;
     }
 
-    if (result.success) {
-      return result.value;
+    const resolvedResult = result as TryResult<TReturn>;
+
+    if (resolvedResult.success) {
+      return resolvedResult.value as IfPromise<
+        TReturn,
+        Promise<Awaited<TReturn> | undefined>,
+        Awaited<TReturn> | undefined
+      >;
     }
 
     if (this.config.message) {
-      this.reportError(result.error);
+      this.reportError(resolvedResult.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
     }
 
-    return (this.config.defaultValue as unknown) ?? undefined;
+    return ((this.config.defaultValue as unknown) ?? undefined) as IfPromise<
+      TReturn,
+      Promise<Awaited<TReturn> | undefined>,
+      Awaited<TReturn> | undefined
+    >;
   }
 
   /**
@@ -635,10 +679,10 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *
    * @returns Promise resolving to a result object indicating success/failure
    */
-  private execute(): TryResult<T> | Promise<TryResult<T>> {
+  private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
     if (this.state === 'executed' && this.cachedResult) {
       return this.isAsync
-        ? (this.cachedPromise as Promise<TryResult<T>>)
+        ? (this.cachedPromise as Promise<TryResult<TReturn>>)
         : this.cachedResult;
     }
 
@@ -649,13 +693,13 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     try {
       const value = this.fn(...this.args);
 
-      if (isPromiseLike(value)) {
+      if (isPromiseLike<Awaited<TReturn>>(value)) {
         this.isAsync = true;
         this.cachedPromise = Promise.resolve(value)
           .then((resolved) => {
             this.cachedResult = {
               success: true,
-              value: resolved as Awaited<T>,
+              value: resolved as Awaited<TReturn>,
             };
             return this.cachedResult;
           })
@@ -672,11 +716,14 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
             return this.runFinallyCallback();
           });
 
-        return this.cachedPromise;
+        return this.cachedPromise as Promise<TryResult<TReturn>>;
       }
 
       this.isAsync = false;
-      this.cachedResult = { success: true, value: value as Awaited<T> };
+      this.cachedResult = {
+        success: true,
+        value: value as Awaited<TReturn>,
+      };
     } catch (e) {
       if (this.config.debug) {
         console.error(e);
@@ -785,9 +832,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * const users = await new Try(fetchUsers); // undefined if error
    * ```
    */
-  then<TResult1 = Awaited<T> | undefined, TResult2 = never>(
+  then<TResult1 = Awaited<TReturn> | undefined, TResult2 = never>(
     onfulfilled?:
-      | ((value: Awaited<T> | undefined) => TResult1 | PromiseLike<TResult1>)
+      | ((
+          value: Awaited<TReturn> | undefined,
+        ) => TResult1 | PromiseLike<TResult1>)
       | undefined
       | null,
     onrejected?:
@@ -797,9 +846,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   ): Promise<TResult1 | TResult2> {
     return Promise.resolve(
       this.value() as
-        | Awaited<T>
+        | Awaited<TReturn>
         | undefined
-        | PromiseLike<Awaited<T> | undefined>,
+        | PromiseLike<Awaited<TReturn> | undefined>,
     ).then(onfulfilled ?? undefined, onrejected ?? undefined);
   }
 }
