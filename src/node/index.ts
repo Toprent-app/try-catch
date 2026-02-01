@@ -11,7 +11,7 @@ TryClass.setDefaultReporter(new NodeReporter());
  *
  * Usage:
  *   import { Try } from '@power-rent/try-catch/node';
- *   
+ *
  *   const result = new Try(asyncFn, arg1, arg2)
  *     .breadcrumbs(['id'])
  *     .report('failed to execute')

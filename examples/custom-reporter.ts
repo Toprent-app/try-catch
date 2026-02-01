@@ -40,7 +40,7 @@ async function demonstrateReporters() {
   const result1 = await new Try(() => {
     throw new Error('Test error 1');
   })
-    .report('This error won\'t be reported anywhere')
+    .report("This error won't be reported anywhere")
     .value();
 
   console.log('Result 1 (NoopReporter):', result1); // undefined
@@ -61,7 +61,7 @@ async function demonstrateReporters() {
   const result3 = await new Try(() => {
     return 'Success!';
   })
-    .report('This won\'t be called since there\'s no error')
+    .report("This won't be called since there's no error")
     .value();
 
   console.log('Result 3 (Success):', result3); // "Success!"

@@ -13,7 +13,7 @@ export interface ErrorReportConfig {
 /**
  * @deprecated This class is deprecated and will be removed in a future version.
  * Use the Reporter interface from '../core/reporter' instead for better modularity.
- * 
+ *
  * Utility class for handling error reporting to Sentry
  */
 export class ErrorReporter {
@@ -22,12 +22,17 @@ export class ErrorReporter {
    */
   static report(error: Error, config: ErrorReportConfig): void {
     // Add breadcrumbs if configured
-    if (config.breadcrumbData && Object.keys(config.breadcrumbData).length > 0) {
+    if (
+      config.breadcrumbData &&
+      Object.keys(config.breadcrumbData).length > 0
+    ) {
       this.addBreadcrumbs(config.breadcrumbData, config.functionName);
     }
 
     // Create wrapped error if custom message is provided
-    const errorToReport = config.message ? this.createWrappedError(error, config.message) : error;
+    const errorToReport = config.message
+      ? this.createWrappedError(error, config.message)
+      : error;
 
     // Report to Sentry with tags
     Sentry.captureException(errorToReport, {
@@ -38,7 +43,10 @@ export class ErrorReporter {
   /**
    * Add breadcrumbs to Sentry context
    */
-  static addBreadcrumbs(data: Record<string, unknown>, functionName = 'anonymous'): void {
+  static addBreadcrumbs(
+    data: Record<string, unknown>,
+    functionName = 'anonymous',
+  ): void {
     Sentry.addBreadcrumb({
       message: `Calling ${functionName} function`,
       data,
@@ -58,7 +66,10 @@ export class ErrorReporter {
   /**
    * Check if an error type should be thrown through without wrapping
    */
-  static shouldThrowThrough(error: Error, ignoreErrorTypes: readonly string[]): boolean {
+  static shouldThrowThrough(
+    error: Error,
+    ignoreErrorTypes: readonly string[],
+  ): boolean {
     return ignoreErrorTypes.includes(error.name);
   }
 }

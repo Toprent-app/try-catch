@@ -1,5 +1,7 @@
-import { Try as CoreTry, TryResult } from '../core/Try';
+import { Try as CoreTry } from '../core/Try';
 import { SentryReporter } from './SentryReporter';
+
+export type { TryResult } from '../core/Try';
 
 // Set up the Sentry reporter as the default for NextJS
 CoreTry.setDefaultReporter(new SentryReporter());
@@ -14,7 +16,10 @@ CoreTry.setDefaultReporter(new SentryReporter());
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<T, TArgs extends readonly unknown[] = unknown[]> extends CoreTry<T, TArgs> {
+export class Try<
+  T,
+  TArgs extends readonly unknown[] = unknown[],
+> extends CoreTry<T, TArgs> {
   /**
    * Configure error types that should be thrown through without being wrapped.
    * When using `.report()`, errors matching these types will be re-thrown as-is

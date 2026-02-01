@@ -11,7 +11,7 @@ TryClass.setDefaultReporter(new BrowserReporter());
  *
  * Usage:
  *   import { Try } from '@power-rent/try-catch/browser';
- *   
+ *
  *   const result = new Try(asyncFn, arg1, arg2)
  *     .breadcrumbs(['id'])
  *     .report('failed to execute')

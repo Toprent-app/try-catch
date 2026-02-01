@@ -42,11 +42,10 @@
     "./dist/esm/browser/index.js"
   ],
   "scripts": {
-    "build": "npm run build:cjs && npm run build:esm",
+    "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts",
+    "build:watch": "tsup --config tsup.config.ts --watch",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "build:cjs": "tsc -p tsconfig.json",
-    "build:esm": "tsc -p tsconfig.esm.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
@@ -71,28 +70,17 @@
     "url": "https://github.com/Toprent-app/try-catch/issues"
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
-  "peerDependencies": {
-    "@sentry/browser": "^8",
-    "@sentry/nextjs": "^8",
-    "@sentry/node": "^8"
-  },
-  "peerDependenciesMeta": {
-    "@sentry/nextjs": {
-      "optional": true
-    },
-    "@sentry/node": {
-      "optional": true
-    },
-    "@sentry/browser": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@changesets/cli": "^2.29.6",
+    "@changesets/cli": "^2.29.7",
+    "@sentry/browser": ">=8.0.0 <11.0.0",
+    "@sentry/nextjs": ">=8.0.0 <11.0.0",
+    "@sentry/node": ">=8.0.0 <11.0.0",
     "@types/node": "^20.19.1",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "tsup": "^8.5.0",
+    "type-fest": "^5.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.3"
   },
   "engines": {
     "node": ">=20"

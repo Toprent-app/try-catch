@@ -43,7 +43,7 @@ interface UpdateOptions {
 
 // Mock async functions that might fail
 async function fetchUser(id: string): Promise<User> {
-  await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network delay
+  await new Promise((resolve) => setTimeout(resolve, 100)); // Simulate network delay
 
   if (id === 'invalid') {
     throw new Error(`User not found: ${id}`);
@@ -53,12 +53,15 @@ async function fetchUser(id: string): Promise<User> {
     id,
     name: `User ${id}`,
     email: `user${id}@example.com`,
-    age: Math.floor(Math.random() * 50) + 20
+    age: Math.floor(Math.random() * 50) + 20,
   };
 }
 
-async function updateUser(userData: UserData, options: UpdateOptions = {}): Promise<User> {
-  await new Promise(resolve => setTimeout(resolve, 50));
+async function updateUser(
+  userData: UserData,
+  options: UpdateOptions = {},
+): Promise<User> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   if (!userData.email.includes('@')) {
     throw new Error('Invalid email format');
@@ -70,7 +73,7 @@ async function updateUser(userData: UserData, options: UpdateOptions = {}): Prom
 
   return {
     id: 'updated-user',
-    ...userData
+    ...userData,
   };
 }
 
@@ -101,14 +104,20 @@ async function demonstrateBasicUsage() {
 
   // 2. Function with multiple parameter types
   console.log('\n2. Multiple parameter types:');
-  const message = await new Try(formatMessage, 42, 'System ready', true).value();
+  const message = await new Try(
+    formatMessage,
+    42,
+    'System ready',
+    true,
+  ).value();
   console.log('✅ Formatted message:', message);
 
   // 3. Function with object parameters
   console.log('\n3. Object parameters:');
-  const updatedUser = await new Try(updateUser,
+  const updatedUser = await new Try(
+    updateUser,
     { name: 'John Doe', email: 'john@example.com' },
-    { validateOnly: false }
+    { validateOnly: false },
   ).value();
   console.log('✅ Updated user:', updatedUser?.name);
 
@@ -155,7 +164,11 @@ async function demonstrateErrorStrategies() {
   // Strategy 5: Default values
   console.log('\n5. Default Values:');
   const userWithDefault = await new Try(fetchUser, 'invalid')
-    .default({ id: 'default', name: 'Default User', email: 'default@example.com' })
+    .default({
+      id: 'default',
+      name: 'Default User',
+      email: 'default@example.com',
+    })
     .value();
   console.log('✅ User with default:', userWithDefault?.name);
 }
@@ -174,7 +187,7 @@ async function demonstrateBreadcrumbPatterns() {
         message: config.message,
         error: error.message,
         breadcrumbs: config.breadcrumbData,
-        tags: config.tags
+        tags: config.tags,
       });
     }
 
@@ -190,9 +203,10 @@ async function demonstrateBreadcrumbPatterns() {
   Try.setDefaultReporter(new TestReporter());
 
   console.log('\n1. Simple key extraction:');
-  await new Try(updateUser,
+  await new Try(
+    updateUser,
     { name: 'John', email: 'john@example.com', age: 30 },
-    { validateOnly: true }
+    { validateOnly: true },
   )
     .breadcrumbs(['name', 'email'])
     .report('User update failed')
@@ -201,36 +215,44 @@ async function demonstrateBreadcrumbPatterns() {
   console.log('\n2. Transformer function breadcrumb extraction:');
   await new Try(formatMessage, 999, 'Test message', true)
     .breadcrumbs(
-      (id: number) => ({ messageId: id }),       // Transform first param
-      (msg: string) => ({ content: msg }),       // Transform second param
-      (urgent: boolean) => ({ isUrgent: urgent }) // Transform third param
+      (id: number) => ({ messageId: id }), // Transform first param
+      (msg: string) => ({ content: msg }), // Transform second param
+      (urgent: boolean) => ({ isUrgent: urgent }), // Transform third param
     )
     .report('Message formatting failed')
     .value();
 
   console.log('\n3. Object syntax with transformers:');
-  await new Try(updateUser,
+  await new Try(
+    updateUser,
     { name: 'Jane', email: 'invalid-email', age: 25 },
-    { validateOnly: false, skipNotification: true }
+    { validateOnly: false, skipNotification: true },
   )
     .breadcrumbs({
-      0: ['name', 'age'],  // Extract keys from first parameter
-      1: (opts: any) => ({ hasValidation: !!opts.validateOnly, optionCount: Object.keys(opts).length })
+      0: ['name', 'age'], // Extract keys from first parameter
+      1: (opts: any) => ({
+        hasValidation: !!opts.validateOnly,
+        optionCount: Object.keys(opts).length,
+      }),
     })
     .report('Complex update failed')
     .value();
 
   console.log('\n4. Mixed extraction strategies using extractor objects:');
-  async function processOrder(orderId: string, customerData: { id: number, type: string }, urgent: boolean) {
+  async function processOrder(
+    orderId: string,
+    customerData: { id: number; type: string },
+    urgent: boolean,
+  ) {
     if (orderId === 'invalid') throw new Error('Invalid order');
     return { orderId, processed: true };
   }
 
   await new Try(processOrder, 'invalid', { id: 123, type: 'premium' }, true)
     .breadcrumbs([
-      { param: 0, as: 'value' },      // Extract orderId as value
-      { param: 1, keys: ['id', 'type'] },  // Extract keys from customerData
-      { param: 2, as: 'value' }       // Extract urgent as value
+      { param: 0, as: 'value' }, // Extract orderId as value
+      { param: 1, keys: ['id', 'type'] }, // Extract keys from customerData
+      { param: 2, as: 'value' }, // Extract urgent as value
     ])
     .report('Order processing failed')
     .value();
@@ -267,7 +289,10 @@ async function demonstratePlatformSpecific() {
   console.log('✅ Config loaded:', config);
 
   console.log('\n2. Browser-style API calls:');
-  async function fetchFromAPI(endpoint: string, options: RequestInit = {}): Promise<any> {
+  async function fetchFromAPI(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<any> {
     if (endpoint.includes('error')) {
       throw new Error('Network request failed');
     }
@@ -279,7 +304,10 @@ async function demonstratePlatformSpecific() {
     .tag('component', 'api-client')
     .breadcrumbs([
       { param: 0, as: 'value' },
-      { param: 1, transform: (opts: any) => ({ method: opts.method || 'GET' }) }
+      {
+        param: 1,
+        transform: (opts: any) => ({ method: opts.method || 'GET' }),
+      },
     ])
     .default(null)
     .value();
@@ -313,42 +341,70 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  async get<T>(endpoint: string, headers: Record<string, string> = {}): Promise<T> {
+  async get<T>(
+    endpoint: string,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
     return this.makeRequest('GET', endpoint, undefined, headers);
   }
 
-  async post<T>(endpoint: string, body: any, headers: Record<string, string> = {}): Promise<T> {
+  async post<T>(
+    endpoint: string,
+    body: any,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
     return this.makeRequest('POST', endpoint, body, headers);
   }
 
-  async put<T>(endpoint: string, body: any, headers: Record<string, string> = {}): Promise<T> {
+  async put<T>(
+    endpoint: string,
+    body: any,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
     return this.makeRequest('PUT', endpoint, body, headers);
   }
 
-  async delete<T>(endpoint: string, headers: Record<string, string> = {}): Promise<T> {
+  async delete<T>(
+    endpoint: string,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
     return this.makeRequest('DELETE', endpoint, undefined, headers);
   }
 
-  private async makeRequest(method: string, endpoint: string, body?: any, headers: Record<string, string> = {}): Promise<any> {
+  private async makeRequest(
+    method: string,
+    endpoint: string,
+    body?: any,
+    headers: Record<string, string> = {},
+  ): Promise<any> {
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     if (endpoint.includes('error')) {
-      throw new Error(`HTTP ${method} request failed for ${this.baseUrl}${endpoint}`);
+      throw new Error(
+        `HTTP ${method} request failed for ${this.baseUrl}${endpoint}`,
+      );
     }
 
     return {
       data: `Response from ${method} ${this.baseUrl}${endpoint}`,
       body,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }
 
 class UserRepository {
   private apiClient: ApiClient;
-  private boundGet: <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
-  private boundPost: <T>(endpoint: string, body: any, headers?: Record<string, string>) => Promise<T>;
+  private boundGet: <T>(
+    endpoint: string,
+    headers?: Record<string, string>,
+  ) => Promise<T>;
+  private boundPost: <T>(
+    endpoint: string,
+    body: any,
+    headers?: Record<string, string>,
+  ) => Promise<T>;
 
   constructor(apiClient: ApiClient) {
     this.apiClient = apiClient;
@@ -373,7 +429,7 @@ class UserRepository {
   async findByIdWithWrapper(id: string): Promise<User | null> {
     const result = await new Try(
       (endpoint: string) => this.apiClient.get<User>(endpoint),
-      `/users/${id}`
+      `/users/${id}`,
     )
       .tag('repository', 'user')
       .tag('operation', 'findById')
@@ -385,11 +441,11 @@ class UserRepository {
 
   // ✅ SOLUTION 2: Use .bind() method
   async findByIdWithBind(id: string): Promise<User | null> {
-    const boundGet = this.apiClient.get.bind(this.apiClient) as <T>(endpoint: string, headers?: Record<string, string>) => Promise<T>;
-    const result = await new Try(
-      boundGet<User>,
-      `/users/${id}`
-    )
+    const boundGet = this.apiClient.get.bind(this.apiClient) as <T>(
+      endpoint: string,
+      headers?: Record<string, string>,
+    ) => Promise<T>;
+    const result = await new Try(boundGet<User>, `/users/${id}`)
       .tag('repository', 'user')
       .tag('operation', 'findById')
       .breadcrumbs([{ param: 0, as: 'value' }])
@@ -401,18 +457,24 @@ class UserRepository {
   // ✅ SOLUTION 3: Multi-parameter wrapper for complex cases
   async createUser(userData: CreateUserData): Promise<User | null> {
     const result = await new Try(
-      (endpoint: string, body: CreateUserData, headers?: Record<string, string>) =>
-        this.apiClient.post<User>(endpoint, body, headers),
+      (
+        endpoint: string,
+        body: CreateUserData,
+        headers?: Record<string, string>,
+      ) => this.apiClient.post<User>(endpoint, body, headers),
       '/users',
       userData,
-      { 'Content-Type': 'application/json' }
+      { 'Content-Type': 'application/json' },
     )
       .tag('repository', 'user')
       .tag('operation', 'create')
       .breadcrumbs({
         0: (endpoint: any) => ({ endpoint }),
         1: ['name', 'email'],
-        2: (headers: any) => ({ hasHeaders: !!headers, headerCount: Object.keys(headers || {}).length })
+        2: (headers: any) => ({
+          hasHeaders: !!headers,
+          headerCount: Object.keys(headers || {}).length,
+        }),
       })
       .report('Failed to create user')
       .value();
@@ -420,22 +482,22 @@ class UserRepository {
   }
 
   // ✅ SOLUTION 4: Using bound methods stored as class properties (initialized in constructor)
-  async updateUserWithBoundMethods(id: string, updates: Partial<UserData>): Promise<User | null> {
-    const result = await new Try(
-      this.boundPost<User>,
-      `/users/${id}`,
-      updates
-    )
+  async updateUserWithBoundMethods(
+    id: string,
+    updates: Partial<UserData>,
+  ): Promise<User | null> {
+    const result = await new Try(this.boundPost<User>, `/users/${id}`, updates)
       .tag('repository', 'user')
       .tag('operation', 'update')
       .breadcrumbs([
         { param: 0, as: 'value' },
         {
-          param: 1, transform: (updates: any) => ({
+          param: 1,
+          transform: (updates: any) => ({
             updateFields: Object.keys(updates),
-            fieldCount: Object.keys(updates).length
-          })
-        }
+            fieldCount: Object.keys(updates).length,
+          }),
+        },
       ])
       .report(`Failed to update user ${id}`)
       .value();
@@ -455,7 +517,7 @@ class UserService {
   async findById(id: string): Promise<User | null> {
     const result = await new Try(
       (userId: string) => this.userRepository.findByIdWithWrapper(userId),
-      id
+      id,
     )
       .tag('service', 'user')
       .tag('layer', 'business-logic')
@@ -473,7 +535,7 @@ class UserService {
 
     const result = await new Try(
       (data: CreateUserData) => this.userRepository.createUser(data),
-      userData
+      userData,
     )
       .tag('service', 'user')
       .tag('layer', 'business-logic')
@@ -503,26 +565,37 @@ async function demonstrateClassMethodBinding() {
   const newUser = await userRepository.createUser({
     name: 'John Doe',
     email: 'john@example.com',
-    password: 'secure123'
+    password: 'secure123',
   });
   console.log('✅ User created with multi-param wrapper:', newUser);
 
   console.log('\n4. Testing bound methods:');
-  const updatedUser = await userRepository.updateUserWithBoundMethods('user-789', {
-    name: 'Jane Smith',
-    age: 30
-  });
+  const updatedUser = await userRepository.updateUserWithBoundMethods(
+    'user-789',
+    {
+      name: 'Jane Smith',
+      age: 30,
+    },
+  );
   console.log('✅ User updated with bound methods:', updatedUser);
 
   console.log('\n5. Testing service layer delegation:');
   const serviceUser = await userService.findById('user-service-test');
   console.log('✅ User found via service:', serviceUser);
 
-  console.log('\n6. Demonstrating the wrong approach (commented out to avoid errors):');
+  console.log(
+    '\n6. Demonstrating the wrong approach (commented out to avoid errors):',
+  );
   console.log('// ❌ This would fail:');
-  console.log('// await new Try(this.apiClient.post<User>, \'/users\', userData)');
-  console.log('// Error: Cannot read properties of undefined (reading \'makeRequest\')');
-  console.log('\n✅ Key takeaway: Always wrap class methods to preserve \'this\' context!');
+  console.log(
+    "// await new Try(this.apiClient.post<User>, '/users', userData)",
+  );
+  console.log(
+    "// Error: Cannot read properties of undefined (reading 'makeRequest')",
+  );
+  console.log(
+    "\n✅ Key takeaway: Always wrap class methods to preserve 'this' context!",
+  );
 }
 
 // =============================================================================
@@ -538,27 +611,48 @@ class RealWorldApiClient {
   }
 
   // ✅ Proper implementation using private method with correct binding
-  async get<T>(endpoint: string, headers: Record<string, string> = {}): Promise<T | null> {
+  async get<T>(
+    endpoint: string,
+    headers: Record<string, string> = {},
+  ): Promise<T | null> {
     const result = await new Try(
-      (method: string, ep: string, body: any, h: Record<string, string>) => this.makeRequest(method, ep, body, h),
-      'GET', endpoint, undefined, headers
+      (method: string, ep: string, body: any, h: Record<string, string>) =>
+        this.makeRequest(method, ep, body, h),
+      'GET',
+      endpoint,
+      undefined,
+      headers,
     )
       .tag('method', 'GET')
       .tag('client', 'api')
       .breadcrumbs([
-        { param: 0, as: 'value' },  // httpMethod
-        { param: 1, as: 'value' },  // endpoint
-        { param: 3, transform: (h: any) => ({ headerCount: Object.keys(h).length, hasAuth: !!h.authorization }) }
+        { param: 0, as: 'value' }, // httpMethod
+        { param: 1, as: 'value' }, // endpoint
+        {
+          param: 3,
+          transform: (h: any) => ({
+            headerCount: Object.keys(h).length,
+            hasAuth: !!h.authorization,
+          }),
+        },
       ])
       .report(`Failed to GET ${endpoint}`)
       .value();
     return result;
   }
 
-  async post<T>(endpoint: string, body: any, headers: Record<string, string> = {}): Promise<T | null> {
+  async post<T>(
+    endpoint: string,
+    body: any,
+    headers: Record<string, string> = {},
+  ): Promise<T | null> {
     const result = await new Try(
-      (method: string, ep: string, b: any, h: Record<string, string>) => this.makeRequest(method, ep, b, h),
-      'POST', endpoint, body, headers
+      (method: string, ep: string, b: any, h: Record<string, string>) =>
+        this.makeRequest(method, ep, b, h),
+      'POST',
+      endpoint,
+      body,
+      headers,
     )
       .tag('method', 'POST')
       .tag('client', 'api')
@@ -566,16 +660,21 @@ class RealWorldApiClient {
         0: (method: any) => ({ httpMethod: method }),
         1: (endpoint: any) => ({ endpoint }),
         2: (body: any) => ({ bodyType: typeof body, hasData: !!body }),
-        3: (headers: any) => ({ headerCount: Object.keys(headers).length })
+        3: (headers: any) => ({ headerCount: Object.keys(headers).length }),
       })
       .report(`Failed to POST ${endpoint}`)
       .value();
     return result;
   }
 
-  private async makeRequest(method: string, endpoint: string, body?: any, headers: Record<string, string> = {}): Promise<any> {
+  private async makeRequest(
+    method: string,
+    endpoint: string,
+    body?: any,
+    headers: Record<string, string> = {},
+  ): Promise<any> {
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     if (endpoint.includes('error')) {
       throw new Error(`HTTP ${method} request failed`);
@@ -583,7 +682,7 @@ class RealWorldApiClient {
 
     return {
       data: `Response from ${method} ${endpoint}`,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
   }
 }
@@ -598,8 +697,9 @@ class RealWorldUserService {
   // ✅ Proper implementation using wrapper function
   async findById(id: string): Promise<User | null> {
     const result = await new Try(
-      (endpoint: string, headers?: Record<string, string>) => this.apiClient.get<User>(endpoint, headers),
-      `/users/${id}`
+      (endpoint: string, headers?: Record<string, string>) =>
+        this.apiClient.get<User>(endpoint, headers),
+      `/users/${id}`,
     )
       .tag('service', 'user')
       .tag('operation', 'findById')
@@ -611,16 +711,19 @@ class RealWorldUserService {
 
   async create(userData: CreateUserData): Promise<User | null> {
     const result = await new Try(
-      (endpoint: string, body: CreateUserData, headers?: Record<string, string>) =>
-        this.apiClient.post<User>(endpoint, body, headers),
+      (
+        endpoint: string,
+        body: CreateUserData,
+        headers?: Record<string, string>,
+      ) => this.apiClient.post<User>(endpoint, body, headers),
       '/users',
-      userData
+      userData,
     )
       .tag('service', 'user')
       .tag('operation', 'create')
       .breadcrumbs({
         0: (endpoint: any) => ({ endpoint }),
-        1: ['name', 'email']
+        1: ['name', 'email'],
       })
       .report('Failed to create user')
       .value();
@@ -629,20 +732,22 @@ class RealWorldUserService {
 
   async update(id: string, updates: Partial<UserData>): Promise<User | null> {
     const result = await new Try(
-      (endpoint: string, body: Partial<UserData>) => this.apiClient.post<User>(endpoint, body),
+      (endpoint: string, body: Partial<UserData>) =>
+        this.apiClient.post<User>(endpoint, body),
       `/users/${id}`,
-      updates
+      updates,
     )
       .tag('service', 'user')
       .tag('operation', 'update')
       .breadcrumbs([
-        { param: 0, as: 'value' },  // endpoint with userId
+        { param: 0, as: 'value' }, // endpoint with userId
         {
-          param: 1, transform: (updates: any) => ({
+          param: 1,
+          transform: (updates: any) => ({
             updateFields: Object.keys(updates),
-            fieldCount: Object.keys(updates).length
-          })
-        }
+            fieldCount: Object.keys(updates).length,
+          }),
+        },
       ])
       .report(`Failed to update user ${id}`)
       .value();
@@ -668,14 +773,14 @@ async function demonstrateRealWorldPatterns() {
   const newUser = await userService.create({
     name: 'Alice Johnson',
     email: 'alice@example.com',
-    password: 'secure123'
+    password: 'secure123',
   });
   console.log('✅ Created user:', newUser);
 
   console.log('\n4. Update operation with partial data:');
   const updatedUser = await userService.update('user-456', {
     name: 'Alice Smith',
-    age: 28
+    age: 28,
   });
   console.log('✅ Updated user:', updatedUser);
 }
@@ -700,7 +805,7 @@ async function demonstrateAdvancedConfiguration() {
   console.log('\n2. Finally callbacks:');
   let cleanupCalled = false;
   const resultWithCleanup = await new Try(async () => {
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
     return 'Operation completed';
   })
     .finally(() => {
@@ -750,7 +855,7 @@ async function demonstrateAdvancedConfiguration() {
       environment,
       version,
       component: 'user-fetcher',
-      correlationId: Math.random().toString(36)
+      correlationId: Math.random().toString(36),
     })
     .tag('timestamp', new Date().toISOString())
     .debug(environment === 'development')
@@ -766,7 +871,10 @@ async function demonstrateAdvancedConfiguration() {
 
 class TestReporter implements Reporter {
   public reports: Array<{ error: Error; config: ErrorReportConfig }> = [];
-  public breadcrumbs: Array<{ data: Record<string, unknown>; functionName?: string }> = [];
+  public breadcrumbs: Array<{
+    data: Record<string, unknown>;
+    functionName?: string;
+  }> = [];
 
   report(error: Error, config: ErrorReportConfig): void {
     this.reports.push({ error, config });
@@ -807,9 +915,10 @@ async function demonstrateTestingPatterns() {
   console.log('\n2. Testing breadcrumb extraction:');
   testReporter.reset();
 
-  await new Try(updateUser,
+  await new Try(
+    updateUser,
     { name: 'Test User', email: 'test@example.com' },
-    { validateOnly: true }
+    { validateOnly: true },
   )
     .breadcrumbs(['name', 'email'])
     .report('Test breadcrumb extraction')
@@ -854,7 +963,6 @@ async function runComprehensiveExamples() {
     console.log('\n' + '='.repeat(80));
     console.log('✅ ALL EXAMPLES COMPLETED SUCCESSFULLY');
     console.log('='.repeat(80));
-
   } catch (error) {
     console.error('\n❌ Example execution failed:', error);
     process.exit(1);
@@ -866,9 +974,4 @@ if (require.main === module) {
   runComprehensiveExamples();
 }
 
-export {
-  runComprehensiveExamples,
-  ApiClient,
-  UserService,
-  TestReporter
-};
+export { runComprehensiveExamples, ApiClient, UserService, TestReporter };

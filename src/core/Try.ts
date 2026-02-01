@@ -33,13 +33,13 @@ interface TryConfig<TArgs extends readonly unknown[] = unknown[]> {
  */
 export type TryResult<T> =
   | {
-    readonly success: true;
-    readonly value: Awaited<T>;
-  }
+      readonly success: true;
+      readonly value: Awaited<T>;
+    }
   | {
-    readonly success: false;
-    readonly error: Error;
-  };
+      readonly success: false;
+      readonly error: Error;
+    };
 
 /**
  * Core Try class for simplified async error handling.
@@ -112,7 +112,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  constructor(fn: ((...args: TArgs) => T | Promise<T>), ...args: TArgs) {
+  constructor(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs) {
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
@@ -219,10 +219,12 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * ```
    */
   breadcrumbs<Keys extends readonly (keyof TArgs[0])[]>(
-    keys: Keys
+    keys: Keys,
   ): Try<T, TArgs>;
 
-  breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(...transformers: T): Try<T, TArgs>;
+  breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(
+    ...transformers: T
+  ): Try<T, TArgs>;
 
   breadcrumbs(config: BreadcrumbOptions<TArgs>): Try<T, TArgs>;
 
@@ -236,7 +238,8 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
       return this.setConfig({
-        breadcrumbConfig: allTransformers as unknown as BreadcrumbOptions<TArgs>,
+        breadcrumbConfig:
+          allTransformers as unknown as BreadcrumbOptions<TArgs>,
       });
     }
 

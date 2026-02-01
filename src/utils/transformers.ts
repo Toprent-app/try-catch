@@ -10,13 +10,13 @@ export const PredefinedTransformers = {
    */
   length: (value: unknown, paramIndex: number): Record<string, unknown> => {
     const paramKey = `param${paramIndex}`;
-    
+
     if (typeof value === 'string' || Array.isArray(value)) {
       return { [`${paramKey}_length`]: value.length };
     } else if (value && typeof value === 'object') {
       return { [`${paramKey}_length`]: Object.keys(value).length };
     }
-    
+
     return {};
   },
 
@@ -64,11 +64,11 @@ export class TransformerRegistry {
         error as Error,
         'custom',
       );
-      
+
       if (debug) {
         console.error('Error in breadcrumb transformer:', transformationError);
       }
-      
+
       return {};
     }
   }
@@ -91,11 +91,11 @@ export class TransformerRegistry {
         transformerType,
         paramIndex,
       );
-      
+
       if (debug) {
         console.error('Error in predefined transformer:', transformationError);
       }
-      
+
       return {};
     }
   }
@@ -103,7 +103,10 @@ export class TransformerRegistry {
   /**
    * Validate that a parameter index is valid for the given arguments
    */
-  static validateParameterIndex(paramIndex: number, argsLength: number): boolean {
+  static validateParameterIndex(
+    paramIndex: number,
+    argsLength: number,
+  ): boolean {
     return paramIndex >= 0 && paramIndex < argsLength;
   }
 }

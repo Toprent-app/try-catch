@@ -17,6 +17,7 @@ async function throwingFunction(_params: any): Promise<{ ok: boolean }> {
 
 describe('Flexible Breadcrumbs System', () => {
   afterEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -63,10 +64,12 @@ describe('Flexible Breadcrumbs System', () => {
         throw new Error('test');
       }
 
-      await new Try(testFunction, 'order-123', { id: 456, name: 'John' }, true)
+      const customer = { id: 456, name: 'John' };
+
+      await new Try(testFunction, 'order-123', customer, true)
         .breadcrumbs([
           { param: 1, keys: ['id', 'name'] },
-          { param: 2, as: 'value' },
+          { param: 2, transform: (priority) => ({ priority }) },
         ])
         .value();
 
@@ -76,7 +79,7 @@ describe('Flexible Breadcrumbs System', () => {
           data: {
             id: 456,
             name: 'John',
-            param2_value: true,
+            priority: true,
           },
         }),
       );
@@ -211,8 +214,8 @@ describe('Flexible Breadcrumbs System', () => {
       await new Try(twoParams, 'hello', 42)
         .breadcrumbs([
           { param: 0, as: 'value' },
-          { param: 5, as: 'value' }, // Invalid index
-          { param: -1, as: 'value' }, // Invalid index
+          { param: 5, as: 'value' } as any, // Invalid index
+          { param: -1, as: 'value' } as any, // Invalid index
         ])
         .value();
 
@@ -247,7 +250,9 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs({
           0: (url: string) => ({ endpoint: url }),
           1: ['userId'],
-          2: (headers: Record<string, string>) => ({ headerCount: Object.keys(headers).length }),
+          2: (headers: Record<string, string>) => ({
+            headerCount: Object.keys(headers).length,
+          }),
         })
         .value();
 
@@ -281,7 +286,9 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs({
           0: (id: string) => ({ identifier: id.toUpperCase() }),
           1: ['name', 'age'],
-          2: (settings: { theme: string; notifications: boolean }) => ({ settingsCount: Object.keys(settings).length }),
+          2: (settings: { theme: string; notifications: boolean }) => ({
+            settingsCount: Object.keys(settings).length,
+          }),
         })
         .value();
 
@@ -303,7 +310,7 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle transformer errors gracefully with debug enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
 
       function testFunction(data: string) {
         throw new Error('test');
@@ -338,7 +345,7 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle transformer errors gracefully with debug disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
 
       function testFunction(data: string) {
         throw new Error('test');
@@ -369,7 +376,7 @@ describe('Flexible Breadcrumbs System', () => {
     it('should handle predefined transformer errors gracefully', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
 
       function testFunction(data: any) {
         throw new Error('test');
@@ -399,7 +406,7 @@ describe('Flexible Breadcrumbs System', () => {
       }
 
       await new Try(testFunction, 'not-an-object')
-        .breadcrumbs([{ param: 0, keys: ['nonExistentKey'] }])
+        .breadcrumbs([{ param: 0, keys: ['nonExistentKey'] } as any])
         .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
@@ -462,7 +469,7 @@ describe('Flexible Breadcrumbs System', () => {
           { param: 0, as: 'value' }, // Valid
           { param: 10, as: 'value' }, // Invalid param index
           { param: 1, keys: ['key'] }, // Valid
-          { param: 0, keys: ['invalidKey'] }, // Valid param, but key extraction from string will fail
+          { param: 0, keys: ['invalidKey'] } as any, // Valid param, but key extraction from string will fail
         ])
         .value();
 
@@ -483,7 +490,12 @@ describe('Flexible Breadcrumbs System', () => {
         throw new Error('test');
       }
 
-      await new Try(testFunction, { a: 'defined', c: undefined })
+      const payload: { a: string; b?: string; c: undefined } = {
+        a: 'defined',
+        c: undefined,
+      };
+
+      await new Try(testFunction, payload)
         .breadcrumbs([{ param: 0, keys: ['a', 'b', 'c'] }])
         .value();
 
@@ -553,6 +565,28 @@ describe('Flexible Breadcrumbs System', () => {
       // Transform should only be called once due to caching
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Type safety', () => {
+    it('should extract from multiple parameters using keys', async () => {
+      function testFunction(
+        _order: string,
+        _customer: { id: number; name: string },
+        _priority: boolean,
+      ) {
+        throw new Error('test');
+      }
+
+      const customer = { id: 456, name: 'John' };
+
+      await new Try(testFunction, 'order-123', customer, true)
+        .breadcrumbs([
+          // @ts-expect-error name is not a valid key of the customer object
+          { param: 1, keys: ['id', 'nam'] },
+          { param: 2, transform: (priority: boolean) => ({ priority }) },
+        ])
+        .value();
     });
   });
 });
