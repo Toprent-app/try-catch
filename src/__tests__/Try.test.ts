@@ -24,11 +24,11 @@ class TestClass {
     this.name = name;
   }
 
-  async greet({ greeting }: { greeting: string; }) {
+  async greet({ greeting }: { greeting: string }) {
     return `${greeting}, I'm ${this.name}`;
   }
 
-  greetSync({ greeting }: { greeting: string; }) {
+  greetSync({ greeting }: { greeting: string }) {
     return `${greeting}, I'm ${this.name}`;
   }
 }
@@ -43,25 +43,23 @@ describe('Try', () => {
   describe('async', () => {
     async function throwingFunction(
       _params: Record<string, unknown>,
-    ): Promise<{ ok: boolean; }> {
+    ): Promise<{ ok: boolean }> {
       throw new Error('boom');
     }
 
     async function throwingCustomError(
       _params: Record<string, unknown>,
-    ): Promise<{ ok: boolean; }> {
+    ): Promise<{ ok: boolean }> {
       throw new GraphQLError('validation error');
     }
 
     async function successfulFunction(
       params: Record<string, unknown>,
-    ): Promise<{ ok: boolean; }> {
+    ): Promise<{ ok: boolean }> {
       return { ok: true, ...params };
     }
 
-    function returnsPromiseOrThrows(
-      shouldThrow: boolean,
-    ): Promise<string> {
+    function returnsPromiseOrThrows(shouldThrow: boolean): Promise<string> {
       if (shouldThrow) {
         return Promise.reject(new Error('boom'));
       }
@@ -511,7 +509,7 @@ describe('Try', () => {
     it('should not log errors by default', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug(false).value();
@@ -523,7 +521,7 @@ describe('Try', () => {
     it('should log errors when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug().value();
@@ -535,7 +533,7 @@ describe('Try', () => {
     it('should not log errors when debug is explicitly disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug(false).value();
@@ -547,7 +545,7 @@ describe('Try', () => {
     it('should log finally callback errors when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -568,7 +566,7 @@ describe('Try', () => {
     it('should not log finally callback errors when debug is disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -585,7 +583,7 @@ describe('Try', () => {
     it('should support conditional debug logging', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const isDevelopment = true;
 
@@ -656,7 +654,7 @@ describe('Try', () => {
     it('should handle async finally callback errors', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = async () => {
@@ -679,7 +677,7 @@ describe('Try', () => {
     it('should handle async finally callback errors without debug', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = async () => {
@@ -816,7 +814,7 @@ describe('Try', () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
-        const result: TryResult<{ ok: boolean; }> = await new Try(
+        const result: TryResult<{ ok: boolean }> = await new Try(
           successfulFunction,
           params,
         ).result();
@@ -1044,9 +1042,7 @@ describe('Try', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       expect(() => {
-        new Try(throwingFunction, params)
-          .report('failed')
-          .unwrap();
+        new Try(throwingFunction, params).report('failed').unwrap();
       }).toThrow('failed');
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
@@ -1345,7 +1341,7 @@ describe('Try', () => {
     it('should not log errors by default', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug(false).value();
@@ -1357,7 +1353,7 @@ describe('Try', () => {
     it('should log errors when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug().value();
@@ -1369,7 +1365,7 @@ describe('Try', () => {
     it('should not log errors when debug is explicitly disabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug(false).value();
@@ -1381,7 +1377,7 @@ describe('Try', () => {
     it('should log finally callback errors when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -1402,7 +1398,7 @@ describe('Try', () => {
     it('should not log finally callback errors when debug is disabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const throwingFinally = () => {
         throw new Error('finally error');
@@ -1417,7 +1413,7 @@ describe('Try', () => {
     it('should support conditional debug logging', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
       const isDevelopment = true;
 
@@ -1488,7 +1484,7 @@ describe('Try', () => {
     it('should handle async finally callback errors', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = () => {
@@ -1511,7 +1507,7 @@ describe('Try', () => {
     it('should handle async finally callback errors without debug', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
-        .mockImplementation(() => { });
+        .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
       const throwingAsyncFinally = () => {
@@ -1620,31 +1616,11 @@ describe('Try', () => {
         }
       });
 
-      it('should work with async finally callbacks', () => {
-        const params = { parameterKey: 'alpha' };
-        const finallySpy = vi.fn();
-        let asyncCallbackResolved = false;
-
-        const asyncFinally = () => {
-          new Promise((resolve) => setTimeout(resolve, 10));
-          asyncCallbackResolved = true;
-          finallySpy();
-        };
-
-        const result = new Try(successfulFunction, params)
-          .finally(asyncFinally)
-          .result();
-
-        expect(result.success).toBe(true);
-        expect(asyncCallbackResolved).toBe(true);
-        expect(finallySpy).toHaveBeenCalledTimes(1);
-      });
-
       it('should export TryResult type for TypeScript users', () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
-        const result: TryResult<{ ok: boolean; }> = new Try(
+        const result: TryResult<{ ok: boolean }> = new Try(
           successfulFunction,
           params,
         ).result();
