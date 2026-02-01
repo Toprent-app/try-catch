@@ -1,5 +1,12 @@
 # @power-rent/try-catch
 
+## 1.0.1
+
+### Patch Changes
+
+- a7cd12a: Use tsup to build the library
+- b4c8c1b: Fix breadcrumbs type safety
+
 ## 1.0.0
 
 ### Major Changes

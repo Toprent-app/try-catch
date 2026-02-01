@@ -1,6 +1,6 @@
 {
   "name": "@power-rent/try-catch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A TypeScript utility for simplified async error handling with Sentry integration",
   "main": "dist/index.js",
   "module": "dist/esm/index.js",
@@ -44,6 +44,9 @@
   "scripts": {
     "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts",
     "build:watch": "tsup --config tsup.config.ts --watch",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
