@@ -43,6 +43,14 @@ export type TryResult<T> =
       readonly error: Error;
     };
 
+type PromiseLikeValue = { then: (...args: any[]) => any };
+
+function isPromiseLike(value: unknown): value is PromiseLikeValue {
+  return !!value && typeof (value as PromiseLikeValue).then === 'function';
+}
+
+type IfPromise<T, True, False> = T extends PromiseLike<any> ? True : False;
+
 /**
  * Core Try class for simplified async error handling.
  * This implementation is framework-agnostic and uses a Reporter interface
@@ -59,6 +67,8 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
   private cachedResult?: TryResult<T>;
+  private cachedPromise?: Promise<TryResult<T>>;
+  private isAsync?: boolean;
   private cachedBreadcrumbData?: Record<string, unknown>;
   private breadcrumbsAdded: boolean = false;
   private state: 'pending' | 'executed';
@@ -324,8 +334,8 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * `Promise.prototype.finally`.
    *
    * The callback is executed **after** the underlying function settles but
-   * before any error is re-thrown from {@link unwrap}. It is always executed
-   * asynchronously in the same tick as the function resolution.
+   * before any error is re-thrown from {@link unwrap}. It runs synchronously
+   * for sync functions and is awaited for async functions.
    *
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
@@ -388,9 +398,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    */
   default<D>(
     defaultValue: D,
-  ): Omit<typeof this, 'value'> & { value(): Promise<Awaited<T> | D> } {
+  ): Omit<typeof this, 'value'> & {
+    value(): IfPromise<T, Promise<Awaited<T> | D>, Awaited<T> | D>;
+  } {
     type WithGuaranteedValue = Omit<typeof this, 'value'> & {
-      value(): Promise<Awaited<T> | D>;
+      value(): IfPromise<T, Promise<Awaited<T> | D>, Awaited<T> | D>;
     };
 
     // Cast is safe: runtime shape is unchanged; this only narrows the static
@@ -424,18 +436,42 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  async unwrap(): Promise<Awaited<T>> {
-    const result = await this.execute();
+  unwrap(): IfPromise<T, Promise<Awaited<T>>, Awaited<T>> {
+    const result = this.execute();
+
+    if (isPromiseLike(result)) {
+      return result.then((resolved) => {
+        if (!resolved.success) {
+          const shouldCapture = this.config.message;
+
+          if (shouldCapture) {
+            this.reportError(resolved.error);
+          }
+
+          if (
+            this.config.message &&
+            !Try.ignoreErrorTypes.includes(resolved.error.name)
+          ) {
+            const wrappedError = Try.defaultReporter.createWrappedError(
+              resolved.error,
+              this.config.message,
+            );
+            throw wrappedError;
+          }
+          throw resolved.error;
+        }
+
+        return resolved.value;
+      }) as IfPromise<T, Promise<Awaited<T>>, Awaited<T>>;
+    }
 
     if (!result.success) {
-      // Decide if we need to capture
       const shouldCapture = this.config.message;
 
       if (shouldCapture) {
-        await this.reportError(result.error);
+        this.reportError(result.error);
       }
 
-      // Throw a wrapped error with custom message when provided, otherwise re-throw original
       if (
         this.config.message &&
         !Try.ignoreErrorTypes.includes(result.error.name)
@@ -487,8 +523,8 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   );
    * ```
    */
-  async result(): Promise<TryResult<T>> {
-    return this.execute();
+  result(): IfPromise<T, Promise<TryResult<T>>, TryResult<T>> {
+    return this.execute() as IfPromise<T, Promise<TryResult<T>>, TryResult<T>>;
   }
 
   /**
@@ -516,8 +552,15 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  async error(): Promise<Error | undefined> {
-    const result = await this.execute();
+  error(): IfPromise<T, Promise<Error | undefined>, Error | undefined> {
+    const result = this.execute();
+
+    if (isPromiseLike(result)) {
+      return result.then((resolved) =>
+        resolved.success ? undefined : resolved.error,
+      ) as IfPromise<T, Promise<Error | undefined>, Error | undefined>;
+    }
+
     return result.success ? undefined : result.error;
   }
 
@@ -549,22 +592,39 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // undefined if failed, but error is reported
    * ```
    */
-  async value(): Promise<Awaited<T> | undefined> {
-    const result = await this.execute();
+  value(): IfPromise<T, Promise<Awaited<T> | undefined>, Awaited<T> | undefined> {
+    const result = this.execute();
+
+    if (isPromiseLike(result)) {
+      return result.then((resolved) => {
+        if (resolved.success) {
+          return resolved.value;
+        }
+
+        if (this.config.message) {
+          this.reportError(resolved.error);
+        } else if (this.config.breadcrumbConfig) {
+          this.addBreadcrumbsIfConfigured();
+        }
+
+        return (this.config.defaultValue as any) ?? undefined;
+      }) as IfPromise<
+        T,
+        Promise<Awaited<T> | undefined>,
+        Awaited<T> | undefined
+      >;
+    }
 
     if (result.success) {
       return result.value;
     }
 
-    // Report error only when the consumer has explicitly opted-in via `.report()`
     if (this.config.message) {
-      await this.reportError(result.error);
+      this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
-      // Add breadcrumbs when configured but not reporting
       this.addBreadcrumbsIfConfigured();
     }
 
-    // Return configured default when error occurs, otherwise undefined
     return (this.config.defaultValue as any) ?? undefined;
   }
 
@@ -575,38 +635,90 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
    *
    * @returns Promise resolving to a result object indicating success/failure
    */
-  private async execute(): Promise<TryResult<T>> {
+  private execute(): TryResult<T> | Promise<TryResult<T>> {
     if (this.state === 'executed' && this.cachedResult) {
-      return this.cachedResult;
+      return this.isAsync
+        ? (this.cachedPromise as Promise<TryResult<T>>)
+        : this.cachedResult;
+    }
+
+    if (this.cachedPromise) {
+      return this.cachedPromise;
     }
 
     try {
-      const value = await this.fn(...this.args);
-      this.cachedResult = { success: true, value };
+      const value = this.fn(...this.args);
+
+      if (isPromiseLike(value)) {
+        this.isAsync = true;
+        this.cachedPromise = Promise.resolve(value)
+          .then((resolved) => {
+            this.cachedResult = {
+              success: true,
+              value: resolved as Awaited<T>,
+            };
+            return this.cachedResult;
+          })
+          .catch((e) => {
+            if (this.config.debug) {
+              console.error(e);
+            }
+            const error = e as Error;
+            this.cachedResult = { success: false, error };
+            return this.cachedResult;
+          })
+          .finally(() => {
+            this.state = 'executed';
+            return this.runFinallyCallback();
+          });
+
+        return this.cachedPromise;
+      }
+
+      this.isAsync = false;
+      this.cachedResult = { success: true, value: value as Awaited<T> };
     } catch (e) {
       if (this.config.debug) {
         console.error(e);
       }
       const error = e as Error;
+      this.isAsync = false;
       this.cachedResult = { success: false, error };
     } finally {
       this.state = 'executed';
-      try {
-        await Promise.resolve(this.config.finallyCallback?.());
-      } catch (err) {
-        if (this.config.debug) {
-          console.error('Error in finally callback', err);
-        }
+      if (!this.isAsync) {
+        this.runFinallyCallback();
       }
     }
 
     return this.cachedResult;
   }
 
+  private runFinallyCallback(): void | Promise<void> {
+    if (!this.config.finallyCallback) {
+      return;
+    }
+
+    try {
+      const result = this.config.finallyCallback();
+      if (isPromiseLike(result)) {
+        return Promise.resolve(result).catch((err) => {
+          if (this.config.debug) {
+            console.error('Error in finally callback', err);
+          }
+        });
+      }
+    } catch (err) {
+      if (this.config.debug) {
+        console.error('Error in finally callback', err);
+      }
+    }
+  }
+
   /**
    * Report error using the configured reporter with context.
    */
-  private async reportError(error: Error): Promise<void> {
+  private reportError(error: Error): void {
     this.addBreadcrumbsIfConfigured();
 
     Try.defaultReporter.report(error, {
@@ -683,6 +795,9 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       | undefined
       | null,
   ): Promise<TResult1 | TResult2> {
-    return this.value().then(onfulfilled as any, onrejected as any);
+    return Promise.resolve(this.value() as any).then(
+      onfulfilled as any,
+      onrejected as any,
+    );
   }
 }

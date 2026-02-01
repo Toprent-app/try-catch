@@ -123,6 +123,62 @@ describe('Try', () => {
     expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
 
+  describe('sync return behavior', () => {
+    it('returns sync value immediately (no Promise)', () => {
+      const result = new Try(() => 'ok').value();
+
+      expect(result).toBe('ok');
+      expect(result).not.toBeInstanceOf(Promise);
+    });
+
+    it('returns default value on sync error', () => {
+      const result = new Try(() => {
+        throw new Error('boom');
+      })
+        .default('fallback')
+        .value();
+
+      expect(result).toBe('fallback');
+    });
+
+    it('captures sync error for error() and result()', () => {
+      const error = new Try(() => {
+        throw new Error('boom');
+      }).error();
+
+      const result = new Try(() => {
+        throw new Error('boom');
+      }).result();
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('boom');
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toBe('boom');
+      }
+    });
+
+    it('throws on unwrap for sync error', () => {
+      expect(() =>
+        new Try(() => {
+          throw new Error('boom');
+        }).unwrap(),
+      ).toThrow('boom');
+    });
+
+    it('runs finally immediately for sync path and returns Try instance', () => {
+      const finallySpy = vi.fn();
+      const tryInstance = new Try(() => 'ok');
+
+      const chained = tryInstance.finally(finallySpy);
+      const value = tryInstance.value();
+
+      expect(chained).toBe(tryInstance);
+      expect(value).toBe('ok');
+      expect(finallySpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('should throw an error', async () => {
     const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 

@@ -105,17 +105,19 @@ The library accepts any parameter types as function arguments:
 
 ```typescript
 // String parameters
-const greeting = await new Try(greet, 'Alice', 'Hi').value();
+const greeting = new Try(greet, 'Alice', 'Hi').value();
 
 // Number parameters
-const sum = await new Try(add, 5, 3).unwrap();
+const sum = new Try(add, 5, 3).unwrap();
 
 // Mixed parameter types
-const message = await new Try(formatMessage, 123, 'Test message', true).value();
+const message = new Try(formatMessage, 123, 'Test message', true).value();
 
 // No parameters
-const timestamp = await new Try(getCurrentTime).value();
+const timestamp = new Try(getCurrentTime).value();
 ```
+
+Sync functions return values immediately; async functions still require `await`.
 
 ### Advanced Usage
 
@@ -233,7 +235,7 @@ Enable debug logging to console. When enabled, errors will be logged to console.
 
 ### Execution Methods
 
-#### `.unwrap(): Promise<Awaited<T>>`
+#### `.unwrap(): Awaited<T> | Promise<Awaited<T>>`
 
 Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
 
@@ -241,13 +243,15 @@ Execute the function and return the result. Throws the original error if one occ
 
 Set a default value that will be returned by `.value()` when an exception occurs.
 
-#### `.value(): Promise<Awaited<T> | Return | undefined>`
+#### `.value(): Awaited<T> | Return | undefined | Promise<Awaited<T> | Return | undefined>`
 
 Execute the function and return the result, the configured default value, or `undefined` if an error occurs.
 
-#### `.error(): Promise<Error | undefined>`
+#### `.error(): Error | undefined | Promise<Error | undefined>`
 
 Execute the function and return the error if one occurred, or `undefined` if successful.
+
+Sync functions return values immediately; async functions return Promises.
 
 ## Examples
 
@@ -258,20 +262,20 @@ Execute the function and return the error if one occurred, or `undefined` if suc
 function greet(name: string, greeting: string = 'Hello'): string {
   return `${greeting}, ${name}!`;
 }
-const greeting = await new Try(greet, 'Alice', 'Hi').value();
+const greeting = new Try(greet, 'Alice', 'Hi').value();
 
 // Number parameters
 function add(a: number, b: number): number {
   return a + b;
 }
-const sum = await new Try(add, 5, 3).value();
+const sum = new Try(add, 5, 3).value();
 
 // Mixed parameter types
 function formatMessage(id: number, message: string, urgent: boolean): string {
   const prefix = urgent ? '[URGENT]' : '[INFO]';
   return `${prefix} #${id}: ${message}`;
 }
-const formatted = await new Try(formatMessage, 123, 'System error', true)
+const formatted = new Try(formatMessage, 123, 'System error', true)
   .report('Message formatting failed')
   .tag('component', 'notification')
   .default('Unexpected error')
@@ -281,7 +285,7 @@ const formatted = await new Try(formatMessage, 123, 'System error', true)
 function getCurrentTime(): number {
   return Date.now();
 }
-const timestamp = await new Try(getCurrentTime).value();
+const timestamp = new Try(getCurrentTime).value();
 
 // Object parameters (key extraction available)
 const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
