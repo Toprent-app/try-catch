@@ -43,13 +43,13 @@ export type TryResult<T> =
       readonly error: Error;
     };
 
-type PromiseLikeValue = { then: (...args: any[]) => any };
+type PromiseLikeValue = { then: (...args: unknown[]) => unknown };
 
 function isPromiseLike(value: unknown): value is PromiseLikeValue {
   return !!value && typeof (value as PromiseLikeValue).then === 'function';
 }
 
-type IfPromise<T, True, False> = T extends PromiseLike<any> ? True : False;
+type IfPromise<T, True, False> = T extends PromiseLike<unknown> ? True : False;
 
 /**
  * Core Try class for simplified async error handling.
@@ -607,7 +607,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
           this.addBreadcrumbsIfConfigured();
         }
 
-        return (this.config.defaultValue as any) ?? undefined;
+        return (this.config.defaultValue as unknown) ?? undefined;
       }) as IfPromise<
         T,
         Promise<Awaited<T> | undefined>,
@@ -625,7 +625,7 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       this.addBreadcrumbsIfConfigured();
     }
 
-    return (this.config.defaultValue as any) ?? undefined;
+    return (this.config.defaultValue as unknown) ?? undefined;
   }
 
   /**
@@ -795,9 +795,11 @@ export class Try<T, TArgs extends readonly unknown[] = unknown[]> {
       | undefined
       | null,
   ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(this.value() as any).then(
-      onfulfilled as any,
-      onrejected as any,
-    );
+    return Promise.resolve(
+      this.value() as
+        | Awaited<T>
+        | undefined
+        | PromiseLike<Awaited<T> | undefined>,
+    ).then(onfulfilled ?? undefined, onrejected ?? undefined);
   }
 }
