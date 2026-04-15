@@ -12,7 +12,7 @@ This roadmap delivers a fluent, type-safe Try API first, then layers in Sentry r
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Core Try Semantics** - Users can handle sync/async errors with typed outcomes.
+- [x] **Phase 1: Core Try Semantics** - Users can handle sync/async errors with typed outcomes.
 - [ ] **Phase 2: Reporting + Runtime Entry Points** - Users can report errors with Sentry across environments, with diagnostics.
 - [ ] **Phase 3: Documentation & Examples** - Users can follow clear docs that match real behavior.
 
@@ -26,10 +26,17 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. User can wrap sync functions with `new Try(fn, ...args)` and retrieve outcomes via `.value()`, `.error()`, or `.unwrap()`.
   2. User can wrap async functions with the same API and retain correct TypeScript inference for success and error channels.
   3. User can supply a fallback via `.default(value)` and receive it on error.
-**Plans**: TBD
+**Plans**: Complete
+
+Delivered:
+- `new Try(fn, ...args)` with lazy execution and cached outcomes
+- `.value()`, `.error()`, `.unwrap()`, `.result()`, `.default(value)`, and `.finally(callback)`
+- Sync return paths that resolve immediately and async paths that return Promises
+- Type inference updates to preserve async/sync behavior and avoid `never`-driven collapse
+- Verification coverage across runtime behavior and type-safety expectations
 
 Plans:
-- [ ] 01-01: TBD
+- [x] 01-01: Implement core sync/async Try semantics and verify behavior
 
 ### Phase 2: Reporting + Runtime Entry Points
 **Goal**: Users can report errors with Sentry across runtimes, with clear diagnostics.
@@ -66,6 +73,6 @@ Phases execute in numeric order: 2 → 2.1 → 2.2 → 3 → 3.1 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Try Semantics | 0/TBD | Not started | - |
+| 1. Core Try Semantics | 1/1 | Complete | 2026-02-01 |
 | 2. Reporting + Runtime Entry Points | 0/TBD | Not started | - |
 | 3. Documentation & Examples | 0/TBD | Not started | - |
