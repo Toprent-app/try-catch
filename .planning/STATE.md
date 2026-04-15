@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-31)
 
 **Core value:** A fluent Try API that never hides errors.
-**Current focus:** Phase 1 — Core Try Semantics
+**Current focus:** Phase 2 — Reporting + Runtime Entry Points
 
 ## Current Position
 
-Phase: 1 of 3 (Core Try Semantics)
+Phase: 2 of 3 (Reporting + Runtime Entry Points)
 Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-01 - Completed quick task 002: stabilize Try typecheck failures
+Status: Ready to plan Phase 2
+Last activity: 2026-02-01 - Verified Phase 1 implementation and passing test coverage
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -44,6 +44,8 @@ Recent decisions affecting current work:
 
 - Use return-type generics to preserve async/sync inference in Try
 - Treat never as non-promise in IfPromise to avoid type collapse
+- Support both sync and async functions through the same Try API
+- Keep sync paths immediate while preserving Promise-based async behavior
 
 ### Pending Todos
 
@@ -67,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-01 06:36 UTC
-Stopped at: Completed quick-002 tests-are-failing plan 01
+Stopped at: Phase 1 complete; ready to plan Phase 2
 Resume file: None
