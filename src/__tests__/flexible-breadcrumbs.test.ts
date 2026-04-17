@@ -566,5 +566,51 @@ describe('Flexible Breadcrumbs System', () => {
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
     });
+
+    it('child inherits breadcrumb config set before .default()', async () => {
+      const params = { userId: 123, action: 'update' };
+
+      // breadcrumbs configured before default() — not overridden after
+      const result = await new Try(throwingFunction, params)
+        .breadcrumbs(['userId', 'action'])
+        .default({ ok: false })
+        .value();
+
+      expect(result).toEqual({ ok: false });
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { userId: 123, action: 'update' },
+        }),
+      );
+    });
+
+    it('parent and child (via .default()) can have divergent breadcrumb configs', async () => {
+      const params = { userId: 123, action: 'update', role: 'admin' };
+
+      const parent = new Try(throwingFunction, params).breadcrumbs([
+        'userId',
+        'action',
+      ]);
+      const child = parent.default({ ok: false }).breadcrumbs(['role']);
+
+      // Parent runs first and caches its breadcrumbs.
+      await parent.value();
+      await child.value();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(2);
+      expect(Sentry.addBreadcrumb).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: { userId: 123, action: 'update' },
+        }),
+      );
+      expect(Sentry.addBreadcrumb).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: { role: 'admin' },
+        }),
+      );
+    });
   });
 });
