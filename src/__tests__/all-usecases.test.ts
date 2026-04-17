@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi } from 'vitest';
 import { Try, NoopReporter } from '../core';
 
 // --- Test fixtures -----------------------------------------------------
@@ -153,6 +153,17 @@ describe('PromiseLike / await', () => {
     }
     expect(f()).toBe('x:1');
   });
+
+  it('plain fn returning Promise: await resolves to underlying value', async () => {
+    function plainReturnsPromise(): Promise<number> {
+      return Promise.resolve(7);
+    }
+    const t = new Try(plainReturnsPromise);
+    const awaited = await t;
+    expect(awaited).toBe(7);
+    // .value() also works (cached, no re-invocation).
+    await expect(t.value()).resolves.toBe(7);
+  });
 });
 
 // --- .default() --------------------------------------------------------
@@ -195,6 +206,29 @@ describe('.default()', () => {
   it('runtime: default value returned on async error', async () => {
     const v = await new Try(throwingAsync).default(99).value();
     expect(v).toBe(99);
+  });
+
+  it('shares execution with parent: fn and finally run once across chain', async () => {
+    const fn = vi.fn(async () => 42);
+    const fin = vi.fn();
+    const t = new Try(fn).finally(fin);
+    const d = t.default(0);
+    const [a, b] = await Promise.all([t.value(), d.value()]);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fin).toHaveBeenCalledTimes(1);
+    expect(a).toBe(42);
+    expect(b).toBe(42);
+  });
+
+  it('shares sync execution with parent', () => {
+    const fn = vi.fn(() => 7);
+    const fin = vi.fn();
+    const t = new Try(fn).finally(fin);
+    const d = t.default(0);
+    expect(t.value()).toBe(7);
+    expect(d.value()).toBe(7);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fin).toHaveBeenCalledTimes(1);
   });
 });
 
