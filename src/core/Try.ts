@@ -8,7 +8,7 @@ import {
   BreadcrumbExtractor as BreadcrumbExtractorType,
   BreadcrumbExtractorUtil,
 } from '../utils';
-import { Reporter, NoopReporter, ErrorReportConfig } from './reporter';
+import { Reporter, NoopReporter } from './reporter';
 
 /**
  * Configuration for Try execution
@@ -71,7 +71,11 @@ type IfPromise<T, True, False> = [T] extends [never]
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
+export class Try<
+  TReturn,
+  TArgs extends readonly unknown[] = unknown[],
+  TDefault = undefined,
+> {
   private readonly fn: (...args: TArgs) => TReturn;
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
@@ -103,7 +107,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * Creates a new Try instance for simplified async error handling.
    *
    * @param fn The function to execute (can be sync or async)
-   * @param args Arguments to pass to the function (any types: strings, numbers, objects, etc.)
+   * @param args Arguments to pass to the function (various types: strings, numbers, objects, etc.)
    *
    * @example
    * ```typescript
@@ -138,6 +142,22 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     this.args = args;
     this.config = { tags: {} };
     this.state = 'pending';
+    // Install runtime thenable only for AsyncFunction inputs, matching the
+    // type-level contract that sync Try is not awaitable.
+    if (fn.constructor.name === 'AsyncFunction') {
+      (
+        this as unknown as {
+          then: (
+            onfulfilled?: ((value: unknown) => unknown) | null,
+            onrejected?: ((reason: unknown) => unknown) | null,
+          ) => Promise<unknown>;
+        }
+      ).then = (onfulfilled, onrejected) =>
+        Promise.resolve(this.value() as unknown).then(
+          onfulfilled ?? undefined,
+          onrejected ?? undefined,
+        );
+    }
   }
 
   /**
@@ -202,11 +222,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
-   * Configure breadcrumbs with flexible extraction from any function parameters.
+   * Configure breadcrumbs with flexible extraction from the function's parameters.
    * Breadcrumbs provide additional context when errors are reported.
    * The function name is automatically included in all breadcrumbs for better traceability.
    *
-   * **Flexible Usage**: Extract breadcrumbs from any parameter position, transform primitives,
+   * **Flexible Usage**: Extract breadcrumbs from a parameter position, transform primitives,
    * or combine data from multiple parameters.
    *
    * @param config Breadcrumb configuration - supports multiple syntax styles
@@ -258,15 +278,14 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   breadcrumbs(
     configOrFirstTransformer?:
       | BreadcrumbOptions<TArgs>
-      | BreadcrumbTransformer<any>,
-    ...restTransformers: BreadcrumbTransformer<any>[]
+      | BreadcrumbTransformer<unknown>,
+    ...restTransformers: BreadcrumbTransformer<unknown>[]
   ): this {
     // Handle variadic transformer functions
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
       return this.setConfig({
-        breadcrumbConfig:
-          allTransformers as unknown as BreadcrumbOptions<TArgs>,
+        breadcrumbConfig: allTransformers as BreadcrumbOptions<TArgs>,
       });
     }
 
@@ -343,7 +362,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * `Promise.prototype.finally`.
    *
    * The callback is executed **after** the underlying function settles but
-   * before any error is re-thrown from {@link unwrap}. It runs synchronously
+   * before the error is re-thrown from {@link unwrap}. It runs synchronously
    * for sync functions and is awaited for async functions.
    *
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
@@ -405,24 +424,16 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<D>(defaultValue: D): Omit<typeof this, 'value'> & {
-    value(): IfPromise<
-      TReturn,
-      Promise<Awaited<TReturn> | D>,
-      Awaited<TReturn> | D
-    >;
-  } {
-    type WithGuaranteedValue = Omit<typeof this, 'value'> & {
-      value(): IfPromise<
-        TReturn,
-        Promise<Awaited<TReturn> | D>,
-        Awaited<TReturn> | D
-      >;
-    };
-
-    // Cast is safe: runtime shape is unchanged; this only narrows the static
-    // return type information for the `value` method.
-    return this.setConfig({ defaultValue }) as unknown as WithGuaranteedValue;
+  default<D>(defaultValue: D): Try<TReturn, TArgs, D> {
+    const next = new Try<TReturn, TArgs, D>(this.fn, ...this.args);
+    next.config = { ...this.config, defaultValue };
+    next.state = this.state;
+    next.cachedResult = this.cachedResult;
+    next.cachedPromise = this.cachedPromise;
+    next.isAsync = this.isAsync;
+    next.cachedBreadcrumbData = this.cachedBreadcrumbData;
+    next.breadcrumbsAdded = this.breadcrumbsAdded;
+    return next;
   }
 
   /**
@@ -625,8 +636,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    */
   value(): IfPromise<
     TReturn,
-    Promise<Awaited<TReturn> | undefined>,
-    Awaited<TReturn> | undefined
+    Promise<Awaited<TReturn> | TDefault>,
+    Awaited<TReturn> | TDefault
   > {
     const result = this.execute();
 
@@ -642,19 +653,19 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
           this.addBreadcrumbsIfConfigured();
         }
 
-        return this.config.defaultValue;
+        return this.config.defaultValue as TDefault;
       }) as IfPromise<
         TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
+        Promise<Awaited<TReturn> | TDefault>,
+        Awaited<TReturn> | TDefault
       >;
     }
 
     if (result.success) {
       return result.value as IfPromise<
         TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
+        Promise<Awaited<TReturn> | TDefault>,
+        Awaited<TReturn> | TDefault
       >;
     }
 
@@ -666,8 +677,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
     return this.config.defaultValue as IfPromise<
       TReturn,
-      Promise<Awaited<TReturn> | undefined>,
-      Awaited<TReturn> | undefined
+      Promise<Awaited<TReturn> | TDefault>,
+      Awaited<TReturn> | TDefault
     >;
   }
 
@@ -702,7 +713,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
             };
             return this.cachedResult;
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (this.config.debug) {
               console.error(e);
             }
@@ -733,7 +744,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     } finally {
       this.state = 'executed';
       if (!this.isAsync) {
-        this.runFinallyCallback();
+        void this.runFinallyCallback();
       }
     }
 
@@ -748,7 +759,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     try {
       const result = this.config.finallyCallback();
       if (isPromiseLike(result)) {
-        return Promise.resolve(result).catch((err) => {
+        return Promise.resolve(result).catch((err: unknown) => {
           if (this.config.debug) {
             console.error('Error in finally callback', err);
           }
@@ -799,7 +810,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * Extract breadcrumb data using the flexible configuration.
    */
   private extractAllBreadcrumbData(): Record<string, unknown> {
-    const config = this.config.breadcrumbConfig!;
+    const config = this.config.breadcrumbConfig;
+    if (!config) {
+      return {};
+    }
     return BreadcrumbExtractorUtil.extract(
       config,
       this.args,
@@ -808,13 +822,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
-   * Make the Try instance thenable so it can be `await`-ed directly.
+   * Make the Try instance thenable so it can be `await`-ed directly (async only).
    * This executes the underlying function with the current configuration and resolves
    * with the same result as calling `.value()` (never throws, returns undefined on error).
    *
-   * @param onfulfilled Callback for successful resolution
-   * @param onrejected Callback for rejection (rarely used since this doesn't reject)
-   * @returns Promise that resolves with the result or undefined
+   * For sync wrapped functions, `.then` is typed as `never` to prevent misuse —
+   * use `.value()` / `.unwrap()` directly instead of awaiting.
    *
    * @example
    * ```typescript
@@ -831,23 +844,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * const users = await new Try(fetchUsers); // undefined if error
    * ```
    */
-  then<TResult1 = Awaited<TReturn> | undefined, TResult2 = never>(
-    onfulfilled?:
-      | ((
-          value: Awaited<TReturn> | undefined,
-        ) => TResult1 | PromiseLike<TResult1>)
-      | undefined
-      | null,
-    onrejected?:
-      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
-      | undefined
-      | null,
-  ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(
-      this.value() as
-        | Awaited<TReturn>
-        | undefined
-        | PromiseLike<Awaited<TReturn> | undefined>,
-    ).then(onfulfilled ?? undefined, onrejected ?? undefined);
-  }
+  declare then: IfPromise<
+    TReturn,
+    <TResult1 = Awaited<TReturn> | TDefault, TResult2 = never>(
+      onfulfilled?:
+        | ((
+            value: Awaited<TReturn> | TDefault,
+          ) => TResult1 | PromiseLike<TResult1>)
+        | null,
+      onrejected?:
+        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+        | null,
+    ) => Promise<TResult1 | TResult2>,
+    never
+  >;
 }

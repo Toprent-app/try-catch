@@ -8,7 +8,7 @@
 export type BreadcrumbTransformer<T> = (value: T) => Record<string, unknown>;
 
 type ExtractStringKeys<T> =
-  T extends Record<string, any> ? Extract<keyof T, string> : never;
+  T extends Record<string, unknown> ? Extract<keyof T, string> : never;
 
 type KeyArrayFor<T> =
   ExtractStringKeys<T> extends never ? never : readonly ExtractStringKeys<T>[];
@@ -92,13 +92,13 @@ type GenericBreadcrumbExtractor<TArgs extends readonly unknown[]> =
 
 /**
  * Utility type that validates keys exist on the first parameter type.
- * Returns the key array type if valid, or never if any key is invalid.
+ * Returns the key array type if all keys are valid, or never if one is invalid.
  */
 export type ValidateKeys<
   TArgs extends readonly unknown[],
   Keys extends readonly string[],
 > =
-  TArgs[0] extends Record<string, any>
+  TArgs[0] extends Record<string, unknown>
     ? Keys extends readonly (keyof TArgs[0])[]
       ? Keys
       : never

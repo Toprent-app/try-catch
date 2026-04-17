@@ -53,7 +53,7 @@ export class TransformerRegistry {
    * Apply a custom transformer function safely
    */
   static apply(
-    transformer: BreadcrumbTransformer<any>,
+    transformer: BreadcrumbTransformer<unknown>,
     value: unknown,
     debug = false,
   ): Record<string, unknown> {
