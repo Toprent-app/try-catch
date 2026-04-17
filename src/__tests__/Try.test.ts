@@ -1699,4 +1699,102 @@ describe('Try', () => {
       });
     });
   });
+
+  describe('Promise-returning non-async functions', () => {
+    it('await resolves to the underlying value for non-async fn returning a Promise', async () => {
+      function returnsPromise(): Promise<number> {
+        return Promise.resolve(42);
+      }
+
+      const t = new Try(returnsPromise);
+      const awaited = await t;
+
+      expect(awaited).toBe(42);
+    });
+
+    it('await resolves to undefined when a non-async Promise-returning fn rejects', async () => {
+      function returnsRejectedPromise(): Promise<number> {
+        return Promise.reject(new Error('boom'));
+      }
+
+      const awaited = await new Try(returnsRejectedPromise);
+
+      expect(awaited).toBeUndefined();
+    });
+
+    it('await respects .default() for non-async Promise-returning fn that rejects', async () => {
+      function returnsRejectedPromise(): Promise<number> {
+        return Promise.reject(new Error('boom'));
+      }
+
+      const awaited = await new Try(returnsRejectedPromise).default(-1);
+
+      expect(awaited).toBe(-1);
+    });
+
+    it('await still yields the Try instance for truly synchronous fn', async () => {
+      function syncFn(): number {
+        return 42;
+      }
+
+      const t = new Try(syncFn);
+      const awaited = await t;
+
+      expect(awaited).toBe(t);
+    });
+  });
+
+  describe('.default() shares exec state with parent', () => {
+    it('does not re-invoke fn when both parent and child are read', async () => {
+      const fn = vi.fn(async (n: number) => n * 2);
+
+      const parent = new Try(fn, 5);
+      const child = parent.default(-1);
+
+      const parentValue = await parent.value();
+      const childValue = await child.value();
+
+      expect(parentValue).toBe(10);
+      expect(childValue).toBe(10);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child returns parent.value() on success even when default is set', async () => {
+      const fn = vi.fn((n: number) => n + 1);
+
+      const parent = new Try(fn, 41);
+      const child = parent.default(-1);
+
+      expect(child.value()).toBe(42);
+      expect(parent.value()).toBe(42);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child default value is used when parent fn throws (sync)', () => {
+      const fn = vi.fn((_n: number) => {
+        throw new Error('boom');
+      });
+
+      const parent = new Try(fn, 1);
+      const child = parent.default('fallback');
+
+      expect(child.value()).toBe('fallback');
+      // Trigger parent; should reuse cached error result without re-running fn.
+      expect(parent.value()).toBeUndefined();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child default value is used when parent fn rejects (async)', async () => {
+      const fn = vi.fn(async (_n: number) => {
+        throw new Error('boom');
+      });
+
+      const parent = new Try(fn, 1);
+      const child = parent.default('fallback');
+
+      await expect(child.value()).resolves.toBe('fallback');
+      await expect(parent.value()).resolves.toBeUndefined();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -79,12 +79,15 @@ export class Try<
   private readonly fn: (...args: TArgs) => TReturn;
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
-  private cachedResult?: TryResult<TReturn>;
-  private cachedPromise?: Promise<TryResult<TReturn>>;
-  private isAsync?: boolean;
-  private cachedBreadcrumbData?: Record<string, unknown>;
-  private breadcrumbsAdded: boolean = false;
-  private state: 'pending' | 'executed';
+  private exec: {
+    state: 'pending' | 'executed';
+    result?: TryResult<TReturn>;
+    promise?: Promise<TryResult<TReturn>>;
+    isAsync?: boolean;
+    breadcrumbData?: Record<string, unknown>;
+    breadcrumbsAdded: boolean;
+    finallyRan: boolean;
+  };
   private static ignoreErrorTypes: string[] = [];
   private static defaultReporter: Reporter = new NoopReporter();
 
@@ -141,23 +144,76 @@ export class Try<
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
-    this.state = 'pending';
-    // Install runtime thenable only for AsyncFunction inputs, matching the
-    // type-level contract that sync Try is not awaitable.
+    this.exec = { state: 'pending', breadcrumbsAdded: false, finallyRan: false };
+    // Install a thenable `.then` at runtime whenever the wrapped function may
+    // produce a Promise. `AsyncFunction` is the fast path; non-async functions
+    // that still return a Promise are detected lazily via a getter that
+    // triggers a single eager execution the first time `.then` is accessed
+    // (which is exactly what `await` does before anything else). For truly
+    // synchronous functions, the getter returns `undefined`, preserving the
+    // documented contract that `await new Try(syncFn)` yields the Try
+    // instance itself rather than silently unwrapping.
     if (fn.constructor.name === 'AsyncFunction') {
-      (
-        this as unknown as {
-          then: (
-            onfulfilled?: ((value: unknown) => unknown) | null,
-            onrejected?: ((reason: unknown) => unknown) | null,
-          ) => Promise<unknown>;
-        }
-      ).then = (onfulfilled, onrejected) =>
-        Promise.resolve(this.value() as unknown).then(
-          onfulfilled ?? undefined,
-          onrejected ?? undefined,
-        );
+      this.installThenable();
+    } else {
+      this.installLazyThenable();
     }
+  }
+
+  /**
+   * Install a thenable `.then` method directly on this instance. The
+   * implementation defers to `.value()` (never throws; returns the configured
+   * default on error) and wraps it in `Promise.resolve(...)` so it also works
+   * in the already-executed-async branch.
+   */
+  private installThenable(): void {
+    const thenFn = (
+      onfulfilled?: ((value: unknown) => unknown) | null,
+      onrejected?: ((reason: unknown) => unknown) | null,
+    ): Promise<unknown> =>
+      Promise.resolve(this.value() as unknown).then(
+        onfulfilled ?? undefined,
+        onrejected ?? undefined,
+      );
+    Object.defineProperty(this, 'then', {
+      configurable: true,
+      enumerable: false,
+      writable: true,
+      value: thenFn,
+    });
+  }
+
+  /**
+   * For non-async functions, define `.then` as a getter so we can detect
+   * Promise-returning functions lazily. On first access the wrapped function
+   * is executed exactly once; if it returns a Promise we replace the getter
+   * with the real thenable, otherwise we replace it with `undefined` so the
+   * instance remains non-thenable and `await` yields the Try itself.
+   */
+  private installLazyThenable(): void {
+    const self = this as unknown as {
+      then: unknown;
+    };
+    Object.defineProperty(this, 'then', {
+      configurable: true,
+      enumerable: false,
+      get: (): unknown => {
+        const result = this.execute();
+        if (isPromiseLike<TryResult<TReturn>>(result)) {
+          this.installThenable();
+          return (
+            self as unknown as { then: (...a: unknown[]) => unknown }
+          ).then;
+        }
+        Object.defineProperty(this, 'then', {
+          configurable: true,
+          enumerable: false,
+          value: undefined,
+          writable: true,
+        });
+        return undefined;
+      },
+    });
   }
 
   /**
@@ -427,12 +483,7 @@ export class Try<
   default<D>(defaultValue: D): Try<TReturn, TArgs, D> {
     const next = new Try<TReturn, TArgs, D>(this.fn, ...this.args);
     next.config = { ...this.config, defaultValue };
-    next.state = this.state;
-    next.cachedResult = this.cachedResult;
-    next.cachedPromise = this.cachedPromise;
-    next.isAsync = this.isAsync;
-    next.cachedBreadcrumbData = this.cachedBreadcrumbData;
-    next.breadcrumbsAdded = this.breadcrumbsAdded;
+    next.exec = this.exec;
     return next;
   }
 
@@ -690,47 +741,47 @@ export class Try<
    * @returns Promise resolving to a result object indicating success/failure
    */
   private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
-    if (this.state === 'executed' && this.cachedResult) {
-      return this.isAsync
-        ? (this.cachedPromise as Promise<TryResult<TReturn>>)
-        : this.cachedResult;
+    if (this.exec.state === 'executed' && this.exec.result) {
+      return this.exec.isAsync
+        ? (this.exec.promise as Promise<TryResult<TReturn>>)
+        : this.exec.result;
     }
 
-    if (this.cachedPromise) {
-      return this.cachedPromise;
+    if (this.exec.promise) {
+      return this.exec.promise;
     }
 
     try {
       const value = this.fn(...this.args);
 
       if (isPromiseLike<Awaited<TReturn>>(value)) {
-        this.isAsync = true;
-        this.cachedPromise = Promise.resolve(value)
+        this.exec.isAsync = true;
+        this.exec.promise = Promise.resolve(value)
           .then((resolved) => {
-            this.cachedResult = {
+            this.exec.result = {
               success: true,
               value: resolved as Awaited<TReturn>,
             };
-            return this.cachedResult;
+            return this.exec.result;
           })
           .catch((e: unknown) => {
             if (this.config.debug) {
               console.error(e);
             }
             const error = e as Error;
-            this.cachedResult = { success: false, error };
-            return this.cachedResult;
+            this.exec.result = { success: false, error };
+            return this.exec.result;
           })
           .finally(() => {
-            this.state = 'executed';
+            this.exec.state = 'executed';
             return this.runFinallyCallback();
           });
 
-        return this.cachedPromise;
+        return this.exec.promise;
       }
 
-      this.isAsync = false;
-      this.cachedResult = {
+      this.exec.isAsync = false;
+      this.exec.result = {
         success: true,
         value: value as Awaited<TReturn>,
       };
@@ -739,22 +790,23 @@ export class Try<
         console.error(e);
       }
       const error = e as Error;
-      this.isAsync = false;
-      this.cachedResult = { success: false, error };
+      this.exec.isAsync = false;
+      this.exec.result = { success: false, error };
     } finally {
-      this.state = 'executed';
-      if (!this.isAsync) {
+      this.exec.state = 'executed';
+      if (!this.exec.isAsync) {
         void this.runFinallyCallback();
       }
     }
 
-    return this.cachedResult;
+    return this.exec.result;
   }
 
   private runFinallyCallback(): void | Promise<void> {
-    if (!this.config.finallyCallback) {
+    if (!this.config.finallyCallback || this.exec.finallyRan) {
       return;
     }
+    this.exec.finallyRan = true;
 
     try {
       const result = this.config.finallyCallback();
@@ -781,7 +833,7 @@ export class Try<
     Try.defaultReporter.report(error, {
       message: this.config.message,
       tags: this.config.tags,
-      breadcrumbData: this.cachedBreadcrumbData,
+      breadcrumbData: this.exec.breadcrumbData,
       functionName: this.fn.name,
     });
   }
@@ -790,20 +842,18 @@ export class Try<
    * Add breadcrumbs using the configured reporter if configured.
    */
   private addBreadcrumbsIfConfigured(): void {
-    if (!this.config.breadcrumbConfig || this.breadcrumbsAdded) {
+    if (!this.config.breadcrumbConfig || this.exec.breadcrumbsAdded) {
       return;
     }
 
-    // Cache breadcrumb data to avoid re-computation
-    if (!this.cachedBreadcrumbData) {
-      this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
+    if (!this.exec.breadcrumbData) {
+      this.exec.breadcrumbData = this.extractAllBreadcrumbData();
     }
 
-    // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.cachedBreadcrumbData, functionName);
-    this.breadcrumbsAdded = true;
+    Try.defaultReporter.addBreadcrumbs(this.exec.breadcrumbData, functionName);
+    this.exec.breadcrumbsAdded = true;
   }
 
   /**
