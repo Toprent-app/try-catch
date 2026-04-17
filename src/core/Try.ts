@@ -84,9 +84,11 @@ export class Try<
     result?: TryResult<TReturn>;
     promise?: Promise<TryResult<TReturn>>;
     isAsync?: boolean;
+    finallyRan: boolean;
+  };
+  private local: {
     breadcrumbData?: Record<string, unknown>;
     breadcrumbsAdded: boolean;
-    finallyRan: boolean;
   };
   private static ignoreErrorTypes: string[] = [];
   private static defaultReporter: Reporter = new NoopReporter();
@@ -144,7 +146,8 @@ export class Try<
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
-    this.exec = { state: 'pending', breadcrumbsAdded: false, finallyRan: false };
+    this.exec = { state: 'pending', finallyRan: false };
+    this.local = { breadcrumbsAdded: false };
     // Install a thenable `.then` at runtime whenever the wrapped function may
     // produce a Promise. `AsyncFunction` is the fast path; non-async functions
     // that still return a Promise are detected lazily via a getter that
@@ -833,7 +836,7 @@ export class Try<
     Try.defaultReporter.report(error, {
       message: this.config.message,
       tags: this.config.tags,
-      breadcrumbData: this.exec.breadcrumbData,
+      breadcrumbData: this.local.breadcrumbData,
       functionName: this.fn.name,
     });
   }
@@ -842,18 +845,18 @@ export class Try<
    * Add breadcrumbs using the configured reporter if configured.
    */
   private addBreadcrumbsIfConfigured(): void {
-    if (!this.config.breadcrumbConfig || this.exec.breadcrumbsAdded) {
+    if (!this.config.breadcrumbConfig || this.local.breadcrumbsAdded) {
       return;
     }
 
-    if (!this.exec.breadcrumbData) {
-      this.exec.breadcrumbData = this.extractAllBreadcrumbData();
+    if (!this.local.breadcrumbData) {
+      this.local.breadcrumbData = this.extractAllBreadcrumbData();
     }
 
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.exec.breadcrumbData, functionName);
-    this.exec.breadcrumbsAdded = true;
+    Try.defaultReporter.addBreadcrumbs(this.local.breadcrumbData, functionName);
+    this.local.breadcrumbsAdded = true;
   }
 
   /**
