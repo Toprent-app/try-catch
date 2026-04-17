@@ -239,19 +239,19 @@ Enable debug logging to console. When enabled, errors will be logged to console.
 
 Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
 
-#### `.default<Return>(defaultValue: Return): Try<T, TArgs>`
+#### `.default<D>(defaultValue: D): Try<T, TArgs, D>`
 
-Set a default value that will be returned by `.value()` when an exception occurs.
+Return a new `Try` instance that substitutes `defaultValue` for `.value()` when an error occurs. Returns a fresh instance — the original reference is unchanged; subsequent `.report()`/`.tag()` calls after `.default()` apply only to the returned chain.
 
-#### `.value(): T | undefined | Promise<Awaited<T> | undefined>`
+#### `.value(): T | D | Promise<Awaited<T> | D>`
 
-Execute the function and return the result, the configured default value, or `undefined` if an error occurs.
+Execute the function and return the result, the configured default value, or `undefined` (when no default is set) if an error occurs.
 
 #### `.error(): Error | undefined | Promise<Error | undefined>`
 
 Execute the function and return the error if one occurred, or `undefined` if successful.
 
-Sync functions return values immediately; async functions return Promises.
+Sync functions return values immediately; async functions return Promises. Only async-function-wrapped `Try` instances are awaitable — `await new Try(syncFn)` yields the `Try` instance itself, use `.value()` / `.unwrap()` instead.
 
 ## Examples
 
