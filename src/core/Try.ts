@@ -849,6 +849,14 @@ export class Try<
       this.local.breadcrumbData = this.extractAllBreadcrumbData();
     }
 
+    // Skip the reporter call when no data was extracted. Do not set the
+    // idempotence guard here — `breadcrumbConfig` is immutable on a single
+    // instance, so "empty now" implies "empty on any retry" and there is
+    // no double-recording risk from leaving the guard unset.
+    if (Object.keys(this.local.breadcrumbData).length === 0) {
+      return;
+    }
+
     const functionName = this.fn.name || 'anonymous';
 
     Try.defaultReporter.addBreadcrumbs(this.local.breadcrumbData, functionName);

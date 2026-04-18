@@ -406,6 +406,7 @@ describe('Try', () => {
         .unwrap();
 
       await expect(exec).rejects.toThrow('validation error');
+      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', async () => {
@@ -1242,6 +1243,7 @@ describe('Try', () => {
           .report('failed')
           .unwrap();
       }).toThrow('validation error');
+      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', () => {
@@ -1891,7 +1893,7 @@ describe('Try', () => {
 
     it('async unwrap: breadcrumbs called once when .breadcrumbs() configured', async () => {
       await expect(
-        new Try(async () => { throw new Error('boom'); })
+        new Try(async (_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
           .breadcrumbs(['x'])
           .unwrap()
       ).rejects.toThrow('boom');
@@ -1900,7 +1902,7 @@ describe('Try', () => {
 
     it('sync unwrap: breadcrumbs called once when .breadcrumbs() configured', () => {
       expect(() =>
-        new Try(() => { throw new Error('boom'); })
+        new Try((_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
           .breadcrumbs(['x'])
           .unwrap()
       ).toThrow('boom');
@@ -1908,7 +1910,7 @@ describe('Try', () => {
     });
 
     it('async error(): breadcrumbs called once; returns normalized Error', async () => {
-      const err = await new Try(async () => { throw new Error('boom'); })
+      const err = await new Try(async (_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
         .breadcrumbs(['x'])
         .error();
       expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
@@ -1916,7 +1918,7 @@ describe('Try', () => {
     });
 
     it('sync error(): breadcrumbs called once; returns normalized Error', () => {
-      const err = new Try(() => { throw new Error('boom'); })
+      const err = new Try((_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
         .breadcrumbs(['x'])
         .error();
       expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
@@ -1924,7 +1926,7 @@ describe('Try', () => {
     });
 
     it('result(): breadcrumbs called once on failure', async () => {
-      const r = await new Try(async () => { throw new Error('boom'); })
+      const r = await new Try(async (_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
         .breadcrumbs(['x'])
         .result();
       expect(r.success).toBe(false);
@@ -1933,7 +1935,7 @@ describe('Try', () => {
 
     it('.report().breadcrumbs(): addBreadcrumbs called exactly once total (no double-add)', async () => {
       await expect(
-        new Try(async () => { throw new Error('boom'); })
+        new Try(async (_p: { x: number }) => { throw new Error('boom'); }, { x: 1 })
           .report('msg')
           .breadcrumbs(['x'])
           .unwrap()

@@ -45,12 +45,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(throwingFunction, params).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling throwingFunction function',
-          data: {},
-        }),
-      );
+      // Empty extracted data should short-circuit the reporter call.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
   });
 
@@ -332,12 +328,8 @@ describe('Flexible Breadcrumbs System', () => {
         'Error in breadcrumb transformer:',
         expect.any(Error),
       );
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty data due to transformer error
-        }),
-      );
+      // Transformer error yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
     });
@@ -363,12 +355,8 @@ describe('Flexible Breadcrumbs System', () => {
         .value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty data due to transformer error
-        }),
-      );
+      // Transformer error yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
     });
@@ -409,12 +397,8 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs([{ param: 0, keys: ['nonExistentKey'] } as any])
         .value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty because param 0 is not an object
-        }),
-      );
+      // No keys extracted from a primitive — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
   });
 
@@ -451,12 +435,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(testFunction, 'test').debug(false).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {},
-        }),
-      );
+      // Empty config yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
     it('should handle mixed valid and invalid extractors', async () => {
@@ -544,12 +524,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(noParams).debug(false).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling noParams function',
-          data: {},
-        }),
-      );
+      // No data extracted — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
     it('should handle anonymous functions properly', async () => {
