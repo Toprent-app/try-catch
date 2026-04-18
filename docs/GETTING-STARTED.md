@@ -100,22 +100,39 @@ The library works transparently with both sync and async functions. The key diff
 
 **Async functions** — `await` the terminal method (or the `Try` instance directly):
 
-```typescript
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+async function asyncFn(arg: number) {
+  return arg * 2;
+}
+
 // Async function: await the terminal call
-const result = await new Try(asyncFn, arg).value();
+const result = await new Try(asyncFn, 21).value();
 
 // Or await the Try instance itself (works for async functions only)
-const result = await new Try(asyncFn, arg);
+const same = await new Try(asyncFn, 21);
+
+if (result !== 42 || same !== 42) {
+  throw new Error(`expected 42, got ${String(result)} / ${String(same)}`);
+}
 ```
 
 **Sync functions** — do not `await`; call the terminal method directly:
 
-```typescript
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+const rawString = '{"ok":true}';
+
 // Sync function: call terminal method without await
 const result = new Try(JSON.parse, rawString).value();
 
 // Awaiting a sync Try yields the Try instance, not the result
 // This is intentional — use .value() / .unwrap() / .error() instead
+if ((result as { ok: boolean }).ok !== true) {
+  throw new Error('sync .value() path failed');
+}
 ```
 
 If you are unsure whether a function is async, using `.value()` without `await` is always safe for sync functions, and using `await .value()` is always safe for async functions.

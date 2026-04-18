@@ -14,42 +14,33 @@ This library lets you write what you mean, almost like English:
   - **get the error as a value** with `.error()`
   - **or let it throw** with `.unwrap()`
 
+New to the library? Read the next three sections in order — they're a
+newcomer-first tour. The [API reference](#api) lives at the bottom once the
+shape is familiar.
+
 Examples that read like a sentence:
 
-```ts
-// Try to get a user; if it fails, report and return null
-const user = await new Try(fetchUser, { id: 123 })
-  .report('Failed to fetch user')
-  .default(null)
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+// Try to parse JSON; if it fails, fall back to a default
+const value = await new Try(JSON.parse, '{"ok":true}')
+  .default({ ok: false })
   .value();
 
-// Try to charge a card; if it fails, throw with a custom message (and report)
-const receipt = await new Try(chargeCard, { amount: 1000, currency: 'USD' })
-  .report('Payment failed')
-  .unwrap();
+if ((value as { ok: boolean }).ok !== true) {
+  throw new Error(`expected ok:true, got ${JSON.stringify(value)}`);
+}
+```
+
+```ts doctest
+import { Try } from '@power-rent/try-catch';
 
 // Try to parse JSON; if it fails, give me the error instead of throwing
-const error = await new Try(JSON.parse, raw)
-  .error();
-
-// Or try to parse JSON; if it fails, give me the default value instead of throwing
-const value = await new Try(JSON.parse, raw)
-  .default({ initial: 'value' })
-  .value();
-
-// Or try to parse JSON; if it fails, give me value or undefined instead of throwing
-const value = await new Try(JSON.parse, raw)
-  .value();
-
-// Try with flexible logic, the function will be executed once
-const shouldThrow = someCustomLogic();
-const attempt = await new Try(chargeCard, { amount: 1000, currency: 'USD' })
-const result = attempt.value();
-const error = attempt.error();
-if (shouldThrow) {
-  throw error;
+const error = new Try(JSON.parse, 'not-json').error();
+if (!(error instanceof Error)) {
+  throw new Error('expected an Error from .error() on bad JSON');
 }
-return result;
 ```
 
 ## Installation
@@ -58,21 +49,104 @@ return result;
 npm install @power-rent/try-catch
 ```
 
+Pick the entry point that matches your runtime. Each environment-specific
+entry auto-registers the right Sentry reporter as a side effect on import:
+
+```typescript
+// Node.js
+import { Try } from '@power-rent/try-catch/node';
+// Browser / bundler
+import { Try } from '@power-rent/try-catch/browser';
+// Next.js
+import { Try } from '@power-rent/try-catch/nextjs';
+// No Sentry — NoopReporter is active; supply your own reporter if you want one
+import { Try } from '@power-rent/try-catch';
+```
+
+## Sync vs Async
+
+The library works transparently with both sync and async functions. The key difference is in how you consume the result.
+
+**Async functions** — `await` the terminal method (or the `Try` instance directly):
+
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+async function asyncFn(arg: number) {
+  return arg * 2;
+}
+
+// Async function: await the terminal call
+const result = await new Try(asyncFn, 21).value();
+
+// Or await the Try instance itself (works for async functions only)
+const same = await new Try(asyncFn, 21);
+
+if (result !== 42 || same !== 42) {
+  throw new Error(`expected 42, got ${String(result)} / ${String(same)}`);
+}
+```
+
+**Sync functions** — do not `await`; call the terminal method directly:
+
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+const rawString = '{"ok":true}';
+
+// Sync function: call terminal method without await
+const result = new Try(JSON.parse, rawString).value();
+
+// Awaiting a sync Try yields the Try instance, not the result
+// This is intentional — use .value() / .unwrap() / .error() instead
+if ((result as { ok: boolean }).ok !== true) {
+  throw new Error('sync .value() path failed');
+}
+```
+
+If you are unsure whether a function is async, using `.value()` without `await` is always safe for sync functions, and using `await .value()` is always safe for async functions.
+
+## When your function throws something that isn't an `Error`
+
+Plenty of code throws strings, numbers, or bare objects. The library
+normalizes anything that isn't an `Error` into one: the wrapped error carries
+`message === 'Non-Error thrown (<type>)'` and preserves the original value on
+`.cause`. You never have to guess what `catch (e: unknown)` gave you.
+
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+
+function misbehaves(): number {
+  throw 'boom';
+}
+
+const error = new Try(misbehaves).error();
+if (!(error instanceof Error)) {
+  throw new Error('expected an Error');
+}
+if (error.message !== 'Non-Error thrown (string)') {
+  throw new Error(`unexpected message: ${error.message}`);
+}
+if (error.cause !== 'boom') {
+  throw new Error(`cause not preserved, got ${String(error.cause)}`);
+}
+```
+
 ## Usage
 
-The `Try` class provides a fluent interface for handling async operations with automatic error reporting to Sentry. Each method returns a new instance.
+The `Try` class provides a fluent interface for handling operations with automatic error reporting to Sentry. Each configuration method returns a new instance; terminal methods (`.value()`, `.unwrap()`, `.error()`, `.result()`) execute the wrapped function.
 
 ### Basic Usage
 
 ```typescript
 // With Sentry for Next.js
-import Try from '@power-rent/try-catch/nextjs';
+import { Try } from '@power-rent/try-catch/nextjs';
 // With Sentry for Node
-import Try from '@power-rent/try-catch/node';
+import { Try } from '@power-rent/try-catch/node';
 // With Sentry for Browser
-import Try from '@power-rent/try-catch/browser';
+import { Try } from '@power-rent/try-catch/browser';
 // For custom error reporting service
-import Try from '@power-rent/try-catch';
+import { Try } from '@power-rent/try-catch';
 
 // Execute, get result or undefined, and report errors (never throws)
 const result = await new Try(asyncFunction, arg1, arg2)
@@ -80,7 +154,7 @@ const result = await new Try(asyncFunction, arg1, arg2)
   .value();
 
 // Execute, get result or default value (never throws)
-const result = await new Try(asyncFunction, arg1, arg2)
+const resultWithDefault = await new Try(asyncFunction, arg1, arg2)
   .default('fallback')
   .value();
 
@@ -89,62 +163,29 @@ const error = await new Try(asyncFunction, arg1, arg2).error();
 
 // Report to Sentry and let the error bubble up
 try {
-  const result = await new Try(asyncFunction, arg1, arg2)
+  const unwrapped = await new Try(asyncFunction, arg1, arg2)
     .report('Failed to execute business logic')
     .unwrap();
-} catch (error) {
-  // Handle the error
-  // error.message will be 'Failed to execute business logic'
-  // error.cause will be the original error
+} catch (err) {
+  // err.message will be 'Failed to execute business logic'
+  // err.cause will be the original error
 }
 ```
-
-### Parameter Types
-
-The library accepts any parameter types as function arguments:
-
-```typescript
-// String parameters
-const greeting = new Try(greet, 'Alice', 'Hi').value();
-
-// Number parameters
-const sum = new Try(add, 5, 3).unwrap();
-
-// Mixed parameter types
-const message = new Try(formatMessage, 123, 'Test message', true).value();
-
-// No parameters
-const timestamp = new Try(getCurrentTime).value();
-```
-
-Sync functions return values immediately; async functions require `await`.
 
 ### Advanced Usage
 
 ```typescript
 // Chain multiple configuration methods with flexible breadcrumbs
-const result = await new Try(processOrder, 'order-123', { customerId: 456, amount: 99.50 }, { isUrgent: true, retryCount: 3, sensitiveData: {} })
+const result = await new Try(processOrder, 'order-123', { customerId: 456, amount: 99.50 }, { isUrgent: true, retryCount: 3 })
   .breadcrumbs(
-    'orderId', // add to breadcrumbs as { orderId: 'order-123' }
+    'orderId',                                                     // { orderId: 'order-123' }
     (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
-    ['isUrgent', 'retryCount'] // add to breadcrumbs as { isUrgent: true, retryCount: 3 }
+    ['isUrgent', 'retryCount']                                     // { isUrgent: true, retryCount: 3 }
   )
-  .report('Failed to process order')   // Custom error message
-  .tag('operation', 'order-processing') // Add Sentry tag
-  .tag('priority', 'high')            // Add another tag
+  .report('Failed to process order')
+  .tag('operation', 'order-processing')
+  .tag('priority', 'high')
   .default(null)
-  .value();
-
-// Custom transformers work with any parameter types
-const result = await new Try(calculateDistance, 10, 20, 'meters')
-  .breadcrumbs(
-    (x: number) => ({ startX: x }),
-    (y: number) => ({ startY: y }),
-    (unit: string) => ({ measurementUnit: unit })
-  )
-  .report('Distance calculation failed')
-  .tag('operation', 'calculation')
-  .default(0)
   .value();
 
 // Check for errors without throwing
@@ -154,19 +195,17 @@ const error = await new Try(riskyOperation, data)
 
 if (error) {
   console.log('Operation failed:', error.message);
-} else {
-  console.log('Operation succeeded');
 }
 
 // Enable debug logging (opt-in)
-const result = await new Try(problematicFunction, params)
-  .debug() // Logs errors to console.error
+const debugResult = await new Try(problematicFunction, params)
+  .debug()
   .report('Function failed')
   .tag('environment', 'development')
   .value();
 
 // Conditional debug logging
-const result = await new Try(apiCall, endpoint)
+const conditional = await new Try(apiCall, endpoint)
   .debug(process.env.NODE_ENV !== 'production')
   .report('API call failed')
   .value();
@@ -183,38 +222,78 @@ new Try<T, TArgs>(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs)
 - `fn`: The function to execute (can be sync or async)
 - `args`: Arguments to pass to the function (any types: strings, numbers, objects, etc.)
 
-The constructor accepts any number of arguments of any type. Breadcrumbs functionality supports all parameter types through custom transformer functions.
-
 ### Configuration Methods
 
-All configuration methods return a new `Try` instance, enabling method chaining:
+All configuration methods return the `Try` instance, enabling method chaining:
 
 #### `.report(message: string): Try<T, TArgs>`
 
-Report to Sentry with a custom error message, attach the original error as a cause
+Report to the configured reporter (Sentry in environment-specific entry
+points) with a custom error message; the original error is attached as
+`.cause`.
 
 #### `.breadcrumbs(config): Try<T, TArgs>`
 
 Record breadcrumbs with flexible extraction from any function parameters. The function name is automatically included in all breadcrumbs for better traceability.
 
+**Breadcrumbs are recorded on every terminal method** — `.value()`,
+`.unwrap()`, `.error()`, and `.result()`. The library calls
+`addBreadcrumbsIfConfigured()` on the error path of each terminal, so you
+can use whichever terminal fits your control flow and still get context on
+failure.
+
+```ts doctest
+import { Try, type Reporter, type ErrorReportConfig } from '@power-rent/try-catch';
+
+// Capture a breadcrumb even when the caller picks .error() as the terminal.
+let breadcrumbCalls = 0;
+const recordingReporter: Reporter = {
+  report(_error: Error, _config: ErrorReportConfig): void {},
+  addBreadcrumbs(_data: Record<string, unknown>, _functionName?: string): void {
+    breadcrumbCalls += 1;
+  },
+  createWrappedError(error: Error, message: string): Error {
+    const wrapped = new Error(message);
+    wrapped.cause = error;
+    return wrapped;
+  },
+};
+
+const previous = Try.getDefaultReporter();
+Try.setDefaultReporter(recordingReporter);
+try {
+  const error = new Try(JSON.parse, 'not-json')
+    .breadcrumbs((raw: string) => ({ length: raw.length }))
+    .error();
+  if (!(error instanceof Error)) {
+    throw new Error('expected parse error');
+  }
+  if (breadcrumbCalls !== 1) {
+    throw new Error(`breadcrumbs should fire on .error(), got ${breadcrumbCalls}`);
+  }
+} finally {
+  Try.setDefaultReporter(previous);
+}
+```
+
 **Supports multiple syntax styles:**
 
 ```typescript
-// Variadic transformer functions - transform each parameter
+// Variadic transformer functions — transform each parameter
 .breadcrumbs(
   (id: string) => ({ orderId: id }),
   (amount: number) => ({ amountCategory: amount > 100 ? 'large' : 'small' }),
   (meta: object) => ({ metaKeys: Object.keys(meta).length })
 )
 
-// Array syntax - positional entries
+// Array syntax — positional entries
 .breadcrumbs([
   'value',        // { value: arg0 }
   ['customerId'], // extract keys from arg1 object
   'urgent'        // { urgent: arg2 }
 ])
 
-// Object syntax - parameter index as keys
+// Object syntax — parameter index as keys
 .breadcrumbs({
   0: (url) => ({ endpoint: url }),
   1: ['userId'],
@@ -224,34 +303,54 @@ Record breadcrumbs with flexible extraction from any function parameters. The fu
 
 #### `.tag(name: string, value: string): Try<T, TArgs>`
 
-Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
+Add a tag for error reporting. Can be called multiple times to add multiple tags.
+
 #### `.tags({ name1: 'value1', name2: 'value2' }): Try<T, TArgs>`
 
-Add multiple tags for Sentry error reporting. Each call overrides previous tags.
+Add multiple tags at once. Merges with tags previously added via `.tag()`.
 
 #### `.debug(enabled?: boolean): Try<T, TArgs>`
 
-Enable debug logging to console. When enabled, errors will be logged to console.error.
+Enable debug logging to console. When enabled, errors will be logged to
+`console.error`.
 
-### Execution Methods
+### Terminal (Execution) Methods
 
 #### `.unwrap(): T | Promise<Awaited<T>>`
 
-Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
+Execute the function and return the result. Throws the original error if
+one occurred (or a wrapped error with your custom message if `.report()`
+was called). Breadcrumbs configured via `.breadcrumbs()` are recorded on
+the error path.
 
 #### `.default<D>(defaultValue: D): Try<T, TArgs, D>`
 
-Return a new `Try` instance that substitutes `defaultValue` for `.value()` when an error occurs. Returns a fresh instance — the original reference is unchanged; subsequent `.report()`/`.tag()` calls after `.default()` apply only to the returned chain.
+Return a new `Try` instance that substitutes `defaultValue` for `.value()`
+when an error occurs. Returns a fresh instance — the original reference is
+unchanged; subsequent `.report()` / `.tag()` calls after `.default()` apply
+only to the returned chain.
 
 #### `.value(): T | D | Promise<Awaited<T> | D>`
 
-Execute the function and return the result, the configured default value, or `undefined` (when no default is set) if an error occurs.
+Execute the function and return the result, the configured default value,
+or `undefined` (when no default is set) if an error occurs. Breadcrumbs
+are recorded on the error path.
 
 #### `.error(): Error | undefined | Promise<Error | undefined>`
 
-Execute the function and return the error if one occurred, or `undefined` if successful.
+Execute the function and return the error if one occurred, or `undefined`
+if successful. Breadcrumbs are recorded when an error is present.
 
-Sync functions return values immediately; async functions return Promises. Only async-function-wrapped `Try` instances are awaitable — `await new Try(syncFn)` yields the `Try` instance itself, use `.value()` / `.unwrap()` instead.
+#### `.result(): TryResult<T> | Promise<TryResult<T>>`
+
+Execute and return a discriminated union:
+`{ success: true; value }` or `{ success: false; error }`. Never throws.
+Breadcrumbs are recorded on the error branch.
+
+Sync functions return values immediately; async functions return Promises.
+Only async-function-wrapped `Try` instances are awaitable —
+`await new Try(syncFn)` yields the `Try` instance itself, use
+`.value()` / `.unwrap()` / `.error()` / `.result()` instead.
 
 ## Examples
 
@@ -270,47 +369,20 @@ function add(a: number, b: number): number {
 }
 const sum = new Try(add, 5, 3).value();
 
-// Mixed parameter types
-function formatMessage(id: number, message: string, urgent: boolean): string {
-  const prefix = urgent ? '[URGENT]' : '[INFO]';
-  return `${prefix} #${id}: ${message}`;
-}
-const formatted = new Try(formatMessage, 123, 'System error', true)
-  .report('Message formatting failed')
-  .tag('component', 'notification')
-  .default('Unexpected error')
-  .value();
-
-// No parameters
-function getCurrentTime(): number {
-  return Date.now();
-}
-const timestamp = new Try(getCurrentTime).value();
-
 // Object parameters (key extraction available)
 const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
-  .breadcrumbs(['userId']) // ✅ Extract keys from object parameter
+  .breadcrumbs(['userId'])
   .report('Failed to fetch user')
   .value();
 
-// Any parameter types (custom transformers available)
+// Custom transformers on any parameter type
 const result = await new Try(processString, 'hello world')
   .breadcrumbs((str: string) => ({
     length: str.length,
-    firstWord: str.split(' ')[0]
+    firstWord: str.split(' ')[0],
   }))
   .report('String processing failed')
   .tag('operation', 'process')
-  .value();
-
-// Mixed parameter types with transformers
-const result = await new Try(processOrder, 'order-123', 99.50, true)
-  .breadcrumbs(
-    (id: string) => ({ orderId: id }),
-    (amount: number) => ({ priceCategory: amount > 100 ? 'high' : 'low' }),
-    (urgent: boolean) => ({ priority: urgent ? 'high' : 'normal' })
-  )
-  .report('Order processing failed')
   .value();
 ```
 
@@ -334,7 +406,6 @@ const error = await new Try(updateDatabase, data)
   .error();
 
 if (error) {
-  // Handle error case
   return { success: false, error: error.message };
 }
 
@@ -344,7 +415,7 @@ try {
     .report('Critical operation failed')
     .tag('critical', 'true')
     .unwrap();
-} catch (error) {
+} catch (err) {
   // Handle critical failure
 }
 ```
@@ -364,18 +435,19 @@ const result = await new Try(complexOperation, data)
 
 ## Features
 
-- 🚀 **Promise-like interface** - Can be awaited directly
-- 🔍 **Automatic Sentry integration** - Errors are automatically reported
-- 🍞 **Flexible breadcrumb support** - Extract context from any parameter types using transformers
-- 🏷️ **Tag support** - Add custom tags to Sentry reports
-- 🎯 **TypeScript support** - Full type safety
-- 🔄 **Flexible error handling** - Choose to ignore, use defaults, inspect errors, or let them bubble up
+- 🚀 **Promise-like interface** — async instances can be `await`-ed directly
+- 🔍 **Automatic Sentry integration** — errors are reported via environment adapters
+- 🧱 **Non-Error normalization** — strings, numbers, objects thrown by callers become real `Error` instances with `.cause`
+- 🍞 **Consistent breadcrumbs** — recorded on every terminal method
+- 🏷️ **Tag support** — categorize reports with tags
+- 🎯 **TypeScript support** — full type safety
+- 🔄 **Flexible error handling** — ignore, default, inspect, or re-throw
 
 ## Requirements
 
 - Node.js >= 20
 - TypeScript >= 4.5 (if using TypeScript)
-- Sentry or an alternative error reporting service
+- Sentry or an alternative error reporting service (optional — `NoopReporter` is the default)
 
 ## License
 
