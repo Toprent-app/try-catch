@@ -185,20 +185,22 @@ export class Try<
   }
 
   /**
-   * Configure error types that should be thrown through without being wrapped.
-   * When using `.report()`, errors matching these types will be re-thrown as-is
-   * instead of being wrapped with the custom message.
+   * Configure error types that should be thrown through without being wrapped
+   * AND without being reported to the configured Reporter (Sentry).
+   * When using `.report()`, errors matching these types are re-thrown as-is
+   * and `Reporter.report()` is NOT called for them. Breadcrumbs configured via
+   * `.breadcrumbs()` are still recorded.
    *
    * @param ignoreErrorTypes Array of error type names (error.name) to throw through
    *
    * @example
    * ```typescript
-   * // Configure to throw ValidationError and AuthError as-is
+   * // Configure to throw ValidationError and AuthError as-is (and skip Sentry)
    * Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
    *
-   * // Now these errors won't be wrapped:
+   * // Now these errors won't be wrapped or sent to Sentry:
    * await new Try(validateUser, userData)
-   *   .report('User validation failed') // ValidationError will be thrown as-is
+   *   .report('User validation failed') // ValidationError throws as-is, no captureException
    *   .unwrap();
    * ```
    */
@@ -487,7 +489,10 @@ export class Try<
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (!resolved.success) {
-          const shouldCapture = this.config.message;
+          const isThrowThrough = Try.ignoreErrorTypes.includes(
+            resolved.error.name,
+          );
+          const shouldCapture = this.config.message && !isThrowThrough;
 
           if (shouldCapture) {
             this.reportError(resolved.error);
@@ -495,10 +500,7 @@ export class Try<
             this.addBreadcrumbsIfConfigured();
           }
 
-          if (
-            this.config.message &&
-            !Try.ignoreErrorTypes.includes(resolved.error.name)
-          ) {
+          if (this.config.message && !isThrowThrough) {
             const wrappedError = Try.defaultReporter.createWrappedError(
               resolved.error,
               this.config.message,
@@ -513,7 +515,8 @@ export class Try<
     }
 
     if (!result.success) {
-      const shouldCapture = this.config.message;
+      const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+      const shouldCapture = this.config.message && !isThrowThrough;
 
       if (shouldCapture) {
         this.reportError(result.error);
@@ -521,10 +524,7 @@ export class Try<
         this.addBreadcrumbsIfConfigured();
       }
 
-      if (
-        this.config.message &&
-        !Try.ignoreErrorTypes.includes(result.error.name)
-      ) {
+      if (this.config.message && !isThrowThrough) {
         const wrappedError = Try.defaultReporter.createWrappedError(
           result.error,
           this.config.message,
@@ -834,8 +834,6 @@ export class Try<
     Try.defaultReporter.report(error, {
       message: this.config.message,
       tags: this.config.tags,
-      breadcrumbData: this.local.breadcrumbData,
-      functionName: this.fn.name,
     });
   }
 

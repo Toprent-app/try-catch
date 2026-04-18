@@ -28,9 +28,7 @@ class ConsoleReporter implements Reporter {
     console.error('[report]', {
       message: config.message ?? error.message,
       name: error.name,
-      functionName: config.functionName,
       tags: config.tags,
-      breadcrumbs: config.breadcrumbData,
       stack: error.stack,
     });
   }

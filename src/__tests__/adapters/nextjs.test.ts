@@ -72,8 +72,6 @@ describe('SentryReporter / nextjs (SENT-01, SENT-02, SENT-03, ENTRY-03)', () => 
     reporter.report(original, {
       message: 'wrapped',
       tags: { env: 'test' },
-      breadcrumbData: { foo: 'bar' },
-      functionName: 'doThing',
     });
     expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
