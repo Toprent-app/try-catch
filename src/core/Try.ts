@@ -84,7 +84,12 @@ export class Try<
     result?: TryResult<TReturn>;
     promise?: Promise<TryResult<TReturn>>;
     isAsync?: boolean;
-    finallyRan: boolean;
+    // Callbacks that have already fired for this shared execution. When
+    // .default() produces a clone, both parent and child share `exec`; each
+    // instance's .finally() callback must still fire exactly once. Keying by
+    // callback reference keeps the guard per-instance while the state lives
+    // on the shared execution.
+    finallyRan: Set<() => void | Promise<void>>;
     // Set of breadcrumbConfig objects whose breadcrumbs have already been
     // emitted for this shared execution. Shared across .default() clones so
     // a parent + child referencing the same config emit breadcrumbs only
@@ -151,7 +156,7 @@ export class Try<
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
-    this.exec = { state: 'pending', finallyRan: false, breadcrumbsEmitted: new Set() };
+    this.exec = { state: 'pending', finallyRan: new Set(), breadcrumbsEmitted: new Set() };
     this.local = { breadcrumbsAdded: false };
     // Only `AsyncFunction`s are thenable: `installThenable()` defines an owned
     // `.then` data property so `await new Try(asyncFn)` works without
@@ -745,9 +750,21 @@ export class Try<
    */
   private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
     if (this.exec.state === 'executed' && this.exec.result) {
-      return this.exec.isAsync
-        ? (this.exec.promise as Promise<TryResult<TReturn>>)
-        : this.exec.result;
+      if (this.exec.isAsync) {
+        // Chain this instance's finally onto the settled promise so clones
+        // (from .default()) each run their own finallyCallback exactly once.
+        return (this.exec.promise as Promise<TryResult<TReturn>>).then(
+          (result) => {
+            const ran = this.runFinallyCallback();
+            return isPromiseLike(ran)
+              ? Promise.resolve(ran).then(() => result)
+              : result;
+          },
+        );
+      }
+      // Sync cached path: run this instance's finally if not already run.
+      void this.runFinallyCallback();
+      return this.exec.result;
     }
 
     if (this.exec.promise) {
@@ -813,13 +830,14 @@ export class Try<
   }
 
   private runFinallyCallback(): void | Promise<void> {
-    if (!this.config.finallyCallback || this.exec.finallyRan) {
+    const cb = this.config.finallyCallback;
+    if (!cb || this.exec.finallyRan.has(cb)) {
       return;
     }
-    this.exec.finallyRan = true;
+    this.exec.finallyRan.add(cb);
 
     try {
-      const result = this.config.finallyCallback();
+      const result = cb();
       if (isPromiseLike(result)) {
         return Promise.resolve(result).catch((err: unknown) => {
           if (this.config.debug) {
