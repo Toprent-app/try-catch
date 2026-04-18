@@ -174,8 +174,11 @@ export class BreadcrumbExtractorUtil {
       // Positional syntax handling
       const arg = args[index];
       if (typeof entry === 'string') {
-        // Map value directly under the provided key
-        breadcrumbData = { ...breadcrumbData, [entry]: arg };
+        // Map value directly under the provided key; drop undefined
+        // to match `extractFromKeys` semantics.
+        if (arg !== undefined) {
+          breadcrumbData = { ...breadcrumbData, [entry]: arg };
+        }
       } else if (Array.isArray(entry)) {
         // Extract listed keys from an object argument
         if (arg && typeof arg === 'object') {
