@@ -15,9 +15,11 @@ Deliver a type-safe Try API for sync and async error handling, including `new Tr
 
 ### Execution timing
 - `new Try(fn, ...args)` is lazy: it does not call `fn` until first access.
+- "First access" = `.value()`, `.error()`, `.result()`, `.unwrap()`, or `await` (thenable).
 - The function runs once and caches the outcome for subsequent accesses.
-- For async functions, execution starts on first access (same lazy behavior).
-- If a sync function returns a Promise, treat the Promise as a success value (no async handling).
+- For `AsyncFunction`, the instance is thenable up front (eager `then` install).
+- For non-async functions, `then` is a getter that runs `fn` once on access; if the return is a Promise, the instance becomes thenable, otherwise `then` is set to `undefined` and `await` yields the Try itself.
+- Both sync and async are supported uniformly: `new Try(syncFn).value()` and `await new Try(asyncFn)` both work.
 
 ### Claude's Discretion
 None specified.

@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-04-18T02:37:14.712Z"
+milestone: v1.2.0
+milestone_name: Type-safe Try + Sentry + Docs
+status: shipped
+stopped_at: v1.2.0 milestone closed 2026-04-18
+last_updated: "2026-04-18T15:30:00.000Z"
 last_activity: 2026-04-18
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 4
+  completed_phases: 3
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -18,75 +18,61 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-31)
+See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** A fluent Try API that never hides errors.
-**Current focus:** Phase 02 — reporting-runtime-entry-points
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Executing Phase 02
+Milestone: v1.2.0 — SHIPPED 2026-04-18
+Status: Awaiting next milestone (`/gsd-new-milestone`)
 Last activity: 2026-04-18
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
-**Velocity:**
-
-- Total plans completed: 5
-- Average duration: 4m 10s
-- Total execution time: 8m 19s
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| Quick | 2 | 8m 19s | 4m 10s |
-| 02 | 3 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
-
-*Updated after each plan completion*
+**Milestone v1.2.0:**
+- Phases: 3
+- Plans: 5
+- Quick tasks: 2
+- Tests: 242/242 passing
+- Timeline: 2026-01-30 → 2026-04-18
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Use return-type generics to preserve async/sync inference in Try
-- Treat never as non-promise in IfPromise to avoid type collapse
-- Support both sync and async functions through the same Try API
-- Keep sync paths immediate while preserving Promise-based async behavior
+Decisions logged in PROJECT.md Key Decisions table. Milestone v1.2.0 decisions all marked ✓ Good.
 
 ### Pending Todos
 
-[From .planning/todos/pending/ — ideas captured during sessions]
-
-None yet.
+None.
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
-
-None yet.
+None.
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 001 | write tests that verify type safety accoriding to the use cases covered in Readme.md | 2026-01-31 | 9595583 | [001-write-tests-that-verify-type-safety-acco](./quick/001-write-tests-that-verify-type-safety-acco/) |
+| 001 | write tests that verify type safety according to use cases in Readme.md | 2026-01-31 | 9595583 | [001-write-tests-that-verify-type-safety-acco](./quick/001-write-tests-that-verify-type-safety-acco/) |
 | 002 | stabilize Try typecheck failures for type-safety tests | 2026-02-01 | 793eed1 | [002-tests-are-failing](./quick/002-tests-are-failing/) |
+
+## Deferred Items
+
+Items deferred at v1.2.0 close (2026-04-18):
+
+| Category | Item | Status |
+|----------|------|--------|
+| tech_debt | Pre-existing lint errors in src/__tests__/Try.test.ts | tracked in phase 03 deferred-items.md |
+| tech_debt | tsx not pinned as devDependency | examples/README.md documents npm install -D tsx workaround |
+| quick_task | 001-write-tests-that-verify-type-safety-acco (audit-open false positive) | files exist, commit 9595583 |
 
 ## Session Continuity
 
-Last session: 2026-04-15T15:13:36.328Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-reporting-runtime-entry-points/02-CONTEXT.md
+Last session: 2026-04-18T15:30:00.000Z
+Stopped at: v1.2.0 milestone closed
+Resume: `/gsd-new-milestone` to define next milestone scope
