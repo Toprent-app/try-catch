@@ -23,7 +23,7 @@ const formatMessage = (id: number, message: string, urgent: boolean) => {
 function processRequest(
   endpoint: string,
   payload: { userId: number; data: string },
-  headers: any,
+  headers: Record<string, string>,
 ) {
   throw new Error('test');
 }
