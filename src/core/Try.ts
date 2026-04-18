@@ -148,26 +148,24 @@ export class Try<
     this.config = { tags: {} };
     this.exec = { state: 'pending', finallyRan: false };
     this.local = { breadcrumbsAdded: false };
-    // Install a thenable `.then` at runtime whenever the wrapped function may
-    // produce a Promise. `AsyncFunction` is the fast path; non-async functions
-    // that still return a Promise are detected lazily via a getter that
-    // triggers a single eager execution the first time `.then` is accessed
-    // (which is exactly what `await` does before anything else). For truly
-    // synchronous functions, the getter returns `undefined`, preserving the
-    // documented contract that `await new Try(syncFn)` yields the Try
-    // instance itself rather than silently unwrapping.
+    // Only `AsyncFunction`s are thenable: `installThenable()` defines an owned
+    // `.then` data property so `await new Try(asyncFn)` works without
+    // triggering execution at probe time. Non-async functions (including
+    // sync functions that happen to return a Promise) are NOT thenable —
+    // any thenability probe (Promise.resolve, util.inspect, jest deep-equal,
+    // Sentry serialization, ...) must never silently invoke the wrapped
+    // function. Use `.value()` / `.unwrap()` / `.error()` / `.result()`
+    // (which still handle Promise-returning sync fns via `execute()`).
     if (fn.constructor.name === 'AsyncFunction') {
       this.installThenable();
-    } else {
-      this.installLazyThenable();
     }
   }
 
   /**
-   * Install a thenable `.then` method directly on this instance. The
-   * implementation defers to `.value()` (never throws; returns the configured
-   * default on error) and wraps it in `Promise.resolve(...)` so it also works
-   * in the already-executed-async branch.
+   * Install a thenable `.then` method directly on this instance for
+   * `AsyncFunction`-wrapped Try instances. Defers to `.value()` (never throws;
+   * returns the configured default on error) and wraps in `Promise.resolve(...)`
+   * so it also works once the underlying promise has settled.
    */
   private installThenable(): void {
     const thenFn = (
@@ -183,39 +181,6 @@ export class Try<
       enumerable: false,
       writable: true,
       value: thenFn,
-    });
-  }
-
-  /**
-   * For non-async functions, define `.then` as a getter so we can detect
-   * Promise-returning functions lazily. On first access the wrapped function
-   * is executed exactly once; if it returns a Promise we replace the getter
-   * with the real thenable, otherwise we replace it with `undefined` so the
-   * instance remains non-thenable and `await` yields the Try itself.
-   */
-  private installLazyThenable(): void {
-    const self = this as unknown as {
-      then: unknown;
-    };
-    Object.defineProperty(this, 'then', {
-      configurable: true,
-      enumerable: false,
-      get: (): unknown => {
-        const result = this.execute();
-        if (isPromiseLike<TryResult<TReturn>>(result)) {
-          this.installThenable();
-          return (
-            self as unknown as { then: (...a: unknown[]) => unknown }
-          ).then;
-        }
-        Object.defineProperty(this, 'then', {
-          configurable: true,
-          enumerable: false,
-          value: undefined,
-          writable: true,
-        });
-        return undefined;
-      },
     });
   }
 
