@@ -96,7 +96,7 @@ Try.setDefaultReporter(new ConsoleReporter());
 
 ## Sync vs Async
 
-The library works transparently with both sync and async functions. The key difference is in how you consume the result.
+Only `async` functions (declared with the `async` keyword) produce a thenable `Try` instance. Everything else — sync functions, *and sync functions that happen to return a Promise* — must be consumed via a terminal method.
 
 **Async functions** — `await` the terminal method (or the `Try` instance directly):
 
@@ -118,7 +118,7 @@ if (result !== 42 || same !== 42) {
 }
 ```
 
-**Sync functions** — do not `await`; call the terminal method directly:
+**Sync functions (and sync fns returning a Promise)** — call a terminal method:
 
 ```ts doctest
 import { Try } from '@power-rent/try-catch';
@@ -128,9 +128,16 @@ const rawString = '{"ok":true}';
 // Sync function: call terminal method without await
 const result = new Try(JSON.parse, rawString).value();
 
-// Awaiting a sync Try yields the Try instance, not the result
-// This is intentional — use .value() / .unwrap() / .error() instead
-if ((result as { ok: boolean }).ok !== true) {
+// Sync fn that returns a Promise: terminal methods still handle it.
+function returnsPromise(): Promise<number> {
+  return Promise.resolve(42);
+}
+const n = await new Try(returnsPromise).value();
+
+// Awaiting a non-async Try yields the Try instance, NOT the result.
+// The instance is not thenable, so `await` cannot trigger execution.
+// Use .value() / .unwrap() / .error() / .result() instead.
+if ((result as { ok: boolean }).ok !== true || n !== 42) {
   throw new Error('sync .value() path failed');
 }
 ```
@@ -156,7 +163,7 @@ npm install @sentry/nextjs
 
 Supported version range: `>=8.0.0 <11.0.0`.
 
-**`await new Try(syncFn)` returns the `Try` instance** — This is expected behaviour. Awaiting a `Try` that wraps a sync function yields the `Try` instance itself because the instance is not thenable. Use `.value()`, `.unwrap()`, or `.error()` to retrieve the result.
+**`await new Try(syncFn)` returns the `Try` instance** — This is expected behaviour. Awaiting a `Try` that wraps a non-async function (sync, or sync-returning-Promise) yields the `Try` instance itself because the instance is not thenable. Use `.value()`, `.unwrap()`, `.error()`, or `.result()` to retrieve the result.
 
 ## Next Steps
 

@@ -54,7 +54,7 @@ graph TD
 
 A typical call proceeds as follows:
 
-1. **Construction** — `new Try(fn, ...args)` stores the function and its arguments. If `fn` is an `AsyncFunction`, a thenable `.then` property is installed immediately so the instance can be directly `await`-ed. For non-async functions a lazy getter defers execution until `.then` is first accessed, allowing the library to detect Promise-returning non-async functions at runtime.
+1. **Construction** — `new Try(fn, ...args)` stores the function and its arguments. If `fn` is an `AsyncFunction`, a thenable `.then` property is installed immediately so the instance can be directly `await`-ed. For non-async functions no `.then` is installed, so the instance is not thenable and any thenability probe (e.g. `Promise.resolve`, `util.inspect`, deep-equality matchers) cannot trigger execution.
 2. **Configuration** — The caller chains `.report(message)`, `.breadcrumbs(config)`, `.tag(name, value)`, `.tags({...})`, `.default(fallback)`, `.debug()`, and/or `.finally(callback)`. Each method mutates internal config and returns `this`.
 3. **Execution** — A terminal method (`unwrap`, `value`, `result`, or `error`) calls the private `execute()` method. `execute()` invokes `fn(...args)` inside a `try/catch`. If the return value is thenable, execution continues asynchronously via `Promise.resolve(value).then(...).catch(...).finally(...)`. Otherwise it settles synchronously. Results are cached so repeated terminal calls do not re-invoke the function.
 4. **Thrown-value normalization** — Both the synchronous `catch (e)` arm of `execute()` and the async `.catch(...)` branch pass the thrown value through `Try.normalizeThrown`. If `e instanceof Error`, it is returned unchanged. Otherwise a fresh `Error` is constructed with `message === 'Non-Error thrown (<typeof e>)'` and the original value preserved on `.cause`. Downstream terminals and the `Reporter` contract therefore always see an `Error` instance — callers never need to re-check `typeof err`.
@@ -83,15 +83,13 @@ When `.report()` is **not** configured but `.breadcrumbs()` is, each terminal me
 
 ## Sync vs async execution paths
 
-The library resolves the sync/async split at construction time using two strategies:
+The library resolves the sync/async split at construction time using a single check:
 
 **Async path (declared `async` functions)**
 `fn.constructor.name === 'AsyncFunction'` is true. `installThenable()` defines `.then` as an owned data property immediately, so `await new Try(asyncFn)` works without executing the function early.
 
-**Sync path with lazy async detection (non-`async` functions)**
-`installLazyThenable()` defines `.then` as a getter. When the JavaScript engine evaluates `await expr`, it reads `.then` once. The getter calls `execute()` synchronously:
-- If `execute()` returns a Promise (the function returned a thenable), `installThenable()` replaces the getter with a real `.then`, and the getter returns that `.then` function.
-- If `execute()` returns a `TryResult` directly, `.then` is replaced with `undefined` (non-thenable), so `await new Try(syncFn)` yields the `Try` instance itself rather than its return value. Callers must use `.value()`, `.unwrap()`, `.result()`, or `.error()` directly.
+**Non-async path (everything else)**
+No `.then` property is installed. The instance is **not thenable**, so `await new Try(nonAsyncFn)` yields the `Try` instance itself rather than triggering execution. This holds even when the wrapped function happens to return a `Promise` — any thenability probe (`Promise.resolve`, `util.inspect`, deep-equality matchers, serializers) is guaranteed not to invoke the wrapped function. Callers must use `.value()`, `.unwrap()`, `.result()`, or `.error()` directly. Each terminal routes through `execute()`, which detects a `Promise` return value and returns a `Promise<TryResult>` so awaiting the terminal still works.
 
 Both paths cache the result in `this.exec` so that subsequent terminal method calls return the same settled value.
 
