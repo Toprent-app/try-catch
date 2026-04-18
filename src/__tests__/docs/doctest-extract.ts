@@ -50,7 +50,7 @@ export function extractDoctests(source: string): DoctestBlock[] {
     }
 
     const lang = match[1];
-    const rest = match[2] ?? '';
+    const rest = match[2] || '';
     const tagged = isDoctestFence(lang, rest);
     const openLine = i + 1; // 1-based
 
