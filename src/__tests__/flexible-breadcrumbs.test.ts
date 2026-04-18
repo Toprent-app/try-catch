@@ -510,6 +510,33 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
+    it('positional string handler drops undefined values', async () => {
+      function testFunction(a?: string, b?: number, c?: boolean) {
+        throw new Error('test');
+      }
+
+      // Mix positional strings with an extractor so config exercises
+      // extractFromArray's positional-string branch (not extractFromKeys).
+      await new Try(testFunction, 'defined', undefined, true)
+        .breadcrumbs([
+          'a',
+          'b',
+          { param: 2, as: 'value' },
+        ])
+        .value();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Calling testFunction function',
+          data: {
+            a: 'defined',
+            param2_value: true,
+            // b should be filtered out (undefined positional value)
+          },
+        }),
+      );
+    });
+
     it('should work with functions that have no parameters', async () => {
       function noParams() {
         throw new Error('test');
