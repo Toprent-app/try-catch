@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import Try from '../nextjs';
+import { BreadcrumbExtractorUtil } from '../utils';
 
 // Mock Sentry SDK
 vi.mock('@sentry/nextjs', () => {
@@ -614,6 +615,24 @@ describe('Flexible Breadcrumbs System', () => {
           data: { role: 'admin' },
         }),
       );
+    });
+  });
+
+  describe('Empty breadcrumb data idempotence', () => {
+    it('empty breadcrumb data does not re-extract on subsequent terminals', async () => {
+      const extractSpy = vi.spyOn(BreadcrumbExtractorUtil, 'extract');
+      const fn = async () => {
+        throw new Error('boom');
+      };
+
+      const t = new Try(fn).breadcrumbs(['nonexistent'] as never);
+      await t.value();
+      await t.unwrap().catch(() => {});
+      await t.result();
+
+      // Extractor should run at most once for a given (exec, config) pair.
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      extractSpy.mockRestore();
     });
   });
 });

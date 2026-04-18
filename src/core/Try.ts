@@ -882,11 +882,12 @@ export class Try<
       this.local.breadcrumbData = this.extractAllBreadcrumbData();
     }
 
-    // Skip the reporter call when no data was extracted. Do not set the
-    // idempotence guard here — `breadcrumbConfig` is immutable on a single
-    // instance, so "empty now" implies "empty on any retry" and there is
-    // no double-recording risk from leaving the guard unset.
+    // Mark the guard before short-circuiting on empty data so subsequent
+    // terminals (and clones sharing `exec`) do not re-run extraction for
+    // the same (exec, config) pair.
     if (Object.keys(this.local.breadcrumbData).length === 0) {
+      this.local.breadcrumbsAdded = true;
+      this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
       return;
     }
 
