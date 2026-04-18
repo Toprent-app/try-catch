@@ -406,7 +406,6 @@ describe('Try', () => {
         .unwrap();
 
       await expect(exec).rejects.toThrow('validation error');
-      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', async () => {
@@ -1243,7 +1242,6 @@ describe('Try', () => {
           .report('failed')
           .unwrap();
       }).toThrow('validation error');
-      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', () => {
