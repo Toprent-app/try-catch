@@ -125,11 +125,11 @@ describe('Regression: multi-CLI review findings', () => {
    */
   describe('R-03 .default() breadcrumb idempotence', () => {
     it('parent + child .default() emit breadcrumbs only once for shared failure', async () => {
-      const fn = async () => {
+      const fn = async (_ctx: { context: string }) => {
         throw new Error('boom');
       };
 
-      const parent = new Try(fn).breadcrumbs(['context']);
+      const parent = new Try(fn, { context: 'test' }).breadcrumbs(['context']);
       const child = parent.default('fallback');
 
       await parent.value();

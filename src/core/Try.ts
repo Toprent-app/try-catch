@@ -85,6 +85,11 @@ export class Try<
     promise?: Promise<TryResult<TReturn>>;
     isAsync?: boolean;
     finallyRan: boolean;
+    // Set of breadcrumbConfig objects whose breadcrumbs have already been
+    // emitted for this shared execution. Shared across .default() clones so
+    // a parent + child referencing the same config emit breadcrumbs only
+    // once, while divergent configs each emit independently.
+    breadcrumbsEmitted: Set<BreadcrumbOptions<TArgs>>;
   };
   private local: {
     breadcrumbData?: Record<string, unknown>;
@@ -146,7 +151,7 @@ export class Try<
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
-    this.exec = { state: 'pending', finallyRan: false };
+    this.exec = { state: 'pending', finallyRan: false, breadcrumbsEmitted: new Set() };
     this.local = { breadcrumbsAdded: false };
     // Only `AsyncFunction`s are thenable: `installThenable()` defines an owned
     // `.then` data property so `await new Try(asyncFn)` works without
@@ -849,6 +854,14 @@ export class Try<
       return;
     }
 
+    // Guard against duplicate emission across shared execution. Parent and
+    // child clones (via .default()) share `exec`; if they reference the same
+    // breadcrumbConfig they must emit at most once per shared failure.
+    if (this.exec.breadcrumbsEmitted.has(this.config.breadcrumbConfig)) {
+      this.local.breadcrumbsAdded = true;
+      return;
+    }
+
     if (!this.local.breadcrumbData) {
       this.local.breadcrumbData = this.extractAllBreadcrumbData();
     }
@@ -865,6 +878,7 @@ export class Try<
 
     Try.defaultReporter.addBreadcrumbs(this.local.breadcrumbData, functionName);
     this.local.breadcrumbsAdded = true;
+    this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
   }
 
   /**
