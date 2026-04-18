@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import Try from '../nextjs';
 
@@ -1851,6 +1851,87 @@ describe('Try', () => {
         expect(result.error).toBe(real);
         expect(result.error.message).toBe('real');
       }
+    });
+  });
+
+  describe('breadcrumb consistency (SENT-03, D-06)', () => {
+    let mockAddBreadcrumbs: ReturnType<typeof vi.fn>;
+    let savedReporter: import('../core/reporter').Reporter;
+
+    beforeEach(() => {
+      savedReporter = Try.getDefaultReporter();
+      mockAddBreadcrumbs = vi.fn();
+      Try.setDefaultReporter({
+        report: vi.fn(),
+        addBreadcrumbs: mockAddBreadcrumbs,
+        createWrappedError: (error: Error, message: string) => {
+          const w = new Error(message);
+          w.cause = error;
+          w.stack = error.stack;
+          return w;
+        },
+      });
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(savedReporter);
+    });
+
+    it('async unwrap: breadcrumbs called once when .breadcrumbs() configured', async () => {
+      await expect(
+        new Try(async () => { throw new Error('boom'); })
+          .breadcrumbs(['x'])
+          .unwrap()
+      ).rejects.toThrow('boom');
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('sync unwrap: breadcrumbs called once when .breadcrumbs() configured', () => {
+      expect(() =>
+        new Try(() => { throw new Error('boom'); })
+          .breadcrumbs(['x'])
+          .unwrap()
+      ).toThrow('boom');
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('async error(): breadcrumbs called once; returns normalized Error', async () => {
+      const err = await new Try(async () => { throw new Error('boom'); })
+        .breadcrumbs(['x'])
+        .error();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('sync error(): breadcrumbs called once; returns normalized Error', () => {
+      const err = new Try(() => { throw new Error('boom'); })
+        .breadcrumbs(['x'])
+        .error();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('result(): breadcrumbs called once on failure', async () => {
+      const r = await new Try(async () => { throw new Error('boom'); })
+        .breadcrumbs(['x'])
+        .result();
+      expect(r.success).toBe(false);
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('.report().breadcrumbs(): addBreadcrumbs called exactly once total (no double-add)', async () => {
+      await expect(
+        new Try(async () => { throw new Error('boom'); })
+          .report('msg')
+          .breadcrumbs(['x'])
+          .unwrap()
+      ).rejects.toThrow();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('no .breadcrumbs(): addBreadcrumbs NEVER called', async () => {
+      await new Try(async () => { throw new Error('boom'); }).result();
+      expect(mockAddBreadcrumbs).not.toHaveBeenCalled();
     });
   });
 });
