@@ -823,10 +823,6 @@ export class Try<
     return this.exec.result;
   }
 
-  private static normalizeThrown(e: unknown): Error {
-    return normalizeThrown(e);
-  }
-
   private runFinallyCallback(): void | Promise<void> {
     const cb = this.config.finallyCallback;
     if (!cb || this.exec.finallyRan.has(cb)) {
@@ -879,7 +875,9 @@ export class Try<
     }
 
     if (!this.local.breadcrumbData) {
-      this.local.breadcrumbData = this.extractAllBreadcrumbData();
+      this.local.breadcrumbData = this.extractAllBreadcrumbData(
+        this.config.breadcrumbConfig,
+      );
     }
 
     // Mark the guard before short-circuiting on empty data so subsequent
@@ -901,16 +899,10 @@ export class Try<
   /**
    * Extract breadcrumb data using the flexible configuration.
    */
-  private extractAllBreadcrumbData(): Record<string, unknown> {
-    const config = this.config.breadcrumbConfig;
-    if (!config) {
-      return {};
-    }
-    return BreadcrumbExtractorUtil.extract(
-      config,
-      this.args,
-      this.config.debug,
-    );
+  private extractAllBreadcrumbData(
+    config: BreadcrumbOptions<TArgs>,
+  ): Record<string, unknown> {
+    return BreadcrumbExtractorUtil.extract(config, this.args, this.config.debug);
   }
 
   /**
