@@ -692,7 +692,10 @@ export class Try<
           return resolved.value;
         }
 
-        if (this.config.message) {
+        const isThrowThrough = Try.ignoreErrorTypes.includes(
+          resolved.error.name,
+        );
+        if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
         } else if (this.config.breadcrumbConfig) {
           this.addBreadcrumbsIfConfigured();
@@ -714,7 +717,8 @@ export class Try<
       >;
     }
 
-    if (this.config.message) {
+    const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+    if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
