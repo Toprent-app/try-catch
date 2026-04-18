@@ -54,7 +54,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Normalize non-Error throws in execute() and unify breadcrumb recording across unwrap/error/result (DIAG-01, SENT-03)
 - [x] 02-02-PLAN.md — Remove internal addBreadcrumbs call from nextjs SentryReporter.report() (D-07 / SENT-03)
-- [ ] 02-03-PLAN.md — Add adapter tests for node, browser, nextjs including D-07 regression guard
+- [x] 02-03-PLAN.md — Add adapter tests for node, browser, nextjs including D-07 regression guard
 
 ### Phase 3: Documentation & Examples
 **Goal**: Users can rely on docs/examples that reflect real Try and reporting behavior.
