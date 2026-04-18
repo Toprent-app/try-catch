@@ -7,6 +7,7 @@ import {
   ValidateKeys,
   BreadcrumbExtractor as BreadcrumbExtractorType,
   BreadcrumbExtractorUtil,
+  normalizeThrown,
 } from '../utils';
 import { Reporter, NoopReporter } from './reporter';
 
@@ -788,7 +789,7 @@ export class Try<
             if (this.config.debug) {
               console.error(e);
             }
-            const error = Try.normalizeThrown(e);
+            const error = normalizeThrown(e);
             this.exec.result = { success: false, error };
             return this.exec.result;
           })
@@ -809,7 +810,7 @@ export class Try<
       if (this.config.debug) {
         console.error(e);
       }
-      const error = Try.normalizeThrown(e);
+      const error = normalizeThrown(e);
       this.exec.isAsync = false;
       this.exec.result = { success: false, error };
     } finally {
@@ -823,10 +824,7 @@ export class Try<
   }
 
   private static normalizeThrown(e: unknown): Error {
-    if (e instanceof Error) return e;
-    const wrapped = new Error(`Non-Error thrown (${typeof e})`);
-    wrapped.cause = e;
-    return wrapped;
+    return normalizeThrown(e);
   }
 
   private runFinallyCallback(): void | Promise<void> {
