@@ -77,6 +77,16 @@ src/
     transformers.ts   # TransformerRegistry, PredefinedTransformers
     types.ts          # Shared types (BreadcrumbOptions, TryResult, ...)
   __tests__/
+    adapters/
+      browser.test.ts
+      node.test.ts
+      nextjs.test.ts
+    docs/
+      __fixtures__/
+      doctest-extract.ts
+      doctest-extract.test.ts
+      doctest.test.ts
+      README.md
     Try.test.ts
     all-usecases.test.ts
     flexible-breadcrumbs.test.ts
@@ -85,6 +95,8 @@ docs/
   ARCHITECTURE.md
   CONFIGURATION.md
   DEVELOPMENT.md
+  GETTING-STARTED.md
+  TESTING.md
 .planning/            # Phase planning context (not shipped)
   phases/
     01-core-try-semantics/
@@ -145,5 +157,5 @@ No formal convention is documented. The main branch is `main`. Feature branches 
 
 - Open a pull request against `main`.
 - The `prepublishOnly` gate (`lint → test → build`) must pass locally before pushing.
-- No CI workflow file was detected in the repository — verification runs locally.
+- The CI workflow (`.github/workflows/ci.yml`) runs `tsc --noEmit` and `npm run test` on every push and pull request to `main` (Node.js 20.x, `ubuntu-latest`). PRs must be green before merge.
 - Include a changeset entry (`npm run changeset`) if the change affects the public API or fixes a bug consumers would notice.

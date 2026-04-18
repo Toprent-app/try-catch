@@ -68,6 +68,34 @@ All test files live under `src/__tests__/` and follow the `*.test.ts` naming pat
 | `src/__tests__/all-usecases.test.ts` | Type-level and runtime surface — construction, result methods, `PromiseLike`/`await` behaviour, `.default()`, `.breadcrumbs()` overloads, chain methods, statics, `TryResult` narrowing |
 | `src/__tests__/flexible-breadcrumbs.test.ts` | The full breadcrumb extraction API — key arrays, extractor objects, variadic transformers, object-syntax config, error handling, edge cases, caching |
 | `src/__tests__/type-safety.test.ts` | TypeScript type assertions using `expectTypeOf` — value/error/unwrap return types, breadcrumb key validation, invalid argument rejection |
+| `src/__tests__/adapters/node.test.ts` | `NodeReporter` adapter — Sentry `@sentry/node` mock-based assertions |
+| `src/__tests__/adapters/browser.test.ts` | `BrowserReporter` adapter — Sentry `@sentry/browser` mock-based assertions |
+| `src/__tests__/adapters/nextjs.test.ts` | `SentryReporter` (Next.js) adapter — Sentry `@sentry/nextjs` mock-based assertions |
+| `src/__tests__/docs/doctest.test.ts` | Doctest harness — executes every ` ```ts doctest``` `-tagged snippet in `README.md`, `docs/*.md`, and `src/__tests__/docs/__fixtures__/*.md` with `NoopReporter` + mocked Sentry |
+| `src/__tests__/docs/doctest-extract.test.ts` | Unit tests for the marker-based fenced-block extractor that feeds the doctest harness |
+
+## Doc verification harness
+
+The doctest harness (introduced in Phase 3 Wave 1) auto-executes TypeScript
+snippets embedded in user-facing docs so examples cannot drift from real
+behavior. Mark a fenced block with the ` ```ts doctest ` (or
+` ```typescript doctest `) info string to opt it in:
+
+````markdown
+```ts doctest
+import { Try } from '@power-rent/try-catch';
+const value = await new Try(() => 42).value();
+if (value !== 42) throw new Error('drift detected');
+```
+````
+
+Scanned surface: `README.md`, every `docs/*.md`, and any `*.md` under
+`src/__tests__/docs/__fixtures__/`. The runner sets `NoopReporter` as the
+default reporter before each snippet (restored after), `vi.mock`s
+`@sentry/node`, `@sentry/browser`, and `@sentry/nextjs`, and wires vitest
+aliases so snippets can import from `@power-rent/try-catch[/sub]` as a real
+consumer would. See `src/__tests__/docs/README.md` for the full marker
+convention, execution contract, and checklist before adding a snippet.
 
 ## Writing new tests
 
