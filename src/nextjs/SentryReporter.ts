@@ -15,6 +15,7 @@ export class SentryReporter implements Reporter {
       : error;
 
     Sentry.captureException(errorToReport, {
+      // `library` is injected last so user-supplied `tags` cannot shadow our provenance signal
       tags: { ...config.tags, library: '@power-rent/try-catch' },
     });
   }
