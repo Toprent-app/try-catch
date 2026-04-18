@@ -526,6 +526,8 @@ export class Try<
 
           if (shouldCapture) {
             this.reportError(resolved.error);
+          } else if (this.config.breadcrumbConfig) {
+            this.addBreadcrumbsIfConfigured();
           }
 
           if (
@@ -550,6 +552,8 @@ export class Try<
 
       if (shouldCapture) {
         this.reportError(result.error);
+      } else if (this.config.breadcrumbConfig) {
+        this.addBreadcrumbsIfConfigured();
       }
 
       if (
@@ -612,7 +616,19 @@ export class Try<
     Promise<TryResult<TReturn>>,
     TryResult<TReturn>
   > {
-    return this.execute() as IfPromise<
+    const result = this.execute();
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return result.then((resolved) => {
+        if (!resolved.success && this.config.breadcrumbConfig) {
+          this.addBreadcrumbsIfConfigured();
+        }
+        return resolved;
+      }) as IfPromise<TReturn, Promise<TryResult<TReturn>>, TryResult<TReturn>>;
+    }
+    if (!result.success && this.config.breadcrumbConfig) {
+      this.addBreadcrumbsIfConfigured();
+    }
+    return result as IfPromise<
       TReturn,
       Promise<TryResult<TReturn>>,
       TryResult<TReturn>
@@ -648,12 +664,22 @@ export class Try<
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) =>
-        resolved.success ? undefined : resolved.error,
-      ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+      return result.then((resolved) => {
+        if (resolved.success) return undefined;
+        if (this.config.breadcrumbConfig) {
+          this.addBreadcrumbsIfConfigured();
+        }
+        return resolved.error;
+      }) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
-    return (result.success ? undefined : result.error) as IfPromise<
+    if (result.success) {
+      return undefined as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+    }
+    if (this.config.breadcrumbConfig) {
+      this.addBreadcrumbsIfConfigured();
+    }
+    return result.error as IfPromise<
       TReturn,
       Promise<Error | undefined>,
       Error | undefined
