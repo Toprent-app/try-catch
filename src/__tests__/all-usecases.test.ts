@@ -154,14 +154,16 @@ describe('PromiseLike / await', () => {
     expect(f()).toBe('x:1');
   });
 
-  it('plain fn returning Promise: await resolves to underlying value', async () => {
+  it('plain fn returning Promise: not thenable; .value() resolves to underlying', async () => {
     function plainReturnsPromise(): Promise<number> {
       return Promise.resolve(7);
     }
     const t = new Try(plainReturnsPromise);
-    const awaited = await t;
-    expect(awaited).toBe(7);
-    // .value() also works (cached, no re-invocation).
+    expect('then' in t).toBe(false);
+    // Awaiting the instance yields the Try itself (no execution).
+    const awaited = await (t as unknown as Promise<unknown>);
+    expect(awaited).toBe(t);
+    // .value() routes through execute() and unwraps the Promise.
     await expect(t.value()).resolves.toBe(7);
   });
 });

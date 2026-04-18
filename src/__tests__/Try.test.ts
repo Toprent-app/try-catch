@@ -1701,35 +1701,41 @@ describe('Try', () => {
   });
 
   describe('Promise-returning non-async functions', () => {
-    it('await resolves to the underlying value for non-async fn returning a Promise', async () => {
+    it('non-async fn returning a Promise is NOT thenable', () => {
       function returnsPromise(): Promise<number> {
+        return Promise.resolve(42);
+      }
+
+      const t = new Try(returnsPromise);
+      expect('then' in t).toBe(false);
+    });
+
+    it('await on non-async Try does not execute the wrapped fn (no side effects)', async () => {
+      let calls = 0;
+      function returnsPromise(): Promise<number> {
+        calls += 1;
         return Promise.resolve(42);
       }
 
       const t = new Try(returnsPromise);
       const awaited = await t;
 
-      expect(awaited).toBe(42);
+      expect(awaited).toBe(t);
+      expect(calls).toBe(0);
     });
 
-    it('await resolves to undefined when a non-async Promise-returning fn rejects', async () => {
+    it('Promise-returning sync fn is consumed via .unwrap() / .value()', async () => {
+      function returnsPromise(): Promise<number> {
+        return Promise.resolve(42);
+      }
       function returnsRejectedPromise(): Promise<number> {
         return Promise.reject(new Error('boom'));
       }
 
-      const awaited = await new Try(returnsRejectedPromise);
-
-      expect(awaited).toBeUndefined();
-    });
-
-    it('await respects .default() for non-async Promise-returning fn that rejects', async () => {
-      function returnsRejectedPromise(): Promise<number> {
-        return Promise.reject(new Error('boom'));
-      }
-
-      const awaited = await new Try(returnsRejectedPromise).default(-1);
-
-      expect(awaited).toBe(-1);
+      await expect(new Try(returnsPromise).unwrap()).resolves.toBe(42);
+      await expect(
+        new Try(returnsRejectedPromise).default(-1).value(),
+      ).resolves.toBe(-1);
     });
 
     it('await still yields the Try instance for truly synchronous fn', async () => {
@@ -1741,6 +1747,12 @@ describe('Try', () => {
       const awaited = await t;
 
       expect(awaited).toBe(t);
+    });
+
+    it('AsyncFunction-wrapped Try IS thenable and await works', async () => {
+      const t = new Try(async () => 1);
+      expect('then' in t).toBe(true);
+      await expect(Promise.resolve(t)).resolves.toBe(1);
     });
   });
 
