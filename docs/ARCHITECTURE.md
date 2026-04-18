@@ -58,10 +58,13 @@ A typical call proceeds as follows:
 2. **Configuration** — The caller chains `.report(message)`, `.breadcrumbs(config)`, `.tag(name, value)`, `.tags({...})`, `.default(fallback)`, `.debug()`, and/or `.finally(callback)`. Each method mutates internal config and returns `this`.
 3. **Execution** — A terminal method (`unwrap`, `value`, `result`, or `error`) calls the private `execute()` method. `execute()` invokes `fn(...args)` inside a `try/catch`. If the return value is thenable, execution continues asynchronously via `Promise.resolve(value).then(...).catch(...).finally(...)`. Otherwise it settles synchronously. Results are cached so repeated terminal calls do not re-invoke the function.
 4. **Thrown-value normalization** — Both the synchronous `catch (e)` arm of `execute()` and the async `.catch(...)` branch pass the thrown value through `Try.normalizeThrown`. If `e instanceof Error`, it is returned unchanged. Otherwise a fresh `Error` is constructed with `message === 'Non-Error thrown (<typeof e>)'` and the original value preserved on `.cause`. Downstream terminals and the `Reporter` contract therefore always see an `Error` instance — callers never need to re-check `typeof err`.
-5. **Error handling** — On failure, if `.report()` was configured `reportError()` is called, which:
-   - Runs `addBreadcrumbsIfConfigured()` to extract context from arguments via `BreadcrumbExtractorUtil.extract`.
-   - Calls `Try.defaultReporter.report(error, config)` — the active `Reporter` implementation sends the event to Sentry.
-   - For `unwrap`, a wrapped `Error` (original as `.cause`) is thrown unless the error name appears in the `throwThroughErrorTypes` list.
+5. **Error handling** — On failure:
+   - If the error's `name` appears in `Try.throwThroughErrorTypes`, `.report()` is short-circuited: `reportError()` is NOT called and (for `unwrap`) the original error is re-thrown as-is. If `.breadcrumbs()` was configured, `addBreadcrumbsIfConfigured()` still runs.
+   - Otherwise, if `.report()` was configured, `reportError()` runs, which:
+     - Calls `addBreadcrumbsIfConfigured()` to extract context from arguments via `BreadcrumbExtractorUtil.extract`.
+     - Calls `Try.defaultReporter.report(error, config)` — the active `Reporter` implementation sends the event to Sentry.
+     - For `unwrap`, a wrapped `Error` (original as `.cause`) is thrown with the configured `.report()` message.
+   - If neither `.report()` nor throw-through applies, terminals still invoke `addBreadcrumbsIfConfigured()` when `.breadcrumbs()` is configured (see below).
 6. **Finally callback** — `runFinallyCallback()` executes the registered `.finally()` callback exactly once after the function settles, regardless of success or failure. Async callbacks are awaited; errors inside the callback are swallowed (logged when `debug` is enabled).
 
 When `.report()` is **not** configured but `.breadcrumbs()` is, each terminal method still invokes `addBreadcrumbsIfConfigured()` on its error branch — `value()`, `unwrap()`, `error()`, and `result()` all share the same breadcrumb-recording path. `addBreadcrumbsIfConfigured()` is internally idempotent (guarded by `local.breadcrumbsAdded`), so chaining `.report()` and another terminal in the same instance never double-records.
