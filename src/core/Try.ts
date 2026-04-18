@@ -771,7 +771,7 @@ export class Try<
             if (this.config.debug) {
               console.error(e);
             }
-            const error = e as Error;
+            const error = Try.normalizeThrown(e);
             this.exec.result = { success: false, error };
             return this.exec.result;
           })
@@ -792,7 +792,7 @@ export class Try<
       if (this.config.debug) {
         console.error(e);
       }
-      const error = e as Error;
+      const error = Try.normalizeThrown(e);
       this.exec.isAsync = false;
       this.exec.result = { success: false, error };
     } finally {
@@ -803,6 +803,13 @@ export class Try<
     }
 
     return this.exec.result;
+  }
+
+  private static normalizeThrown(e: unknown): Error {
+    if (e instanceof Error) return e;
+    const wrapped = new Error(`Non-Error thrown (${typeof e})`);
+    wrapped.cause = e;
+    return wrapped;
   }
 
   private runFinallyCallback(): void | Promise<void> {
