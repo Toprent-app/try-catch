@@ -13,7 +13,6 @@
  *           `message === "Non-Error thrown (<typeof>)"` and `cause === original`.
  *   - D-08: breadcrumbs record on every terminal method
  *           (.value / .unwrap / .error / .result) — not only on .unwrap.
- *   - D-09: the Next.js double-add fix is an internal detail and is NOT shown.
  *   - D-11: every pattern matches the current API surface.
  *   - D-12: imports come from the package name, never from `../src/...`.
  *
