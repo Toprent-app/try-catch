@@ -123,3 +123,13 @@ describe('Try README type safety', () => {
       .value();
   });
 });
+
+describe('Nextjs Try subclass generics', () => {
+  it('default() preserves nextjs subclass type with third generic', async () => {
+    const t = new Try(async (): Promise<number> => 42);
+    const withDefault = t.default('fallback' as const);
+    // Narrowed return via TDefault
+    const v = await withDefault.value();
+    expectTypeOf(v).toEqualTypeOf<number | 'fallback'>();
+  });
+});
