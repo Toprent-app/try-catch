@@ -158,6 +158,7 @@ Tests run with [Vitest](https://vitest.dev/).
 | Globals | Enabled (`globals: true`) |
 | Coverage provider | `v8` |
 | Coverage include | `src/**/*.ts` |
+| `resolve.alias` | Maps `@power-rent/try-catch` and its `/node`, `/browser`, `/nextjs` subpaths to the corresponding entry under `src/` so docs/doctest snippets can `import` the package by its published name. Order matters — sub-path aliases are matched before the bare package alias. |
 
 No coverage threshold is configured.
 
