@@ -1797,4 +1797,60 @@ describe('Try', () => {
       expect(fn).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('non-Error normalization (DIAG-01)', () => {
+    it('sync: thrown string is normalized to Error with cause', async () => {
+      const result = new Try(() => { throw 'oops'; }).result();
+      expect(result).not.toBeInstanceOf(Promise);
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (string)');
+      expect(r.error.cause).toBe('oops');
+    });
+
+    it('sync: thrown number is normalized to Error with cause', () => {
+      const result = new Try(() => { throw 42; }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (number)');
+      expect(r.error.cause).toBe(42);
+    });
+
+    it('sync: thrown plain object is normalized to Error with cause', () => {
+      const obj = { code: 42 };
+      const result = new Try(() => { throw obj; }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (object)');
+      expect(r.error.cause).toBe(obj);
+    });
+
+    it('async: rejected string is normalized to Error with cause', async () => {
+      const result = await new Try(async () => { throw 'oops'; }).result();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toBe('Non-Error thrown (string)');
+        expect(result.error.cause).toBe('oops');
+      }
+    });
+
+    it('sync: real Error passes through unchanged (no re-wrap)', () => {
+      const real = new Error('real');
+      const result = new Try(() => { throw real; }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBe(real);
+      expect(r.error.message).toBe('real');
+    });
+
+    it('async: real Error passes through unchanged', async () => {
+      const real = new Error('real');
+      const result = await new Try(async () => { throw real; }).result();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBe(real);
+        expect(result.error.message).toBe('real');
+      }
+    });
+  });
 });
