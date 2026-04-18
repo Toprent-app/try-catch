@@ -10,20 +10,10 @@ export class SentryReporter implements Reporter {
    * Report an error to Sentry with configured context
    */
   report(error: Error, config: ErrorReportConfig): void {
-    // Add breadcrumbs if configured
-    if (
-      config.breadcrumbData &&
-      Object.keys(config.breadcrumbData).length > 0
-    ) {
-      this.addBreadcrumbs(config.breadcrumbData, config.functionName);
-    }
-
-    // Create wrapped error if custom message is provided
     const errorToReport = config.message
       ? this.createWrappedError(error, config.message)
       : error;
 
-    // Report to Sentry with tags
     Sentry.captureException(errorToReport, {
       tags: { ...config.tags, library: '@power-rent/try-catch' },
     });
