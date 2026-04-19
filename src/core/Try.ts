@@ -97,7 +97,7 @@ export class Try<
     // once, while divergent configs each emit independently.
     breadcrumbsEmitted: Set<BreadcrumbOptions<TArgs>>;
   };
-  private local: {
+  private readonly local: {
     breadcrumbData?: Record<string, unknown>;
     breadcrumbsAdded: boolean;
   };
