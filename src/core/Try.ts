@@ -814,14 +814,22 @@ export class Try<
 
   /**
    * Report error using the configured reporter with context.
+   * Reporter failures are swallowed so a broken reporter never masks
+   * the original error from the caller.
    */
   private reportError(error: Error): void {
     this.addBreadcrumbsIfConfigured();
 
-    Try.defaultReporter.report(error, {
-      message: this.config.message,
-      tags: this.config.tags,
-    });
+    try {
+      Try.defaultReporter.report(error, {
+        message: this.config.message,
+        tags: this.config.tags,
+      });
+    } catch (reporterError) {
+      if (this.config.debug) {
+        console.error('Reporter.report threw:', reporterError);
+      }
+    }
   }
 
   /**
@@ -840,11 +848,9 @@ export class Try<
       return;
     }
 
-    if (!this.local.breadcrumbData) {
-      this.local.breadcrumbData = this.extractAllBreadcrumbData(
-        this.config.breadcrumbConfig,
-      );
-    }
+    this.local.breadcrumbData = this.extractAllBreadcrumbData(
+      this.config.breadcrumbConfig,
+    );
 
     // Mark the guard before short-circuiting on empty data so subsequent
     // terminals (and clones sharing `exec`) do not re-run extraction for
@@ -857,7 +863,13 @@ export class Try<
 
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.local.breadcrumbData, functionName);
+    try {
+      Try.defaultReporter.addBreadcrumbs(this.local.breadcrumbData, functionName);
+    } catch (reporterError) {
+      if (this.config.debug) {
+        console.error('Reporter.addBreadcrumbs threw:', reporterError);
+      }
+    }
     this.local.breadcrumbsAdded = true;
     this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
   }

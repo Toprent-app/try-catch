@@ -264,12 +264,228 @@ describe('coverage gaps', () => {
       );
       expect(out).toEqual({ a: 1 });
     });
+
+    it('non-object, non-array config returns empty object', () => {
+      const out = BreadcrumbExtractorUtil.extract(
+        42 as never,
+        [{ id: 1 }],
+        false,
+      );
+      expect(out).toEqual({});
+    });
+
+    it('extractor without keys/transform/as returns empty object', () => {
+      const out = BreadcrumbExtractorUtil.extract(
+        [{ param: 0 } as never],
+        [{ id: 1 }],
+        false,
+      );
+      expect(out).toEqual({});
+    });
+
+    it('positional string entry with undefined arg is dropped', () => {
+      const out = BreadcrumbExtractorUtil.extract(
+        ['label'],
+        [undefined] as never,
+        false,
+      );
+      expect(out).toEqual({});
+    });
+
+    it('positional entry that is neither string nor array is skipped', () => {
+      const out = BreadcrumbExtractorUtil.extract(
+        [42 as never],
+        [{ id: 1 }],
+        false,
+      );
+      expect(out).toEqual({});
+    });
+
+    it('object-style config with non-array non-function paramConfig returns empty', () => {
+      const out = BreadcrumbExtractorUtil.extract(
+        { 0: 'unexpected' as never },
+        [{ id: 1 }],
+        false,
+      );
+      expect(out).toEqual({});
+    });
   });
 
   describe('extractDoctests untagged unterminated fence', () => {
     it('breaks scanning on untagged unterminated fence without throw', () => {
       const source = 'intro\n```js\nconst x = 1;\n';
       expect(extractDoctests(source)).toHaveLength(0);
+    });
+  });
+
+  describe('reporter error resilience', () => {
+    let priorReporter: ReturnType<typeof Try.getDefaultReporter>;
+
+    beforeEach(() => {
+      priorReporter = Try.getDefaultReporter();
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(priorReporter);
+    });
+
+    it('sync: reporter.report() throwing does not mask original error', () => {
+      Try.setDefaultReporter({
+        report: () => {
+          throw new Error('reporter down');
+        },
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e, m) => {
+          const w = new Error(m);
+          w.cause = e;
+          return w;
+        },
+      });
+
+      expect(() =>
+        new Try(() => {
+          throw new Error('original');
+        })
+          .report('wrapped')
+          .unwrap(),
+      ).toThrow('wrapped');
+    });
+
+    it('async: reporter.report() throwing does not mask original error', async () => {
+      Try.setDefaultReporter({
+        report: () => {
+          throw new Error('reporter down');
+        },
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e, m) => {
+          const w = new Error(m);
+          w.cause = e;
+          return w;
+        },
+      });
+
+      await expect(
+        new Try(async () => {
+          throw new Error('original');
+        })
+          .report('wrapped')
+          .unwrap(),
+      ).rejects.toThrow('wrapped');
+    });
+
+    it('reporter.addBreadcrumbs() throwing does not break execution', async () => {
+      Try.setDefaultReporter({
+        report: vi.fn(),
+        addBreadcrumbs: () => {
+          throw new Error('breadcrumb store unavailable');
+        },
+        createWrappedError: (e) => e,
+      });
+
+      const result = await new Try(
+        async (_ctx: { id: string }) => {
+          throw new Error('original');
+        },
+        { id: 'x' },
+      )
+        .breadcrumbs(['id'])
+        .default('fallback')
+        .value();
+
+      expect(result).toBe('fallback');
+    });
+
+    it('sync: reporter.addBreadcrumbs() throwing does not break execution', () => {
+      Try.setDefaultReporter({
+        report: vi.fn(),
+        addBreadcrumbs: () => {
+          throw new Error('breadcrumb store unavailable');
+        },
+        createWrappedError: (e) => e,
+      });
+
+      const err = new Try(
+        (_ctx: { id: string }) => {
+          throw new Error('original');
+        },
+        { id: 'x' },
+      )
+        .breadcrumbs(['id'])
+        .error();
+
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe('original');
+    });
+
+    it('reporter errors are logged in debug mode', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      Try.setDefaultReporter({
+        report: () => {
+          throw new Error('reporter down');
+        },
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e) => e,
+      });
+
+      await new Try(async () => {
+        throw new Error('original');
+      })
+        .debug(true)
+        .report('msg')
+        .default('fallback')
+        .value();
+
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('reporter errors are silent without debug', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      Try.setDefaultReporter({
+        report: () => {
+          throw new Error('reporter down');
+        },
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e) => e,
+      });
+
+      await new Try(async () => {
+        throw new Error('original');
+      })
+        .report('msg')
+        .default('fallback')
+        .value();
+
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('addBreadcrumbs errors are logged in debug mode', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      Try.setDefaultReporter({
+        report: vi.fn(),
+        addBreadcrumbs: () => {
+          throw new Error('breadcrumb store down');
+        },
+        createWrappedError: (e) => e,
+      });
+
+      await new Try(
+        async (_ctx: { id: string }) => {
+          throw new Error('original');
+        },
+        { id: 'x' },
+      )
+        .debug(true)
+        .breadcrumbs(['id'])
+        .default('fallback')
+        .value();
+
+      expect(spy).toHaveBeenCalledWith(
+        'Reporter.addBreadcrumbs threw:',
+        expect.any(Error),
+      );
+      spy.mockRestore();
     });
   });
 });
