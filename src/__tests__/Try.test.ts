@@ -273,7 +273,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           name: 'value',
@@ -301,7 +301,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           component: 'payment-service',
@@ -328,7 +328,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           module: 'data-processor',
@@ -354,7 +354,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           version: '2.0', // overridden value
@@ -379,7 +379,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           single: 'tag',
@@ -843,7 +843,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'test',
@@ -884,7 +884,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'payment',
@@ -1112,7 +1112,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           name: 'value',
@@ -1140,7 +1140,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           component: 'payment-service',
@@ -1167,7 +1167,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           module: 'data-processor',
@@ -1193,7 +1193,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           version: '2.0', // overridden value
@@ -1218,7 +1218,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           single: 'tag',
@@ -1650,7 +1650,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'test',
@@ -1691,7 +1691,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'payment',
@@ -1809,6 +1809,7 @@ describe('Try', () => {
 
   describe('non-Error normalization (DIAG-01)', () => {
     it('sync: thrown string is normalized to Error with cause', async () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       const result = new Try(() => { throw 'oops'; }).result();
       expect(result).not.toBeInstanceOf(Promise);
       const r = result as { success: false; error: Error };
@@ -1818,6 +1819,7 @@ describe('Try', () => {
     });
 
     it('sync: thrown number is normalized to Error with cause', () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       const result = new Try(() => { throw 42; }).result();
       const r = result as { success: false; error: Error };
       expect(r.error).toBeInstanceOf(Error);
@@ -1827,6 +1829,7 @@ describe('Try', () => {
 
     it('sync: thrown plain object is normalized to Error with cause', () => {
       const obj = { code: 42 };
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       const result = new Try(() => { throw obj; }).result();
       const r = result as { success: false; error: Error };
       expect(r.error).toBeInstanceOf(Error);
@@ -1835,6 +1838,7 @@ describe('Try', () => {
     });
 
     it('async: rejected string is normalized to Error with cause', async () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       const result = await new Try(async () => { throw 'oops'; }).result();
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -1864,7 +1868,7 @@ describe('Try', () => {
   });
 
   describe('breadcrumb consistency (SENT-03, D-06)', () => {
-    let mockAddBreadcrumbs: ReturnType<typeof vi.fn>;
+    let mockAddBreadcrumbs: import('../core/reporter').Reporter['addBreadcrumbs'];
     let savedReporter: import('../core/reporter').Reporter;
 
     beforeEach(() => {
