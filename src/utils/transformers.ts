@@ -66,6 +66,12 @@ export class TransformerRegistry {
         'custom',
       );
 
+      // Always warn: a thrown transformer yields empty data, which trips the
+      // guard in addBreadcrumbsIfConfigured and silently drops the breadcrumb.
+      console.warn(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        transformationError,
+      );
       if (debug) {
         console.error('Error in breadcrumb transformer:', transformationError);
       }
@@ -93,6 +99,10 @@ export class TransformerRegistry {
         paramIndex,
       );
 
+      console.warn(
+        '[try-catch] predefined breadcrumb transformer threw; breadcrumb dropped:',
+        transformationError,
+      );
       if (debug) {
         console.error('Error in predefined transformer:', transformationError);
       }

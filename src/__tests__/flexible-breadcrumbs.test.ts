@@ -305,8 +305,11 @@ describe('Flexible Breadcrumbs System', () => {
 
   describe('Error Handling', () => {
     it('should handle transformer errors gracefully with debug enabled', async () => {
-      const consoleSpy = vi
+      const errorSpy = vi
         .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const warnSpy = vi
+        .spyOn(console, 'warn')
         .mockImplementation(() => {});
 
       function testFunction(data: string) {
@@ -325,19 +328,27 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
         'Error in breadcrumb transformer:',
         expect.any(Error),
       );
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
-    it('should handle transformer errors gracefully with debug disabled', async () => {
-      const consoleSpy = vi
+    it('should always warn on transformer errors even with debug disabled', async () => {
+      const errorSpy = vi
         .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const warnSpy = vi
+        .spyOn(console, 'warn')
         .mockImplementation(() => {});
 
       function testFunction(data: string) {
@@ -355,16 +366,24 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should handle predefined transformer errors gracefully', async () => {
-      const consoleSpy = vi
+      const errorSpy = vi
         .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const warnSpy = vi
+        .spyOn(console, 'warn')
         .mockImplementation(() => {});
 
       function testFunction(data: any) {
@@ -382,11 +401,16 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs([{ param: 0, as: 'toString' }])
         .value();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] predefined breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
         'Error in predefined transformer:',
         expect.any(Error),
       );
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should handle non-object parameters for key extraction gracefully', async () => {
