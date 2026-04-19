@@ -116,31 +116,7 @@ describe('Result methods', () => {
 // --- PromiseLike / await behavior --------------------------------------
 
 describe('PromiseLike / await', () => {
-  it('await async Try resolves to T | undefined', async () => {
-    const result = await new Try(asyncNoArgs);
-    expectTypeOf(result).toEqualTypeOf<number | undefined>();
-    expect(result).toBe(42);
-  });
-
-  it('await async Try.default resolves to T | D', async () => {
-    const result = await new Try(asyncNoArgs).default('fallback' as const);
-    expectTypeOf(result).toEqualTypeOf<number | 'fallback'>();
-  });
-
-  it('async .then typechecks', async () => {
-    const result = await new Try(asyncNoArgs).then((v) => {
-      expectTypeOf(v).toEqualTypeOf<number | undefined>();
-      return v ?? 0;
-    });
-    expect(result).toBe(42);
-  });
-
-  it('sync .then type is never', () => {
-    const t = new Try(syncNoArgs);
-    expectTypeOf(t.then).toEqualTypeOf<never>();
-  });
-
-  it('sync Try has no runtime then (await returns instance as-is)', async () => {
+  it('Try has no runtime then (await returns instance as-is)', async () => {
     const t = new Try(syncNoArgs);
     expect((t as unknown as { then?: unknown }).then).toBeUndefined();
     const awaited = await (t as unknown as Promise<unknown>);

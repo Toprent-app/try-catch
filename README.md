@@ -65,9 +65,9 @@ import { Try } from '@power-rent/try-catch';
 
 ## Sync vs Async
 
-Only `async` functions (declared with the `async` keyword) produce a thenable `Try` instance. Everything else — sync functions, *and sync functions that happen to return a Promise* — must be consumed via a terminal method.
+`Try` instances are never thenable. Whether the wrapped function is sync or async, you must call a terminal method (`.value()`, `.unwrap()`, `.error()`, or `.result()`) to run it and read the outcome.
 
-**Async functions** — `await` the terminal method (or the `Try` instance directly):
+**Async functions** — `await` the terminal method:
 
 ```ts doctest
 import { Try } from '@power-rent/try-catch';
@@ -76,14 +76,10 @@ async function asyncFn(arg: number) {
   return arg * 2;
 }
 
-// Async function: await the terminal call
 const result = await new Try(asyncFn, 21).value();
 
-// Or await the Try instance itself (works for async functions only)
-const same = await new Try(asyncFn, 21);
-
-if (result !== 42 || same !== 42) {
-  throw new Error(`expected 42, got ${String(result)} / ${String(same)}`);
+if (result !== 42) {
+  throw new Error(`expected 42, got ${String(result)}`);
 }
 ```
 
@@ -103,7 +99,7 @@ function returnsPromise(): Promise<number> {
 }
 const n = await new Try(returnsPromise).value();
 
-// Awaiting a non-async Try yields the Try instance, NOT the result.
+// Awaiting a Try instance directly yields the Try instance, NOT the result.
 // The instance is not thenable, so `await` cannot trigger execution.
 // Use .value() / .unwrap() / .error() / .result() instead.
 if ((result as { ok: boolean }).ok !== true || n !== 42) {
@@ -355,9 +351,9 @@ Execute and return a discriminated union:
 Breadcrumbs are recorded on the error branch.
 
 Sync functions return values immediately; async functions return Promises.
-Only `AsyncFunction`-wrapped `Try` instances are awaitable —
-`await new Try(nonAsyncFn)` yields the `Try` instance itself, use
-`.value()` / `.unwrap()` / `.error()` / `.result()` instead.
+`Try` instances are never thenable — `await new Try(fn)` yields the `Try`
+instance itself regardless of whether the wrapped function is sync or async.
+Use `.value()` / `.unwrap()` / `.error()` / `.result()` to execute.
 
 ## Examples
 

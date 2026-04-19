@@ -224,7 +224,8 @@ describe('Try', () => {
 
       await new Try(throwingFunction, params)
         .debug(false)
-        .breadcrumbs(['parameterKey']);
+        .breadcrumbs(['parameterKey'])
+        .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1749,12 +1750,6 @@ describe('Try', () => {
       const awaited = await t;
 
       expect(awaited).toBe(t);
-    });
-
-    it('AsyncFunction-wrapped Try IS thenable and await works', async () => {
-      const t = new Try(async () => 1);
-      expect('then' in t).toBe(true);
-      await expect(Promise.resolve(t)).resolves.toBe(1);
     });
   });
 

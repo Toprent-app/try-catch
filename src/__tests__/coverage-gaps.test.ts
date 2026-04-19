@@ -266,20 +266,6 @@ describe('coverage gaps', () => {
     });
   });
 
-  describe('Try thenable branch', () => {
-    it('then(null, reject) covers null onfulfilled branch', async () => {
-      async function asyncOk() {
-        return 7;
-      }
-      const t = new Try(asyncOk);
-      const value = await (t as unknown as PromiseLike<number>).then(
-        null,
-        () => -1,
-      );
-      expect(value).toBe(7);
-    });
-  });
-
   describe('extractDoctests untagged unterminated fence', () => {
     it('breaks scanning on untagged unterminated fence without throw', () => {
       const source = 'intro\n```js\nconst x = 1;\n';

@@ -159,40 +159,6 @@ export class Try<
     this.config = { tags: {} };
     this.exec = { state: 'pending', finallyRan: new Set(), breadcrumbsEmitted: new Set() };
     this.local = { breadcrumbsAdded: false };
-    // Only `AsyncFunction`s are thenable: `installThenable()` defines an owned
-    // `.then` data property so `await new Try(asyncFn)` works without
-    // triggering execution at probe time. Non-async functions (including
-    // sync functions that happen to return a Promise) are NOT thenable —
-    // any thenability probe (Promise.resolve, util.inspect, jest deep-equal,
-    // Sentry serialization, ...) must never silently invoke the wrapped
-    // function. Use `.value()` / `.unwrap()` / `.error()` / `.result()`
-    // (which still handle Promise-returning sync fns via `execute()`).
-    if (fn.constructor.name === 'AsyncFunction') {
-      this.installThenable();
-    }
-  }
-
-  /**
-   * Install a thenable `.then` method directly on this instance for
-   * `AsyncFunction`-wrapped Try instances. Defers to `.value()` (never throws;
-   * returns the configured default on error) and wraps in `Promise.resolve(...)`
-   * so it also works once the underlying promise has settled.
-   */
-  private installThenable(): void {
-    const thenFn = (
-      onfulfilled?: ((value: unknown) => unknown) | null,
-      onrejected?: ((reason: unknown) => unknown) | null,
-    ): Promise<unknown> =>
-      Promise.resolve(this.value() as unknown).then(
-        onfulfilled ?? undefined,
-        onrejected ?? undefined,
-      );
-    Object.defineProperty(this, 'then', {
-      configurable: true,
-      enumerable: false,
-      writable: true,
-      value: thenFn,
-    });
   }
 
   /**
@@ -905,41 +871,4 @@ export class Try<
     return BreadcrumbExtractorUtil.extract(config, this.args, this.config.debug);
   }
 
-  /**
-   * Make the Try instance thenable so it can be `await`-ed directly (async only).
-   * This executes the underlying function with the current configuration and resolves
-   * with the same result as calling `.value()` (never throws, returns undefined on error).
-   *
-   * For sync wrapped functions, `.then` is typed as `never` to prevent misuse —
-   * use `.value()` / `.unwrap()` directly instead of awaiting.
-   *
-   * @example
-   * ```typescript
-   * // Direct await - equivalent to .value()
-   * const user = await new Try(fetchUser, userId)
-   *   .report('Failed to fetch user');
-   *
-   * // Can be used in Promise chains
-   * const result = await new Try(processData, input)
-   *   .default('fallback')
-   *   .then(data => data?.toUpperCase() || 'NO DATA');
-   *
-   * // Behaves like .value() - never throws
-   * const users = await new Try(fetchUsers); // undefined if error
-   * ```
-   */
-  declare then: IfPromise<
-    TReturn,
-    <TResult1 = Awaited<TReturn> | TDefault, TResult2 = never>(
-      onfulfilled?:
-        | ((
-            value: Awaited<TReturn> | TDefault,
-          ) => TResult1 | PromiseLike<TResult1>)
-        | null,
-      onrejected?:
-        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
-        | null,
-    ) => Promise<TResult1 | TResult2>,
-    never
-  >;
 }

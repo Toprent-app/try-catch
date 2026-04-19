@@ -144,8 +144,8 @@ describe('Regression: multi-CLI review findings', () => {
    * `Function.prototype.bind` output (constructor name = 'Function').
    * Bound async methods should still be thenable.
    */
-  describe('R-04 bound async functions are thenable', () => {
-    it('await new Try(asyncMethod.bind(instance)) executes and resolves', async () => {
+  describe('R-04 bound async functions resolve via .value()', () => {
+    it('new Try(asyncMethod.bind(instance)).value() executes and resolves', async () => {
       class C {
         async run() {
           return 42;
@@ -153,16 +153,16 @@ describe('Regression: multi-CLI review findings', () => {
       }
       const c = new C();
 
-      const result = await new Try(c.run.bind(c));
+      const result = await new Try(c.run.bind(c)).value();
 
       expect(result).toBe(42);
     });
 
-    it('Try(arrowReturningPromiseFromAsync) with type declared async should be thenable', async () => {
+    it('Try(arrowReturningPromiseFromAsync) with type declared async resolves via .value()', async () => {
       const asyncFn = async () => 'ok';
       const bound = asyncFn.bind(null);
 
-      const result = await new Try(bound);
+      const result = await new Try(bound).value();
 
       expect(result).toBe('ok');
     });

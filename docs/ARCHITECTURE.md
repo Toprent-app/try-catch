@@ -86,13 +86,15 @@ When `.report()` is **not** configured but `.breadcrumbs()` is, each terminal me
 
 ## Sync vs async execution paths
 
-The library resolves the sync/async split at construction time using a single check:
+The library resolves the sync/async split at terminal-method call time. `Try` instances are **never thenable** — no `.then` is ever installed — so `await new Try(fn)` always yields the `Try` instance itself without triggering execution. Any thenability probe (`Promise.resolve`, `util.inspect`, deep-equality matchers, serializers) is guaranteed not to invoke the wrapped function.
+
+Callers consume the result with `.value()`, `.unwrap()`, `.result()`, or `.error()`. Each terminal routes through `execute()`:
 
 **Async path (declared `async` functions)**
-`fn.constructor.name === 'AsyncFunction'` is true. `installThenable()` defines `.then` as an owned data property immediately, so `await new Try(asyncFn)` works without executing the function early.
+`fn.constructor.name === 'AsyncFunction'` is true. The terminal returns a `Promise<...>` that callers `await`.
 
 **Non-async path (everything else)**
-No `.then` property is installed. The instance is **not thenable**, so `await new Try(nonAsyncFn)` yields the `Try` instance itself rather than triggering execution. This holds even when the wrapped function happens to return a `Promise` — any thenability probe (`Promise.resolve`, `util.inspect`, deep-equality matchers, serializers) is guaranteed not to invoke the wrapped function. Callers must use `.value()`, `.unwrap()`, `.result()`, or `.error()` directly. Each terminal routes through `execute()`, which detects a `Promise` return value and returns a `Promise<TryResult>` so awaiting the terminal still works.
+The terminal runs synchronously. If the wrapped function happens to return a `Promise`, `execute()` detects it and returns a `Promise<TryResult>` so `await` still works on the terminal call.
 
 Both paths cache the result in `this.exec` so that subsequent terminal method calls return the same settled value.
 
