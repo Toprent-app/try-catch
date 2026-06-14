@@ -236,6 +236,10 @@ Add multiple tags for Sentry error reporting. Tags are merged with any previousl
 
 Enable debug logging to console. When enabled, errors will be logged to console.error.
 
+#### `.finally(callback: () => void | Promise<void>): Try<T, TArgs>`
+
+Register a callback that runs once after the wrapped function settles (on success or failure), mirroring `Promise.prototype.finally`. It runs synchronously for sync functions and is awaited for async ones, before any error is re-thrown by `.unwrap()`.
+
 ### Execution Methods
 
 #### `.unwrap(): T | Promise<Awaited<T>>`
@@ -253,6 +257,10 @@ Execute the function and return the result, the configured default value, or `un
 #### `.error(): Error | undefined | Promise<Error | undefined>`
 
 Execute the function and return the error if one occurred, or `undefined` if successful.
+
+#### `.result(): TryResult<T> | Promise<TryResult<T>>`
+
+Execute the function and return a discriminated union you can pattern-match on: `{ success: true, value }` or `{ success: false, error }`. Never throws and never reports (it is an inspection terminal).
 
 Sync functions return values immediately; async functions return Promises.
 
@@ -368,7 +376,7 @@ const result = await new Try(complexOperation, data)
 ## Features
 
 - 🚀 **Promise-like interface** - Can be awaited directly (equivalent to `.value()`: resolves to the result, the configured default, or `undefined` — awaiting **never throws/rejects and discards the error**; use `.unwrap()` to throw or `.error()`/`.result()` to inspect)
-- 🔍 **Automatic Sentry integration** - Errors are automatically reported
+- 🔍 **Sentry integration** - Errors are reported to Sentry when you call `.report()` and end the chain with `.value()` or `.unwrap()`
 - 🍞 **Flexible breadcrumb support** - Extract context from any parameter types using transformers
 - 🏷️ **Tag support** - Add custom tags to Sentry reports
 - 🎯 **TypeScript support** - Full type safety
