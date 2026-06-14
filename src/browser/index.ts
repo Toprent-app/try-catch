@@ -1,9 +1,9 @@
 export { Try, Try as default, TryResult } from '../core/Try';
 import { Try as TryClass } from '../core/Try';
-import { BrowserReporter } from '../adapters/browser/reporter';
+import { browserReporter } from '../adapters/browser/reporter';
 
 // Set up the Browser reporter as the default for browser environments
-TryClass.setDefaultReporter(new BrowserReporter());
+TryClass.setDefaultReporter(browserReporter);
 
 /**
  * Browser-specific Try class with Sentry integration pre-configured.

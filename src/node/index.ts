@@ -1,9 +1,9 @@
 export { Try, Try as default, TryResult } from '../core/Try';
 import { Try as TryClass } from '../core/Try';
-import { NodeReporter } from '../adapters/node/reporter';
+import { nodeReporter } from '../adapters/node/reporter';
 
 // Set up the Node reporter as the default for Node.js environments
-TryClass.setDefaultReporter(new NodeReporter());
+TryClass.setDefaultReporter(nodeReporter);
 
 /**
  * Node.js-specific Try class with Sentry integration pre-configured.
