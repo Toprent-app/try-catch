@@ -10,13 +10,10 @@ export class SentryReporter implements Reporter {
    * Report an error to Sentry with configured context
    */
   report(error: Error, config: ErrorReportConfig): void {
-    // Add breadcrumbs if configured
-    if (
-      config.breadcrumbData &&
-      Object.keys(config.breadcrumbData).length > 0
-    ) {
-      this.addBreadcrumbs(config.breadcrumbData, config.functionName);
-    }
+    // Breadcrumbs are added by the Try core (via addBreadcrumbs) before this
+    // method is called, so we must NOT re-add them here or they would be
+    // duplicated in Sentry. This keeps behaviour consistent with the
+    // node/browser adapters, which also leave breadcrumb handling to the core.
 
     // Create wrapped error if custom message is provided
     const errorToReport = config.message

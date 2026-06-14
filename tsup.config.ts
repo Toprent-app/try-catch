@@ -61,12 +61,12 @@ const entries = deriveEntriesFromExports(pkg.exports || {});
 
 const common: Options = {
   entry: entries,
-  sourcemap: true, // esbuild embeds sourcesContent by default
+  sourcemap: false, // do not ship sourcemaps (they embedded full TS source — ~80% of the published tarball)
   clean: true,
-  minify: false,
+  minify: true, // minify the published artifact (Sentry externals are untouched)
   splitting: false, // one file per entry to mirror tsc output
   platform: 'neutral', // works for node/browser/nextjs entries
-  target: 'es2020',
+  target: 'es2022', // matches engines node>=20 and the Error.cause usage
   skipNodeModulesBundle: true,
   external,
   // Force esbuild to emit .js for both formats (override tsup's default .mjs for ESM)
@@ -90,5 +90,10 @@ export default defineConfig([
     format: 'esm',
     outDir: 'dist/esm',
     dts: false,
+    // The package root has no "type" field (defaults to CommonJS), so emit a
+    // marker telling Node that the ESM output directory contains ES modules.
+    // Without this, `import` consumers on native Node parse these .js files as
+    // CJS and crash on the ESM syntax.
+    onSuccess: 'echo \'{"type":"module"}\' > dist/esm/package.json',
   },
 ]);

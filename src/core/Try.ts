@@ -1,4 +1,4 @@
-import {
+import type {
   BreadcrumbOptions,
   BreadcrumbConfig,
   BreadcrumbTransformer,
@@ -6,8 +6,8 @@ import {
   VariadicBreadcrumbTransformers,
   ValidateKeys,
   BreadcrumbExtractor as BreadcrumbExtractorType,
-  BreadcrumbExtractorUtil,
-} from '../utils';
+} from '../utils/types';
+import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs';
 import { Reporter, NoopReporter, ErrorReportConfig } from './reporter';
 
 /**
@@ -706,7 +706,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
             if (this.config.debug) {
               console.error(e);
             }
-            const error = e as Error;
+            const error = e instanceof Error ? e : new Error(String(e));
             this.cachedResult = { success: false, error };
             return this.cachedResult;
           })
@@ -727,7 +727,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       if (this.config.debug) {
         console.error(e);
       }
-      const error = e as Error;
+      const error = e instanceof Error ? e : new Error(String(e));
       this.isAsync = false;
       this.cachedResult = { success: false, error };
     } finally {
