@@ -1701,40 +1701,42 @@ describe('Try', () => {
   });
 
   describe('non-Error throwables (type contract + safe normalization)', () => {
-    const throwing = (value: unknown) =>
+    // Sync-throwing fns exercise the synchronous catch path (terminals resolve
+    // synchronously); async-throwing fns exercise the Promise-rejection path.
+    // Both run the caught value through the same guarded normalizer.
+    const throwingSync = (value: unknown) =>
       new Try(() => {
         throw value;
       });
+    const throwingAsync = (value: unknown) =>
+      new Try(async () => {
+        throw value;
+      });
 
-    it('normalizes a thrown string to an Error for .error()', async () => {
-      const error = await throwing('plain string').error();
-      expect(error).toBeInstanceOf(Error);
-      expect(error?.message).toBe('plain string');
+    it('normalizes a thrown string to an Error in both sync and async paths', async () => {
+      const syncError = throwingSync('sync string').error();
+      const asyncError = await throwingAsync('async string').error();
+      expect(syncError).toBeInstanceOf(Error);
+      expect(syncError?.message).toBe('sync string');
+      expect(asyncError).toBeInstanceOf(Error);
+      expect(asyncError?.message).toBe('async string');
     });
 
-    it('does not throw when the thrown value is non-stringifiable (null-prototype object)', async () => {
+    it('survives non-stringifiable throwables without re-throwing', async () => {
       // String(Object.create(null)) throws "Cannot convert object to primitive
-      // value"; the never-throw terminals must survive this, not re-throw.
-      const result = await throwing(Object.create(null)).result();
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error).toBeInstanceOf(Error);
-      }
-
-      const value = await throwing(Object.create(null))
-        .default('fallback')
-        .value();
-      expect(value).toBe('fallback');
-    });
-
-    it('does not throw when the thrown value has a throwing toString', async () => {
+      // value", and a hostile toString throws too; the guarded normalizer must
+      // still yield an Error and the never-throw terminals must not propagate.
       const hostile = {
         toString() {
           throw new Error('toString blew up');
         },
       };
-      const error = await throwing(hostile).error();
-      expect(error).toBeInstanceOf(Error);
+
+      expect(throwingSync(Object.create(null)).error()).toBeInstanceOf(Error);
+      expect(await throwingAsync(hostile).error()).toBeInstanceOf(Error);
+      expect(
+        throwingSync(Object.create(null)).default('fallback').value(),
+      ).toBe('fallback');
     });
   });
 });
