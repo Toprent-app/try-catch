@@ -1701,10 +1701,13 @@ describe('Try', () => {
   });
 
   describe('non-Error throwables (type contract + safe normalization)', () => {
+    const throwing = (value: unknown) =>
+      new Try(() => {
+        throw value;
+      });
+
     it('normalizes a thrown string to an Error for .error()', async () => {
-      const error = await new Try(() => {
-        throw 'plain string';
-      }).error();
+      const error = await throwing('plain string').error();
       expect(error).toBeInstanceOf(Error);
       expect(error?.message).toBe('plain string');
     });
@@ -1712,17 +1715,13 @@ describe('Try', () => {
     it('does not throw when the thrown value is non-stringifiable (null-prototype object)', async () => {
       // String(Object.create(null)) throws "Cannot convert object to primitive
       // value"; the never-throw terminals must survive this, not re-throw.
-      const result = await new Try(() => {
-        throw Object.create(null);
-      }).result();
+      const result = await throwing(Object.create(null)).result();
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error).toBeInstanceOf(Error);
       }
 
-      const value = await new Try(() => {
-        throw Object.create(null);
-      })
+      const value = await throwing(Object.create(null))
         .default('fallback')
         .value();
       expect(value).toBe('fallback');
@@ -1734,9 +1733,7 @@ describe('Try', () => {
           throw new Error('toString blew up');
         },
       };
-      const error = await new Try(() => {
-        throw hostile;
-      }).error();
+      const error = await throwing(hostile).error();
       expect(error).toBeInstanceOf(Error);
     });
   });
