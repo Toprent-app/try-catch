@@ -77,16 +77,43 @@ size/build cleanup while missing higher-risk *runtime semantics*.
 
 ## Grok Review
 
-**Unavailable.** Grok CLI failed with `Auth(AuthorizationRequired)` and transport-channel
-errors on every attempt (with/without `--effort`, after leader reset). Requires interactive
-re-auth. Not included.
+Initially blocked on `Auth(AuthorizationRequired)`; completed after interactive
+`grok login`. Grok reviewed the **implemented PR #39 diff** (not just the analysis).
+
+**Verdict.** Net-positive, land it, but "not done": the high-leverage non-breaking fixes
+landed correctly, but the highest-risk items from the analysis were left as-is or only
+documented, and the joint breadcrumb+report path was under-tested.
+
+**Valid findings — actioned:**
+- **No test covered the actual double-breadcrumb symptom** (`.breadcrumbs().report()` together
+  asserting exactly one `addBreadcrumb`). Every existing test had report XOR breadcrumbs.
+  → Added regression (`.value()` + `.unwrap()`, asserts 1 add + 1 capture). Commit c41d6f1.
+
+**Valid findings — deferred (already noted in PR body / v2):**
+- Global mutable `defaultReporter` static + import-order hazard (pre-existing; not introduced).
+- In-flight config-mutation race on the mutable builder (pre-existing).
+- `reportError` still passes now-vestigial `breadcrumbData` to `report()` (the factory ignores
+  it; harmless, but a latent footgun for custom reporters that read it → interface cleanup, v2).
+- Breadcrumb PII / redaction story absent.
+- publint `--strict` / attw still flag the ESM **types** masquerade — the deferred `.d.mts`
+  split. (PR body already caveats this; "packaging fix" covers runtime + CJS/ESM JS, not types.)
+- Disagrees with `minify:true` on a bundler-consumed lib (weak trade-off) — deliberate, kept.
+
+**Corrected (grok overstated):**
+- Grok claimed `.value()` / `.error()` / `.result()` all emit breadcrumbs on a non-reporting
+  terminal. Verified: only `.value()` does (when `breadcrumbConfig` set and no message — a
+  pre-existing, arguably-intended side-effect). **`.error()` and `.result()` are
+  side-effect-free** (Try.ts:602-616, 565-575) — no `addBreadcrumbs` call.
 
 ---
 
 ## Consensus & Synthesis
 
-Single external reviewer (Codex) + original analysis. High agreement on packaging
-(peers, exports, LICENSE, publishConfig) and the README mutability/`await` lies.
+Two external reviewers (Codex on the analysis, Grok on the implemented PR) + original analysis.
+Strong agreement on packaging (peers, exports, LICENSE, publishConfig), the README
+mutability/`await` lies, and that the global-reporter / in-flight-mutation / PII / `.d.mts`
+items are real but belong in a v2. Grok's one net-new actionable was the missing joint
+breadcrumb+report regression test (now added).
 
 ### Confirmed corrections to the original analysis
 - **`await` footgun reframed:** it *swallows the error* (implicit `.value()`), and DOES
