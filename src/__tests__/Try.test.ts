@@ -1739,4 +1739,29 @@ describe('Try', () => {
       ).toBe('fallback');
     });
   });
+
+  describe('breadcrumbs + report — Next.js double-add regression', () => {
+    // The original bug: the nextjs reporter re-added breadcrumbs the core had
+    // already added, so a reported failure emitted each breadcrumb twice. This
+    // locks in exactly one addBreadcrumb and one captureException per report.
+    async function failing(_params: Record<string, unknown>): Promise<never> {
+      throw new Error('boom');
+    }
+    const reportingAttempt = () =>
+      new Try(failing, { id: 7 }).breadcrumbs(['id']).report('failed');
+    const expectReportedOnce = () => {
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    };
+
+    it('adds the breadcrumb exactly once with report on .value()', async () => {
+      await reportingAttempt().value();
+      expectReportedOnce();
+    });
+
+    it('adds the breadcrumb exactly once with report on .unwrap()', async () => {
+      await expect(reportingAttempt().unwrap()).rejects.toThrow('failed');
+      expectReportedOnce();
+    });
+  });
 });
