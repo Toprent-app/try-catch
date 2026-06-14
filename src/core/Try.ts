@@ -50,6 +50,26 @@ function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
 }
 
 /**
+ * Normalize an unknown thrown value into an Error without ever throwing.
+ * `String(value)` can itself throw (e.g. a null-prototype object, or a value
+ * whose `toString`/`Symbol.toPrimitive` throws), so the conversion is guarded
+ * and falls back to a static message. This keeps the never-throw contract of
+ * `.value()`, `.error()`, and `.result()` intact for non-Error throwables.
+ */
+function toError(value: unknown): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+  let message: string;
+  try {
+    message = String(value);
+  } catch {
+    message = 'Unknown non-Error thrown value';
+  }
+  return new Error(message);
+}
+
+/**
  * Resolves to True when T is or may be a Promise (so callers must handle async).
  * For Promise<T> | T (mixed return type), resolves to True so value()/unwrap()
  * are typed as returning Promise<...> and the value is handled via await.
@@ -706,7 +726,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
             if (this.config.debug) {
               console.error(e);
             }
-            const error = e instanceof Error ? e : new Error(String(e));
+            const error = toError(e);
             this.cachedResult = { success: false, error };
             return this.cachedResult;
           })
@@ -727,7 +747,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       if (this.config.debug) {
         console.error(e);
       }
-      const error = e instanceof Error ? e : new Error(String(e));
+      const error = toError(e);
       this.isAsync = false;
       this.cachedResult = { success: false, error };
     } finally {
