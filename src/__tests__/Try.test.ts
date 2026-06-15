@@ -1740,6 +1740,80 @@ describe('Try', () => {
     });
   });
 
+  describe('error-like throwables (custom error preservation)', () => {
+    const throwingSync = (value: unknown) =>
+      new Try(() => {
+        throw value;
+      });
+    const throwingAsync = (value: unknown) =>
+      new Try(async () => {
+        throw value;
+      });
+
+    it('keeps the original instance for same-realm Errors (no reconstruction)', () => {
+      const original = new GraphQLError('boom');
+      expect(throwingSync(original).error()).toBe(original);
+    });
+
+    it('preserves name, message, stack and custom fields of an error-like object', async () => {
+      const errorLike = {
+        name: 'ValidationError',
+        message: 'email is invalid',
+        stack: 'ValidationError: email is invalid\n    at origin',
+        code: 'E_VALIDATION',
+        statusCode: 422,
+      };
+
+      for (const error of [
+        throwingSync(errorLike).error(),
+        await throwingAsync(errorLike).error(),
+      ]) {
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.name).toBe('ValidationError');
+        expect(error?.message).toBe('email is invalid');
+        expect(error?.stack).toBe(errorLike.stack);
+        expect((error as { code?: string }).code).toBe('E_VALIDATION');
+        expect((error as { statusCode?: number }).statusCode).toBe(422);
+        // Original reachable for debugging / nested cause chains.
+        expect(error?.cause).toBe(errorLike);
+      }
+    });
+
+    it('preserves cross-realm Errors flagged only by their toString tag', () => {
+      const crossRealm = {
+        [Symbol.toStringTag]: 'Error',
+        name: 'RangeError',
+        message: 'out of range',
+      };
+      const error = throwingSync(crossRealm).error();
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.name).toBe('RangeError');
+      expect(error?.message).toBe('out of range');
+      expect(error?.cause).toBe(crossRealm);
+    });
+
+    it('routes a preserved name through throwThroughErrorTypes', async () => {
+      Try.throwThroughErrorTypes(['ValidationError']);
+      const errorLike = { name: 'ValidationError', message: 'nope' };
+
+      await expect(
+        throwingAsync(errorLike).report('failed').unwrap(),
+      ).rejects.toMatchObject({ name: 'ValidationError', message: 'nope' });
+    });
+
+    it('never throws on an error-like value whose message getter throws', () => {
+      const hostile = {
+        name: 'HostileError',
+        get message(): string {
+          throw new Error('message getter blew up');
+        },
+      };
+      const error = throwingSync(hostile).error();
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.name).toBe('HostileError');
+    });
+  });
+
   describe('breadcrumbs + report — Next.js double-add regression', () => {
     // The original bug: the nextjs reporter re-added breadcrumbs the core had
     // already added, so a reported failure emitted each breadcrumb twice. This
