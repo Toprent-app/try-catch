@@ -8,7 +8,16 @@ import {
   BreadcrumbExtractor as BreadcrumbExtractorType,
   BreadcrumbExtractorUtil,
 } from '../utils';
-import { Reporter, NoopReporter, ErrorReportConfig } from './reporter';
+import { Reporter, ErrorReportConfig } from './reporter';
+import {
+  Scope,
+  Collected,
+  ScopeProvider,
+  getScopeProvider as readScopeProvider,
+  setScopeProvider as writeScopeProvider,
+  getDefaultReporter as readDefaultReporter,
+  setDefaultReporter as writeDefaultReporter,
+} from './scope';
 
 /**
  * Configuration for Try execution
@@ -80,23 +89,41 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private isAsync?: boolean;
   private cachedBreadcrumbData?: Record<string, unknown>;
   private breadcrumbsAdded: boolean = false;
+  private scope?: Scope;
+  private isBoundary: boolean = false;
+  private collected: boolean = false;
   private state: 'pending' | 'executed';
   private static ignoreErrorTypes: string[] = [];
-  private static defaultReporter: Reporter = new NoopReporter();
 
   /**
    * Set the default reporter for all Try instances
    * @param reporter The reporter implementation to use
    */
   static setDefaultReporter(reporter: Reporter): void {
-    Try.defaultReporter = reporter;
+    writeDefaultReporter(reporter);
   }
 
   /**
    * Get the current default reporter
    */
   static getDefaultReporter(): Reporter {
-    return Try.defaultReporter;
+    return readDefaultReporter();
+  }
+
+  /**
+   * Install the scope provider used for report-once aggregation. Node/Next.js
+   * entries inject an AsyncLocalStorage-backed provider; browser/core leave the
+   * default no-op provider (legacy per-terminal reporting).
+   */
+  static setScopeProvider(provider: ScopeProvider): void {
+    writeScopeProvider(provider);
+  }
+
+  /**
+   * Get the current scope provider.
+   */
+  static getScopeProvider(): ScopeProvider {
+    return readScopeProvider();
   }
 
   /**
@@ -457,17 +484,17 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (!resolved.success) {
-          const shouldCapture = this.config.message;
-
-          if (shouldCapture) {
-            this.reportError(resolved.error);
+          if (!this.collectorSettle(resolved)) {
+            if (this.config.message) {
+              this.reportError(resolved.error);
+            }
           }
 
           if (
             this.config.message &&
             !Try.ignoreErrorTypes.includes(resolved.error.name)
           ) {
-            const wrappedError = Try.defaultReporter.createWrappedError(
+            const wrappedError = Try.getDefaultReporter().createWrappedError(
               resolved.error,
               this.config.message,
             );
@@ -476,22 +503,23 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
           throw resolved.error;
         }
 
+        this.collectorSettle(resolved);
         return resolved.value;
       }) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
     }
 
     if (!result.success) {
-      const shouldCapture = this.config.message;
-
-      if (shouldCapture) {
-        this.reportError(result.error);
+      if (!this.collectorSettle(result)) {
+        if (this.config.message) {
+          this.reportError(result.error);
+        }
       }
 
       if (
         this.config.message &&
         !Try.ignoreErrorTypes.includes(result.error.name)
       ) {
-        const wrappedError = Try.defaultReporter.createWrappedError(
+        const wrappedError = Try.getDefaultReporter().createWrappedError(
           result.error,
           this.config.message,
         );
@@ -500,6 +528,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       throw result.error;
     }
 
+    this.collectorSettle(result);
     return result.value as IfPromise<
       TReturn,
       Promise<Awaited<TReturn>>,
@@ -547,7 +576,23 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     Promise<TryResult<TReturn>>,
     TryResult<TReturn>
   > {
-    return this.execute() as IfPromise<
+    const result = this.execute();
+
+    if (this.scope) {
+      if (isPromiseLike<TryResult<TReturn>>(result)) {
+        return result.then((resolved) => {
+          this.collectorSettle(resolved);
+          return resolved;
+        }) as IfPromise<
+          TReturn,
+          Promise<TryResult<TReturn>>,
+          TryResult<TReturn>
+        >;
+      }
+      this.collectorSettle(result);
+    }
+
+    return result as IfPromise<
       TReturn,
       Promise<TryResult<TReturn>>,
       TryResult<TReturn>
@@ -583,11 +628,13 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) =>
-        resolved.success ? undefined : resolved.error,
-      ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+      return result.then((resolved) => {
+        this.collectorSettle(resolved);
+        return resolved.success ? undefined : resolved.error;
+      }) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
+    this.collectorSettle(result);
     return (result.success ? undefined : result.error) as IfPromise<
       TReturn,
       Promise<Error | undefined>,
@@ -633,13 +680,16 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (resolved.success) {
+          this.collectorSettle(resolved);
           return resolved.value;
         }
 
-        if (this.config.message) {
-          this.reportError(resolved.error);
-        } else if (this.config.breadcrumbConfig) {
-          this.addBreadcrumbsIfConfigured();
+        if (!this.collectorSettle(resolved)) {
+          if (this.config.message) {
+            this.reportError(resolved.error);
+          } else if (this.config.breadcrumbConfig) {
+            this.addBreadcrumbsIfConfigured();
+          }
         }
 
         return this.config.defaultValue;
@@ -651,6 +701,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     if (result.success) {
+      this.collectorSettle(result);
       return result.value as IfPromise<
         TReturn,
         Promise<Awaited<TReturn> | undefined>,
@@ -658,10 +709,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       >;
     }
 
-    if (this.config.message) {
-      this.reportError(result.error);
-    } else if (this.config.breadcrumbConfig) {
-      this.addBreadcrumbsIfConfigured();
+    if (!this.collectorSettle(result)) {
+      if (this.config.message) {
+        this.reportError(result.error);
+      } else if (this.config.breadcrumbConfig) {
+        this.addBreadcrumbsIfConfigured();
+      }
     }
 
     return this.config.defaultValue as IfPromise<
@@ -689,8 +742,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       return this.cachedPromise;
     }
 
+    const provider = Try.getScopeProvider();
+    if (provider.collects) {
+      const store = provider.getStore();
+      this.isBoundary = store === undefined;
+      this.scope = this.isBoundary ? { errors: [], flushed: false } : store;
+    }
+
     try {
-      const value = this.fn(...this.args);
+      const value =
+        this.scope && this.isBoundary
+          ? provider.run(this.scope, () => this.fn(...this.args))
+          : this.fn(...this.args);
 
       if (isPromiseLike<Awaited<TReturn>>(value)) {
         this.isAsync = true;
@@ -767,7 +830,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private reportError(error: Error): void {
     this.addBreadcrumbsIfConfigured();
 
-    Try.defaultReporter.report(error, {
+    Try.getDefaultReporter().report(error, {
       message: this.config.message,
       tags: this.config.tags,
       breadcrumbData: this.cachedBreadcrumbData,
@@ -783,15 +846,17 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       return;
     }
 
-    // Cache breadcrumb data to avoid re-computation
-    if (!this.cachedBreadcrumbData) {
-      this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
-    }
+    // Compute breadcrumb data once (the `breadcrumbsAdded` guard above ensures
+    // this method body runs at most once per instance).
+    this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
 
     // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.cachedBreadcrumbData, functionName);
+    Try.getDefaultReporter().addBreadcrumbs(
+      this.cachedBreadcrumbData,
+      functionName,
+    );
     this.breadcrumbsAdded = true;
   }
 
@@ -805,6 +870,231 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       this.args,
       this.config.debug,
     );
+  }
+
+  /**
+   * Collector-path side effects on settle: collect this layer's error (once,
+   * gated on `.report()`/breadcrumbs) and, at the boundary, flush the scope.
+   * Returns `true` when the collector path is active, so callers skip the
+   * legacy live-report side effect.
+   */
+  private collectorSettle(result: TryResult<TReturn>): boolean {
+    const scope = this.scope;
+    if (!scope) {
+      return false;
+    }
+    if (scope.flushed) {
+      // Scope already emitted. A nested Try settling now (fire-and-forget or
+      // otherwise detached) acts as its own boundary rather than appending to a
+      // dead scope.
+      if (!result.success && !this.collected) {
+        this.lateEmit(result.error);
+      }
+      return true;
+    }
+    if (!result.success) {
+      this.collectError(scope, result.error);
+    }
+    if (this.isBoundary) {
+      this.flushScope(scope);
+    }
+    return true;
+  }
+
+  /**
+   * Emit a nested Try's own error directly when it settled after its boundary
+   * already flushed. Bounds the fire-and-forget limitation to "may emit
+   * separately" rather than "silently lost".
+   */
+  private lateEmit(error: Error): void {
+    this.collected = true;
+    if (!this.config.message) {
+      return; // breadcrumb-only late arrival → nothing to emit
+    }
+    if (this.config.debug) {
+      console.warn(
+        'report-once: nested Try settled after the boundary flushed; emitting separately',
+      );
+    }
+    this.emitGroup([
+      {
+        error,
+        message: this.config.message,
+        tags: this.config.tags,
+        breadcrumbData: this.collectBreadcrumbData(),
+        functionName: this.fn.name || 'anonymous',
+      },
+    ]);
+  }
+
+  /**
+   * Append this layer's contribution to the scope, once per instance. A layer
+   * with a `.report()` message contributes a cause node; a breadcrumb-only
+   * layer contributes breadcrumbs that attach iff its root's event fires.
+   */
+  private collectError(scope: Scope, error: Error): void {
+    if (this.collected) {
+      return;
+    }
+    if (this.config.message) {
+      scope.errors.push({
+        error,
+        message: this.config.message,
+        tags: this.config.tags,
+        breadcrumbData: this.collectBreadcrumbData(),
+        functionName: this.fn.name || 'anonymous',
+      });
+      this.collected = true;
+    } else if (this.config.breadcrumbConfig) {
+      scope.errors.push({
+        error,
+        tags: this.config.tags,
+        breadcrumbData: this.collectBreadcrumbData(),
+        functionName: this.fn.name || 'anonymous',
+      });
+      this.collected = true;
+    }
+  }
+
+  private collectBreadcrumbData(): Record<string, unknown> | undefined {
+    return this.config.breadcrumbConfig
+      ? this.extractAllBreadcrumbData()
+      : undefined;
+  }
+
+  /**
+   * Flush the boundary scope: emit one event per distinct root failure, then
+   * clear the scope. Called exactly once per scope — {@link collectorSettle}
+   * is the sole caller and routes already-flushed settles to the late path.
+   */
+  private flushScope(scope: Scope): void {
+    scope.flushed = true;
+
+    for (const group of this.groupByRoot(scope.errors)) {
+      if (group.some((entry) => entry.message)) {
+        this.emitGroup(group);
+      }
+    }
+
+    scope.errors.length = 0;
+  }
+
+  /**
+   * Walk an error's `.cause` chain to its deepest `Error` (the root), with a
+   * cycle guard. Used only as a de-dup key — the emitted leaf is still the
+   * innermost collected error, not this walked root.
+   */
+  private rootOf(error: Error): Error {
+    const seen = new Set<Error>();
+    let current: Error = error;
+    while (current.cause instanceof Error) {
+      if (seen.has(current)) {
+        break;
+      }
+      seen.add(current);
+      current = current.cause;
+    }
+    return current;
+  }
+
+  /**
+   * Group collected entries by their root error's identity so each distinct
+   * root failure becomes one event. Entry order within a group is preserved
+   * (innermost first); groups are returned in first-seen order.
+   */
+  private groupByRoot(entries: Collected[]): Collected[][] {
+    const groups: Collected[][] = [];
+    const byKey = new Map<Error | string, Collected[]>();
+    for (const entry of entries) {
+      const key = this.groupKey(this.rootOf(entry.error));
+      let group = byKey.get(key);
+      if (!group) {
+        group = [];
+        byKey.set(key, group);
+        groups.push(group);
+      }
+      group.push(entry);
+    }
+    return groups;
+  }
+
+  /**
+   * De-dup key for a root failure: real `Error`s key by identity (distinct
+   * throws stay distinct); error-like values (non-`Error`, e.g. reconstructed
+   * `{ name, message, code }` shapes whose object identity is unstable across
+   * layers) key by content so they don't split into duplicate events.
+   */
+  private groupKey(root: Error): Error | string {
+    if (root instanceof Error) {
+      return root;
+    }
+    const like = root as { name?: unknown; message?: unknown; code?: unknown };
+    return `${String(like.name ?? '')}\0${String(like.message ?? '')}\0${String(
+      like.code ?? '',
+    )}`;
+  }
+
+  /**
+   * Assemble one event from a group of collected entries (innermost first) and
+   * hand it to the reporter.
+   */
+  private emitGroup(entries: Collected[]): void {
+    const messages = entries
+      .filter((entry) => entry.message)
+      .map((entry) => entry.message as string)
+      .reverse();
+
+    const leaf = entries[0].error;
+    const assembled = this.buildCauseChain(messages, leaf);
+    const tags = entries.reduce<Record<string, string>>(
+      (acc, entry) => ({ ...acc, ...entry.tags }),
+      {},
+    );
+    const breadcrumbs = entries
+      .filter(
+        (entry) =>
+          entry.breadcrumbData && Object.keys(entry.breadcrumbData).length > 0,
+      )
+      .map((entry) => ({
+        data: entry.breadcrumbData as Record<string, unknown>,
+        functionName: entry.functionName,
+      }));
+
+    const reporter = Try.getDefaultReporter();
+    try {
+      if (reporter.capture) {
+        reporter.capture(assembled, {
+          tags,
+          breadcrumbs: breadcrumbs.length > 0 ? breadcrumbs : undefined,
+        });
+      } else {
+        reporter.report(leaf, {
+          message: messages[0],
+          tags,
+          breadcrumbData: entries[0].breadcrumbData,
+          functionName: entries[0].functionName,
+        });
+      }
+    } catch (err) {
+      if (this.config.debug) {
+        console.error('Error in report-once flush', err);
+      }
+    }
+  }
+
+  /**
+   * Build a nested-cause chain `messages[0]` (outermost) → … → `leaf`. Each
+   * wrapper copies the leaf's stack so `Try`/assembly frames never appear.
+   */
+  private buildCauseChain(messages: string[], leaf: Error): Error {
+    let current: Error = leaf;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const wrapper = new Error(messages[i]);
+      wrapper.cause = current;
+      wrapper.stack = leaf.stack;
+      current = wrapper;
+    }
+    return current;
   }
 
   /**

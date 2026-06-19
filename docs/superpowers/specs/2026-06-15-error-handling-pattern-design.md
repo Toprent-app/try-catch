@@ -181,6 +181,79 @@ capture?(assembledError: Error, opts: {
 - **ALS provider** lives in a node-only module (`src/adapters/node/scopeProvider.ts`) importing `node:async_hooks`; stores its single `AsyncLocalStorage` on the `globalThis` registry; `collects: true`.
 - **Injection:** `src/node/index.ts` injects it directly. `src/nextjs/index.ts` injects it **lazily and runtime-guarded** — never a top-level static `import` of the node module (that would pull `node:async_hooks` into the shared Edge/client bundle before any guard runs). Use a guarded dynamic import / `require` keyed on Node-runtime detection (e.g. `process.env.NEXT_RUNTIME === 'nodejs'` or `AsyncLocalStorage` feature-detect); Edge/client leave `NoopScopeProvider`.
 - **Browser / bare core:** never inject → legacy path.
+
+## 8. Sync vs async (detail)
+
+See §4.7–§4.8. The async boundary awaiting its nested `Try`s is the supported
+aggregating pattern. A sync boundary flushes after its synchronous portion only;
+a nested *async* `Try` under a sync boundary settles after the flush and is
+handled by the §4.6 late-collection guard (emits separately, not lost).
+
+## 9. Reporter contract
+
+`Reporter` keeps `report` / `addBreadcrumbs` / `createWrappedError` (legacy path)
+and gains an **optional** `capture?(assembledError, { tags, breadcrumbs })`
+(§6). The collector path calls `capture` when present and otherwise falls back to
+per-root `report`, so third-party reporters keep working without changes.
+
+## 10. Backward compatibility & breaking changes
+
+- **Legacy path unchanged.** Browser, bare core, and Next.js Edge behave exactly
+  as before (path gate on `scopeProvider.collects`, §4.3).
+- **Breaking (collector path):** `.error()` / `.result()` now report when
+  `.report()` was set (§3); breadcrumbs are event-scoped rather than global
+  (§6). These ship as a **major** release with README + test updates.
+- **Removed:** the deprecated, unexported `ErrorReporter` utility (also removes a
+  transitive `@sentry/nextjs` import from the browser-safe core graph).
+
+## 11. Key decisions
+
+- **D1 — Implicit boundary only.** No new public boundary API; the outermost
+  `Try` in the async context opens the scope (§3, §4.4).
+- **D2 — `.report()` gates collection** on all terminals, not terminal type
+  (§4.5) — realizes "`.report()` always contributes".
+- **D3 — Preserve application cause chains.** Leaf = innermost collected original
+  error, not the deepest-walked root (§5.2).
+- **D4 — Tag passing is correct, not a bug.** `@sentry/core`
+  `captureException(error, captureContext)` accepts `tags`; the legacy path is
+  unchanged and the collector path uses `withScope` regardless. No fix shipped.
+- **D5 — `globalThis` registry** so per-entry bundles + the ALS converge (§4.2).
+- **D6 — `flushed` guard** for idempotent, once-only boundary flush (§4.6); the
+  sole caller routes already-flushed settles to the late path.
+- **D7 — Error-like de-dup fallback.** Non-`Error` roots key by
+  `name\0message\0code`; real `Error`s key by identity (§5.1).
+- **D8 — Lazy, runtime-guarded ALS injection** for the Next.js entry so Edge /
+  client bundles never load `node:async_hooks` (§7).
+
+## 12. Limitations
+
+- Fire-and-forget / detached / late-settling nested work emits separately
+  (late-collection guard, §4.6) — documented as not aggregated.
+- Sync boundaries aggregate only synchronously-collected nested errors (§8).
+- Browser / Edge have no reliable `AsyncLocalStorage` → legacy path only.
+- Deep chains may hit Sentry's linked-exception render limit; recommend
+  `linkedErrorsIntegration({ limit })` (§5).
+
+## 13. Testing strategy
+
+Per vertical slice (see the implementation plan): single-Try parity, multi-layer
+de-dup + app-cause preservation, robustness (error-like de-dup, late collection,
+sync/async, throw-through), and Next.js packaging (collector activation + build
+guard that the Edge/client bundles are free of `node:async_hooks`). 100% line /
+branch / function coverage is enforced via the v8 coverage thresholds.
+
+## 14. Implementation checklist
+
+1. Core types + `globalThis` registry + path gate + optional `Reporter.capture`.
+2. `/node` collector: ALS provider, boundary detection + `provider.run`,
+   `.report()`-gated collection, idempotent flush, `capture` via `withScope`.
+3. Multi-layer nesting, root-identity grouping, assembly with app-cause
+   preservation.
+4. Robustness: error-like de-dup key, cycle guard, late-collection guard,
+   sync/async, throw-through.
+5. Next.js entry: lazy runtime-guarded injection + build guards; share the scope
+   across `/node` + `/nextjs`.
+6. Docs (README), `major` changeset, D4 verification.
 - **Build guards:** assert `node:async_hooks` never appears in `dist/browser/*`, `dist/index.*`, or the Edge/client portion of the nextjs bundle. Consider package.json export conditions (`edge-light`/`react-server`/`browser`) to route a node-only sub-bundle.
 
 ### 7.1 Per-entry bundling

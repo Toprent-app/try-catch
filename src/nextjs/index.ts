@@ -1,10 +1,31 @@
 import { Try as CoreTry } from '../core/Try';
+import { Scope, installCollector } from '../core/scope';
 import { SentryReporter } from './SentryReporter';
 
 export type { TryResult } from '../core/Try';
 
 // Set up the Sentry reporter as the default for NextJS
 CoreTry.setDefaultReporter(new SentryReporter());
+
+/**
+ * Enable report-once aggregation only on the Next.js Node.js runtime. The
+ * import of `node:async_hooks` is dynamic and runtime-guarded so the Edge and
+ * client bundles never load it (a static import would break those runtimes).
+ */
+function installNextjsCollector(): void {
+  if (typeof process === 'undefined' || process.env.NEXT_RUNTIME !== 'nodejs') {
+    return;
+  }
+  void import('node:async_hooks')
+    .then(({ AsyncLocalStorage }) => {
+      installCollector(() => new AsyncLocalStorage<Scope>());
+    })
+    .catch(() => {
+      // async_hooks unavailable → stay on the legacy path
+    });
+}
+
+installNextjsCollector();
 
 /**
  * NextJS-specific Try class with Sentry integration pre-configured.

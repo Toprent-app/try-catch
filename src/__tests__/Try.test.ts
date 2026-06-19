@@ -790,6 +790,44 @@ describe('Try', () => {
         }
       });
 
+      it('reuses the in-flight promise for concurrent terminals before settle', async () => {
+        let calls = 0;
+        const slow = () =>
+          new Promise<string>((resolve) =>
+            setTimeout(() => {
+              calls += 1;
+              resolve('done');
+            }, 10),
+          );
+
+        const tryInstance = new Try(slow);
+        // Both terminals call execute() before the first settles, so the second
+        // must return the already in-flight cachedPromise (fn runs once).
+        const valuePromise = tryInstance.value();
+        const resultPromise = tryInstance.result();
+
+        const [value, result] = await Promise.all([
+          valuePromise,
+          resultPromise,
+        ]);
+
+        expect(value).toBe('done');
+        expect(result).toEqual({ success: true, value: 'done' });
+        expect(calls).toBe(1);
+      });
+
+      it('then() tolerates missing and explicit handlers', async () => {
+        // No handlers → onfulfilled/onrejected coalesce to undefined.
+        const bare = await new Try(() => 'ok').then();
+        expect(bare).toBe('ok');
+
+        // Explicit onrejected is forwarded but never fires (value() never rejects).
+        const onRejected = vi.fn();
+        const mapped = await new Try(() => 'ok').then((x) => x, onRejected);
+        expect(mapped).toBe('ok');
+        expect(onRejected).not.toHaveBeenCalled();
+      });
+
       it('should work with async finally callbacks', async () => {
         const params = { parameterKey: 'alpha' };
         const finallySpy = vi.fn();

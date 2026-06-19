@@ -362,6 +362,74 @@ const result = await new Try(complexOperation, data)
   .value();
 ```
 
+## Report-once aggregation (Node / Next.js)
+
+On the **Node** (`@power-rent/try-catch/node`) and **Next.js Node runtime**
+(`@power-rent/try-catch/nextjs`) entries, nested `Try` calls that wrap the same
+root failure are aggregated into **exactly one Sentry event**, assembled as a
+nested `cause` chain. This solves the "one root error reported N times up the
+call stack" problem.
+
+```ts
+// level 3 throws → each layer reports → ONE Sentry event:
+//   "outer failed" → "mid failed" → "inner failed" → Error('db down')
+async function level3() { throw new Error('db down'); }
+async function level2() { return new Try(level3).report('inner failed').unwrap(); }
+async function level1() { return new Try(level2).report('mid failed').unwrap(); }
+await new Try(level1).report('outer failed').value();
+```
+
+**How it works.** The outermost `Try` in an `AsyncLocalStorage` context opens a
+scope (the *boundary*); nested `Try` calls collect into it instead of emitting;
+the boundary emits **one event per distinct root failure** when it settles. The
+leaf of the chain is the innermost original error, so a pre-existing application
+`cause` chain (e.g. `DomainError(cause: dbError)`) is preserved. The reported
+stack is the failed function's stack — `Try`/wrapper frames are not added.
+
+### Behavior changes on the collector path
+
+- **`.error()` and `.result()` now report** when `.report()` was called. They
+  still return the error/result to you, but no longer suppress the Sentry
+  report. (On the browser / bare-core / Edge legacy path they remain
+  non-reporting, exactly as before.)
+- **Graceful recovery still reports.** `.report().default().value()` returns the
+  default *and* reports — recovery no longer means silence.
+- **Breadcrumbs are event-scoped.** On the collector path breadcrumb data is
+  attached to the one assembled event via an isolated Sentry scope, instead of
+  added to the global Sentry breadcrumb trail.
+
+### Entries & runtimes
+
+| Entry | Runtime | Behavior |
+| --- | --- | --- |
+| `/node` | Node.js | Collector (report-once) |
+| `/nextjs` | Next.js Node runtime | Collector (report-once) |
+| `/nextjs` | Next.js Edge / client | Legacy per-terminal report |
+| `/browser`, bare `.` | anywhere | Legacy per-terminal report |
+
+The Next.js entry loads `node:async_hooks` only via a runtime-guarded dynamic
+import, so the Edge and client bundles never reference it.
+
+### Custom providers & reporters
+
+- `Try.setScopeProvider(provider)` installs a custom scope provider (advanced;
+  Node/Next.js only). The default no-op provider keeps the legacy path.
+- A custom `Reporter` may implement the optional `capture(assembledError, { tags, breadcrumbs })`
+  method to receive the assembled event; reporters without it fall back to the
+  per-root `report()`.
+
+### Limitations
+
+- **Fire-and-forget / detached work.** A nested `Try` that settles *after* its
+  boundary has already flushed (e.g. not `await`-ed, or scheduled via a timer)
+  emits its own event separately rather than joining the aggregate. It is never
+  silently lost.
+- **Sync boundaries** aggregate only synchronously-collected nested errors; an
+  async nested `Try` under a sync boundary emits separately.
+- **Sentry linked-exception depth.** Very deep chains may be truncated by
+  Sentry's rendering; configure `linkedErrorsIntegration({ limit })` if your
+  layer depth is large.
+
 ## Features
 
 - 🚀 **Promise-like interface** - Can be awaited directly

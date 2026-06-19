@@ -1,5 +1,9 @@
 import * as Sentry from '@sentry/node';
-import type { Reporter, ErrorReportConfig } from '../../core/reporter';
+import type {
+  Reporter,
+  ErrorReportConfig,
+  CaptureOptions,
+} from '../../core/reporter';
 
 /**
  * Node.js Sentry reporter implementation
@@ -31,5 +35,23 @@ export class NodeReporter implements Reporter {
     wrapped.cause = error;
     wrapped.stack = error.stack;
     return wrapped;
+  }
+
+  /**
+   * Collector-path emit: report one pre-assembled event with its tags and
+   * breadcrumbs attached in an isolated Sentry scope (never mutating global
+   * Sentry state).
+   */
+  capture(assembledError: Error, opts: CaptureOptions): void {
+    Sentry.withScope((scope) => {
+      scope.setTags({ ...opts.tags, library: '@power-rent/try-catch' });
+      opts.breadcrumbs?.forEach((breadcrumb) => {
+        scope.addBreadcrumb({
+          message: `Calling ${breadcrumb.functionName ?? 'anonymous'} function`,
+          data: breadcrumb.data,
+        });
+      });
+      Sentry.captureException(assembledError);
+    });
   }
 }
