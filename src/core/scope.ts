@@ -62,23 +62,42 @@ export class NoopScopeProvider implements ScopeProvider {
 interface Registry {
   scopeProvider: ScopeProvider;
   defaultReporter: Reporter;
+  /** `true` once any reporter (entry or user) has been installed. */
+  reporterInstalled: boolean;
+  /** Shared throw-through list, so all entry bundles in one realm agree. */
+  ignoreErrorTypes: string[];
 }
 
-const REGISTRY_KEY = Symbol.for('@power-rent/try-catch/registry');
+// Versioned so a future breaking change to the registry shape bumps the key
+// rather than letting a newer reader inherit an older, incompatible object.
+// Different majors therefore get separate registries (correct — they don't
+// need to converge); same-major bundles still share one.
+const REGISTRY_KEY = Symbol.for('@power-rent/try-catch/registry/v1');
 
 /**
  * Read (lazily creating) the shared registry. The registry lives on
  * `globalThis` so all loaded entry bundles in one realm share it.
+ *
+ * When adopting a registry created by another loaded bundle, missing fields are
+ * coalesced to safe defaults: two builds that pin the same `Symbol.for` key but
+ * disagree on shape (e.g. a skewed install) must never make a reader throw —
+ * the library's never-throw contract depends on `getIgnoreErrorTypes()` always
+ * returning an array.
  */
 export function getRegistry(): Registry {
   const holder = globalThis as unknown as Record<symbol, Registry | undefined>;
   const existing = holder[REGISTRY_KEY];
   if (existing) {
+    existing.scopeProvider ??= new NoopScopeProvider();
+    existing.defaultReporter ??= new NoopReporter();
+    existing.ignoreErrorTypes ??= [];
     return existing;
   }
   const created: Registry = {
     scopeProvider: new NoopScopeProvider(),
     defaultReporter: new NoopReporter(),
+    reporterInstalled: false,
+    ignoreErrorTypes: [],
   };
   holder[REGISTRY_KEY] = created;
   return created;
@@ -102,7 +121,7 @@ export interface AlsLike {
   run<T>(scope: Scope, fn: () => T): T;
 }
 
-const ALS_KEY = Symbol.for('@power-rent/try-catch/als');
+const ALS_KEY = Symbol.for('@power-rent/try-catch/als/v1');
 
 /**
  * Install an ALS-backed collector provider, sharing a single ALS across entry
@@ -124,9 +143,40 @@ export function installCollector(createAls: () => AlsLike): void {
 }
 
 export function setDefaultReporter(reporter: Reporter): void {
-  getRegistry().defaultReporter = reporter;
+  const registry = getRegistry();
+  registry.defaultReporter = reporter;
+  registry.reporterInstalled = true;
+}
+
+/**
+ * Install a default reporter only if none is installed yet (first-wins across
+ * entry bundles). The `/node` entry uses this so a transitively-loaded `/node`
+ * does not clobber a reporter an application already configured.
+ *
+ * Note: first-wins is load-order-dependent and therefore NOT a reliable guard
+ * for platform priority — if `/node` happens to initialize before a Next.js
+ * app's `/nextjs` entry, `NodeReporter` would win. The `/nextjs` entry
+ * deliberately uses the last-wins {@link setDefaultReporter} instead (its
+ * presence is authoritative for a Next.js app) so platform priority does not
+ * depend on import order. The public `Try.setDefaultReporter` is also last-wins,
+ * so explicit user overrides always apply.
+ */
+export function setDefaultReporterIfAbsent(reporter: Reporter): void {
+  const registry = getRegistry();
+  if (!registry.reporterInstalled) {
+    registry.defaultReporter = reporter;
+    registry.reporterInstalled = true;
+  }
 }
 
 export function getDefaultReporter(): Reporter {
   return getRegistry().defaultReporter;
+}
+
+export function setIgnoreErrorTypes(types: string[]): void {
+  getRegistry().ignoreErrorTypes = types;
+}
+
+export function getIgnoreErrorTypes(): string[] {
+  return getRegistry().ignoreErrorTypes ?? [];
 }

@@ -286,6 +286,37 @@ describe('report-once on /node (collector path)', () => {
     expect(assembled.message).toBe('inner failed');
     expect((assembled.cause as Error).message).toBe('boom');
   });
+
+  it('overflow-flushes a long-lived boundary in batches (bounded buffer, no loss)', async () => {
+    // A boundary that handles many distinct failures must not buffer them all
+    // until it returns (unbounded memory + crash-loss). The buffer caps at
+    // MAX_SCOPE_ERRORS (100) and flushes early, staying alive to keep collecting.
+    const COUNT = 150; // > cap, so at least one overflow flush fires mid-boundary
+
+    async function boundary(): Promise<number> {
+      for (let i = 0; i < COUNT; i++) {
+        // Distinct root + message each iteration; handled via value() so it
+        // accumulates into the scope instead of flushing.
+        await new Try(async (): Promise<never> => {
+          throw new Error(`e${i}`);
+        })
+          .report(`m${i}`)
+          .value();
+      }
+      // Evaluated before the boundary settles: an overflow flush has already
+      // emitted a batch, so the buffer never held all COUNT errors at once.
+      return captureException.mock.calls.length;
+    }
+
+    const emittedMidBoundary = await new Try(boundary)
+      .report('boundary')
+      .value();
+
+    expect(emittedMidBoundary).toBeGreaterThan(0); // flushed before boundary returned
+    expect(emittedMidBoundary).toBeLessThan(COUNT); // remainder flushes at the boundary
+    // Every distinct root emits exactly once — overflow batching loses/dupes none.
+    expect(captureException).toHaveBeenCalledTimes(COUNT);
+  });
 });
 
 describe('NodeReporter legacy (non-collector) methods', () => {

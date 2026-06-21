@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { Scope, installCollector } from '../../core/scope';
+import { installCollector } from '../../core/scope';
+import type { Scope } from '../../core/scope';
 
 /**
  * Enable report-once aggregation backed by `AsyncLocalStorage`. The shared ALS

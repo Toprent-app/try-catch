@@ -426,6 +426,15 @@ import, so the Edge and client bundles never reference it.
   silently lost.
 - **Sync boundaries** aggregate only synchronously-collected nested errors; an
   async nested `Try` under a sync boundary emits separately.
+- **Next.js cold start.** The collector is installed via a runtime-guarded
+  dynamic import that resolves during module initialization — before request
+  handling — so the collector is live by the first request in practice. A `Try`
+  that runs in the same synchronous tick as module load would use the legacy
+  path until the import resolves.
+- **Grouping is by identity.** Distinct root failures produce distinct events,
+  even two independent failures with the same message. Non-`Error` throws
+  (`null`, `undefined`, strings, plain objects) are reported safely and grouped
+  by identity.
 - **Sentry linked-exception depth.** Very deep chains may be truncated by
   Sentry's rendering; configure `linkedErrorsIntegration({ limit })` if your
   layer depth is large.

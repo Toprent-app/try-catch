@@ -17,6 +17,8 @@ import {
   setScopeProvider as writeScopeProvider,
   getDefaultReporter as readDefaultReporter,
   setDefaultReporter as writeDefaultReporter,
+  getIgnoreErrorTypes as readIgnoreErrorTypes,
+  setIgnoreErrorTypes as writeIgnoreErrorTypes,
 } from './scope';
 
 /**
@@ -70,6 +72,13 @@ type IfPromise<T, True, False> = [T] extends [never]
     : True;
 
 /**
+ * Upper bound on errors buffered in one report-once scope before an overflow
+ * flush. Caps memory and the crash-loss window for a long-lived boundary that
+ * aggregates many failures; the common single-operation boundary never hits it.
+ */
+const MAX_SCOPE_ERRORS = 100;
+
+/**
  * Core Try class for simplified async error handling.
  * This implementation is framework-agnostic and uses a Reporter interface
  * to decouple error reporting from specific services.
@@ -93,7 +102,6 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private isBoundary: boolean = false;
   private collected: boolean = false;
   private state: 'pending' | 'executed';
-  private static ignoreErrorTypes: string[] = [];
 
   /**
    * Set the default reporter for all Try instances
@@ -174,6 +182,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *
    * @param ignoreErrorTypes Array of error type names (error.name) to throw through
    *
+   * Note: this writes a single realm-global list (shared across all entry
+   * bundles via the registry) with last-wins semantics — a later call, in the
+   * app or any dependency, replaces the whole list rather than merging. Set it
+   * once at startup with the full set of types.
+   *
    * @example
    * ```typescript
    * // Configure to throw ValidationError and AuthError as-is
@@ -186,7 +199,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * ```
    */
   public static throwThroughErrorTypes(ignoreErrorTypes: string[]) {
-    this.ignoreErrorTypes = ignoreErrorTypes;
+    writeIgnoreErrorTypes(ignoreErrorTypes);
   }
 
   /**
@@ -482,54 +495,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (!resolved.success) {
-          if (!this.collectorSettle(resolved)) {
-            if (this.config.message) {
-              this.reportError(resolved.error);
-            }
-          }
-
-          if (
-            this.config.message &&
-            !Try.ignoreErrorTypes.includes(resolved.error.name)
-          ) {
-            const wrappedError = Try.getDefaultReporter().createWrappedError(
-              resolved.error,
-              this.config.message,
-            );
-            throw wrappedError;
-          }
-          throw resolved.error;
-        }
-
-        this.collectorSettle(resolved);
-        return resolved.value;
-      }) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
+      return result.then((resolved) =>
+        this.settleUnwrap(resolved),
+      ) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
     }
 
-    if (!result.success) {
-      if (!this.collectorSettle(result)) {
-        if (this.config.message) {
-          this.reportError(result.error);
-        }
-      }
-
-      if (
-        this.config.message &&
-        !Try.ignoreErrorTypes.includes(result.error.name)
-      ) {
-        const wrappedError = Try.getDefaultReporter().createWrappedError(
-          result.error,
-          this.config.message,
-        );
-        throw wrappedError;
-      }
-      throw result.error;
-    }
-
-    this.collectorSettle(result);
-    return result.value as IfPromise<
+    return this.settleUnwrap(result) as IfPromise<
       TReturn,
       Promise<Awaited<TReturn>>,
       Awaited<TReturn>
@@ -537,9 +508,63 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * Terminal handling shared by `unwrap`'s sync and async paths: run the shared
+   * report side effect, then on failure throw the wrapped error (unless the type
+   * is configured throw-through) or the original error; on success return the
+   * value.
+   */
+  private settleUnwrap(result: TryResult<TReturn>): Awaited<TReturn> {
+    this.runReportSideEffects(result);
+
+    if (!result.success) {
+      if (
+        this.config.message &&
+        !readIgnoreErrorTypes().includes(result.error.name)
+      ) {
+        throw Try.getDefaultReporter().createWrappedError(
+          result.error,
+          this.config.message,
+        );
+      }
+      throw result.error;
+    }
+
+    return result.value;
+  }
+
+  /**
+   * The report-or-collect side effect shared by every terminal
+   * (`value`/`unwrap`/`error`/`result`). Success settles the collector (flushing
+   * at the boundary). Failure routes through the collector when active;
+   * otherwise (legacy path) it honors `.report()` / breadcrumbs directly.
+   *
+   * Consequence: `.report()` alone decides *whether* an error is reported, on
+   * every platform and terminal. The platform decides only once-vs-live
+   * (collector vs legacy) and the terminal decides only the return shape
+   * (throw / value / error / result) — these axes are orthogonal.
+   */
+  private runReportSideEffects(result: TryResult<TReturn>): void {
+    if (result.success) {
+      this.collectorSettle(result);
+      return;
+    }
+
+    if (!this.collectorSettle(result)) {
+      if (this.config.message) {
+        this.reportError(result.error);
+      } else if (this.config.breadcrumbConfig) {
+        this.addBreadcrumbsIfConfigured();
+      }
+    }
+  }
+
+  /**
    * Execute the function and return a result object containing either the value or error.
    * This method never throws - it returns a discriminated union that you can pattern match on.
-   * Errors are not reported when using this method.
+   * A configured `.report()` reports on every platform: the collector path
+   * (Node / Next.js) emits one aggregated event for the boundary, the legacy
+   * path (browser / bare core / Edge) reports this layer's error directly.
+   * Without `.report()`, nothing is reported.
    *
    * @returns A result object with success flag, value (on success), or error (on failure)
    *
@@ -578,20 +603,14 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   > {
     const result = this.execute();
 
-    if (this.scope) {
-      if (isPromiseLike<TryResult<TReturn>>(result)) {
-        return result.then((resolved) => {
-          this.collectorSettle(resolved);
-          return resolved;
-        }) as IfPromise<
-          TReturn,
-          Promise<TryResult<TReturn>>,
-          TryResult<TReturn>
-        >;
-      }
-      this.collectorSettle(result);
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return result.then((resolved) => {
+        this.runReportSideEffects(resolved);
+        return resolved;
+      }) as IfPromise<TReturn, Promise<TryResult<TReturn>>, TryResult<TReturn>>;
     }
 
+    this.runReportSideEffects(result);
     return result as IfPromise<
       TReturn,
       Promise<TryResult<TReturn>>,
@@ -602,7 +621,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Execute the function and return the error if one occurred, or undefined if successful.
    * This method never throws - it returns the error as a value instead.
-   * Errors are not reported when using this method.
+   * A configured `.report()` reports on every platform: the collector path
+   * (Node / Next.js) emits one aggregated event for the boundary, the legacy
+   * path (browser / bare core / Edge) reports this layer's error directly.
+   * Without `.report()`, nothing is reported.
    *
    * @returns The error if execution failed, undefined if successful
    *
@@ -629,12 +651,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
-        this.collectorSettle(resolved);
+        this.runReportSideEffects(resolved);
         return resolved.success ? undefined : resolved.error;
       }) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
-    this.collectorSettle(result);
+    this.runReportSideEffects(result);
     return (result.success ? undefined : result.error) as IfPromise<
       TReturn,
       Promise<Error | undefined>,
@@ -678,50 +700,33 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (resolved.success) {
-          this.collectorSettle(resolved);
-          return resolved.value;
-        }
-
-        if (!this.collectorSettle(resolved)) {
-          if (this.config.message) {
-            this.reportError(resolved.error);
-          } else if (this.config.breadcrumbConfig) {
-            this.addBreadcrumbsIfConfigured();
-          }
-        }
-
-        return this.config.defaultValue;
-      }) as IfPromise<
+      return result.then((resolved) => this.settleValue(resolved)) as IfPromise<
         TReturn,
         Promise<Awaited<TReturn> | undefined>,
         Awaited<TReturn> | undefined
       >;
     }
 
-    if (result.success) {
-      this.collectorSettle(result);
-      return result.value as IfPromise<
-        TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
-      >;
-    }
-
-    if (!this.collectorSettle(result)) {
-      if (this.config.message) {
-        this.reportError(result.error);
-      } else if (this.config.breadcrumbConfig) {
-        this.addBreadcrumbsIfConfigured();
-      }
-    }
-
-    return this.config.defaultValue as IfPromise<
+    return this.settleValue(result) as IfPromise<
       TReturn,
       Promise<Awaited<TReturn> | undefined>,
       Awaited<TReturn> | undefined
     >;
+  }
+
+  /**
+   * Terminal handling shared by `value`'s sync and async paths: run the shared
+   * report side effect, then return the value on success or the configured
+   * default on failure (never throws).
+   */
+  private settleValue(
+    result: TryResult<TReturn>,
+  ): Awaited<TReturn> | undefined {
+    this.runReportSideEffects(result);
+
+    return result.success
+      ? (result.value as Awaited<TReturn>)
+      : (this.config.defaultValue as Awaited<TReturn> | undefined);
   }
 
   /**
@@ -743,10 +748,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     const provider = Try.getScopeProvider();
-    if (provider.collects) {
-      const store = provider.getStore();
-      this.isBoundary = store === undefined;
-      this.scope = this.isBoundary ? { errors: [], flushed: false } : store;
+    try {
+      if (provider.collects) {
+        const store = provider.getStore();
+        this.isBoundary = store === undefined;
+        this.scope = this.isBoundary ? { errors: [], flushed: false } : store;
+      }
+    } catch {
+      // A custom ScopeProvider that throws from `collects`/`getStore` must not
+      // break the never-throw contract: fall back to the legacy (no-aggregation)
+      // path. (Stock ALS never throws here.)
+      this.scope = undefined;
+      this.isBoundary = false;
     }
 
     try {
@@ -825,6 +838,15 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
+   * The wrapped function's name, normalized to `'anonymous'` for unnamed
+   * functions. Single source of truth so legacy and collector paths label
+   * breadcrumbs identically (an empty `fn.name` never reaches a reporter).
+   */
+  private get functionName(): string {
+    return this.fn.name || 'anonymous';
+  }
+
+  /**
    * Report error using the configured reporter with context.
    */
   private reportError(error: Error): void {
@@ -834,7 +856,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       message: this.config.message,
       tags: this.config.tags,
       breadcrumbData: this.cachedBreadcrumbData,
-      functionName: this.fn.name,
+      functionName: this.functionName,
     });
   }
 
@@ -850,12 +872,9 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     // this method body runs at most once per instance).
     this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
 
-    // Add function name to breadcrumbs for better context
-    const functionName = this.fn.name || 'anonymous';
-
     Try.getDefaultReporter().addBreadcrumbs(
       this.cachedBreadcrumbData,
-      functionName,
+      this.functionName,
     );
     this.breadcrumbsAdded = true;
   }
@@ -916,15 +935,22 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         'report-once: nested Try settled after the boundary flushed; emitting separately',
       );
     }
-    this.emitGroup([
-      {
-        error,
-        message: this.config.message,
-        tags: this.config.tags,
-        breadcrumbData: this.collectBreadcrumbData(),
-        functionName: this.fn.name || 'anonymous',
-      },
-    ]);
+    this.emitGroup([this.buildEntry(error)]);
+  }
+
+  /**
+   * Assemble this layer's {@link Collected} contribution. `message` is included
+   * verbatim from config (`undefined` for a breadcrumb-only layer, which
+   * downstream treats as "no cause node").
+   */
+  private buildEntry(error: Error): Collected {
+    return {
+      error,
+      message: this.config.message,
+      tags: this.config.tags,
+      breadcrumbData: this.collectBreadcrumbData(),
+      functionName: this.functionName,
+    };
   }
 
   /**
@@ -936,23 +962,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     if (this.collected) {
       return;
     }
-    if (this.config.message) {
-      scope.errors.push({
-        error,
-        message: this.config.message,
-        tags: this.config.tags,
-        breadcrumbData: this.collectBreadcrumbData(),
-        functionName: this.fn.name || 'anonymous',
-      });
+    if (this.config.message || this.config.breadcrumbConfig) {
+      scope.errors.push(this.buildEntry(error));
       this.collected = true;
-    } else if (this.config.breadcrumbConfig) {
-      scope.errors.push({
-        error,
-        tags: this.config.tags,
-        breadcrumbData: this.collectBreadcrumbData(),
-        functionName: this.fn.name || 'anonymous',
-      });
-      this.collected = true;
+      // Bound memory (and the crash-loss window) for a long-lived boundary that
+      // aggregates many failures: flush early once the buffer fills, keeping the
+      // scope alive so it keeps collecting. Tradeoff: a root that spans an
+      // overflow boundary can emit in more than one batch — acceptable under
+      // pathological volume; the common single-operation case never reaches the
+      // cap. Long-lived/streaming work should not be a single boundary `Try`.
+      if (scope.errors.length >= MAX_SCOPE_ERRORS) {
+        this.emitScope(scope);
+      }
     }
   }
 
@@ -963,12 +984,25 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
-   * Flush the boundary scope: emit one event per distinct root failure, then
-   * clear the scope. Called exactly once per scope — {@link collectorSettle}
-   * is the sole caller and routes already-flushed settles to the late path.
+   * Flush the boundary scope: emit everything buffered, then mark the scope
+   * flushed so any later settle routes to {@link lateEmit}. Called exactly once
+   * per scope — {@link collectorSettle} is the sole caller.
    */
   private flushScope(scope: Scope): void {
     scope.flushed = true;
+    this.emitScope(scope);
+  }
+
+  /**
+   * Emit one event per distinct root failure currently buffered, then clear the
+   * buffer. Shared by the boundary flush ({@link flushScope}) and the overflow
+   * flush in {@link collectError}; the overflow caller leaves `scope.flushed`
+   * false so the scope keeps collecting after the batch.
+   */
+  private emitScope(scope: Scope): void {
+    if (scope.errors.length === 0) {
+      return;
+    }
 
     for (const group of this.groupByRoot(scope.errors)) {
       if (group.some((entry) => entry.message)) {
@@ -981,57 +1015,62 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Walk an error's `.cause` chain to its deepest `Error` (the root), with a
-   * cycle guard. Used only as a de-dup key — the emitted leaf is still the
-   * innermost collected error, not this walked root.
+   * cycle guard. Tolerates non-object throws (`null`, `undefined`, strings,
+   * numbers, POJOs) by returning them unchanged. Used only as a de-dup key —
+   * the emitted leaf is still the innermost collected error.
    */
-  private rootOf(error: Error): Error {
-    const seen = new Set<Error>();
-    let current: Error = error;
-    while (current.cause instanceof Error) {
+  private rootOf(error: unknown): unknown {
+    const seen = new Set<unknown>();
+    let current: unknown = error;
+    while (
+      current != null &&
+      typeof current === 'object' &&
+      (current as { cause?: unknown }).cause instanceof Error
+    ) {
       if (seen.has(current)) {
         break;
       }
       seen.add(current);
-      current = current.cause;
+      current = (current as { cause?: unknown }).cause;
     }
     return current;
   }
 
   /**
-   * Group collected entries by their root error's identity so each distinct
-   * root failure becomes one event. Entry order within a group is preserved
-   * (innermost first); groups are returned in first-seen order.
+   * Group collected entries by their root failure's identity so each distinct
+   * root becomes one event. Real `Error`s and non-`Error` throws alike key by
+   * identity (`Map` value equality), so independent failures never merge.
+   * Entry order within a group is preserved (innermost first); groups are
+   * returned in first-seen order.
+   *
+   * Caveat: identity keying means two genuinely independent failures that reuse
+   * the *same* `Error` instance as their root (e.g. a cached/singleton error
+   * object observed by two operations) merge into one event — non-leaf entries'
+   * identity (stack, own props) is then discarded and only their `.message`
+   * survives in the assembled chain. Throwing fresh errors avoids this.
    */
   private groupByRoot(entries: Collected[]): Collected[][] {
     const groups: Collected[][] = [];
-    const byKey = new Map<Error | string, Collected[]>();
+    const byRoot = new Map<unknown, Collected[]>();
     for (const entry of entries) {
-      const key = this.groupKey(this.rootOf(entry.error));
-      let group = byKey.get(key);
+      const root = this.rootOf(entry.error);
+      // Only object roots dedup by identity. Primitive/null/undefined throws
+      // carry no identity, so two independent failures that happen to throw the
+      // same primitive value (`throw 'boom'`, `NaN`, …) must NOT merge — give
+      // each its own group rather than collapsing them on Map value-equality.
+      if (root === null || typeof root !== 'object') {
+        groups.push([entry]);
+        continue;
+      }
+      let group = byRoot.get(root);
       if (!group) {
         group = [];
-        byKey.set(key, group);
+        byRoot.set(root, group);
         groups.push(group);
       }
       group.push(entry);
     }
     return groups;
-  }
-
-  /**
-   * De-dup key for a root failure: real `Error`s key by identity (distinct
-   * throws stay distinct); error-like values (non-`Error`, e.g. reconstructed
-   * `{ name, message, code }` shapes whose object identity is unstable across
-   * layers) key by content so they don't split into duplicate events.
-   */
-  private groupKey(root: Error): Error | string {
-    if (root instanceof Error) {
-      return root;
-    }
-    const like = root as { name?: unknown; message?: unknown; code?: unknown };
-    return `${String(like.name ?? '')}\0${String(like.message ?? '')}\0${String(
-      like.code ?? '',
-    )}`;
   }
 
   /**
@@ -1084,17 +1123,24 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Build a nested-cause chain `messages[0]` (outermost) → … → `leaf`. Each
-   * wrapper copies the leaf's stack so `Try`/assembly frames never appear.
+   * wrapper copies the leaf's stack (when the leaf is an object with one) so
+   * `Try`/assembly frames never appear. Tolerates a non-object leaf.
    */
-  private buildCauseChain(messages: string[], leaf: Error): Error {
-    let current: Error = leaf;
+  private buildCauseChain(messages: string[], leaf: unknown): Error {
+    const leafStack =
+      leaf != null && typeof leaf === 'object'
+        ? (leaf as { stack?: string }).stack
+        : undefined;
+    let current: unknown = leaf;
     for (let i = messages.length - 1; i >= 0; i--) {
       const wrapper = new Error(messages[i]);
       wrapper.cause = current;
-      wrapper.stack = leaf.stack;
+      if (leafStack !== undefined) {
+        wrapper.stack = leafStack;
+      }
       current = wrapper;
     }
-    return current;
+    return current as Error;
   }
 
   /**

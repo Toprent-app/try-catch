@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterAll } from 'vitest';
 
-// Node runtime, but async_hooks lacks AsyncLocalStorage → installer must fall
-// back to the legacy path instead of crashing the module.
+// Node runtime, but the dynamic import resolves a module without
+// AsyncLocalStorage → the installer must stay on the legacy path, not crash.
 vi.hoisted(() => {
   process.env.NEXT_RUNTIME = 'nodejs';
 });

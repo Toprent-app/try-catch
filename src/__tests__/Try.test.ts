@@ -719,16 +719,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', async () => {
+      it('reports via result() + report() on the legacy path (report-everywhere)', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .report('should be reported')
           .result();
 
-        expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+        // `.report()` decides whether-reported on every terminal; the terminal
+        // only decides the return shape. result() therefore reports too.
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'should be reported' }),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              library: '@power-rent/try-catch',
+            }),
+          }),
+        );
       });
 
       it('should work with type guards for discriminated union', async () => {
@@ -1585,16 +1594,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', () => {
+      it('reports via result() + report() on the legacy path (report-everywhere)', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .report('should be reported')
           .result();
 
-        expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+        // `.report()` decides whether-reported on every terminal; the terminal
+        // only decides the return shape. result() therefore reports too.
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'should be reported' }),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              library: '@power-rent/try-catch',
+            }),
+          }),
+        );
       });
 
       it('should work with type guards for discriminated union', () => {

@@ -1,16 +1,28 @@
 import { Try as CoreTry } from '../core/Try';
-import { Scope, installCollector } from '../core/scope';
+import { installCollector, setDefaultReporter } from '../core/scope';
+import type { Scope } from '../core/scope';
 import { SentryReporter } from './SentryReporter';
 
 export type { TryResult } from '../core/Try';
 
-// Set up the Sentry reporter as the default for NextJS
-CoreTry.setDefaultReporter(new SentryReporter());
+// Force the Sentry (`@sentry/nextjs`) reporter as the default. The `/nextjs`
+// entry being loaded is authoritative for a Next.js app, so it wins regardless
+// of import order — a transitively-loaded `/node` entry must not route this
+// app's events to a typically-uninitialized `@sentry/node`. An explicit
+// `Try.setDefaultReporter` still overrides (also last-wins). Residual: a
+// pure-Node app that transitively imports `/nextjs` forces `SentryReporter`;
+// such apps should call `Try.setDefaultReporter` explicitly.
+setDefaultReporter(new SentryReporter());
 
 /**
  * Enable report-once aggregation only on the Next.js Node.js runtime. The
- * import of `node:async_hooks` is dynamic and runtime-guarded so the Edge and
- * client bundles never load it (a static import would break those runtimes).
+ * `node:async_hooks` import is a runtime-guarded dynamic import, so the Edge and
+ * client bundles never load it. It resolves during module initialization —
+ * before request handling — so in practice the collector is live by the first
+ * request. A `Try` that runs in the *same synchronous tick* as module load
+ * (e.g. at import time) would use the legacy path until the import resolves;
+ * any such nested Try that settles after the boundary flushed falls under the
+ * late-collection guard (emits separately rather than being lost).
  */
 function installNextjsCollector(): void {
   if (typeof process === 'undefined' || process.env.NEXT_RUNTIME !== 'nodejs') {

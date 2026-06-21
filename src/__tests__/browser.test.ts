@@ -33,12 +33,39 @@ describe('/browser entry (legacy path — no collector)', () => {
     );
   });
 
-  it('error()+report() does NOT report on the legacy path', async () => {
-    await new Try(async (): Promise<never> => {
+  it('error()+report() reports on the legacy path (report-everywhere)', async () => {
+    const err = await new Try(async (): Promise<never> => {
       throw new Error('boom');
     })
       .report('failed')
       .error();
+
+    // error() returns the original error to the caller...
+    expect((err as Error).message).toBe('boom');
+    // ...and `.report()` still reports the wrapped error once.
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect((captureException.mock.calls[0][0] as Error).message).toBe('failed');
+  });
+
+  it('result()+report() reports on the legacy path (report-everywhere)', async () => {
+    const res = await new Try(async (): Promise<never> => {
+      throw new Error('boom');
+    })
+      .report('failed')
+      .result();
+
+    expect(res.success).toBe(false);
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect((captureException.mock.calls[0][0] as Error).message).toBe('failed');
+  });
+
+  it('error()/result() without report() do NOT report on the legacy path', async () => {
+    await new Try(async (): Promise<never> => {
+      throw new Error('boom');
+    }).error();
+    await new Try(async (): Promise<never> => {
+      throw new Error('boom');
+    }).result();
 
     expect(captureException).not.toHaveBeenCalled();
   });

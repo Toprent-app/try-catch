@@ -139,7 +139,7 @@ Flush fires for both success and failure of the boundary fn, and regardless of t
 
 Input: `Collected[]` in execution order (innermost first). Output: one assembled `Error` per distinct root group.
 
-1. **Group for de-dup.** For each entry compute its *root key*: walk `error.cause` to the deepest `Error` (with a **cycle guard** — track visited via a `Set`, stop on repeat). Group by that root's **object identity** (`===`). **Fallback key:** if the deepest node is a reconstructed error-like value (identity unstable across layers because `errorFromErrorLike` builds a new `Error` per layer — common for GraphQL/HTTP `{name,message,code}` shapes), group by `name + '\0' + message + '\0' + (code ?? '')`. This keeps the common error-like case from splitting into duplicate events.
+1. **Group for de-dup.** For each entry compute its *root key*: walk `error.cause` to the deepest `Error` (with a **cycle guard** — track visited via a `Set`, stop on repeat), tolerating non-object throws (`null`/`undefined`/strings/POJOs are returned unchanged). Group by that root's **object identity** (`===`, via a `Map` so primitive/`null` roots are handled). **(Implemented as identity-only — see implementation REVIEWS.)** The originally-planned content-key fallback for reconstructed error-like values was dropped: nothing in the library reconstructs error-likes, and content-keying merged independent sibling failures that happened to share `name/message/code`. Independent failures therefore always produce independent events.
 2. **Per group** (skip groups whose entries all lack a `message`):
    - `messages` = the group's entries' `message`s in **outermost→innermost** order (reverse of collection order), dropping `undefined`.
    - **Leaf** = the **innermost collected entry's `error`**, used by reference — preserving its `name`, `stack`, custom own-enumerable fields, **and its own native `.cause` chain** (so an application `DomainError(cause: dbError)` is kept, not discarded for `dbError`).
@@ -220,8 +220,10 @@ per-root `report`, so third-party reporters keep working without changes.
 - **D5 — `globalThis` registry** so per-entry bundles + the ALS converge (§4.2).
 - **D6 — `flushed` guard** for idempotent, once-only boundary flush (§4.6); the
   sole caller routes already-flushed settles to the late path.
-- **D7 — Error-like de-dup fallback.** Non-`Error` roots key by
-  `name\0message\0code`; real `Error`s key by identity (§5.1).
+- **D7 — Identity grouping, null-safe.** Roots (real `Error`s, POJOs, and
+  primitives alike) key by identity/value via a `Map`; `rootOf`/assembly tolerate
+  non-object throws (`null`/`undefined`). The content-key fallback was dropped
+  (it merged independent siblings) — see implementation REVIEWS.
 - **D8 — Lazy, runtime-guarded ALS injection** for the Next.js entry so Edge /
   client bundles never load `node:async_hooks` (§7).
 

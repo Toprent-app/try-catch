@@ -9,12 +9,19 @@ Sentry event**, assembled as a nested `cause` chain, instead of one event per
 layer. The leaf preserves the innermost original error (and its own application
 `cause` chain); only the failed function's stack is reported.
 
-**Breaking changes (collector path — `/node` and `/nextjs` Node runtime only):**
+**Breaking changes:**
 
-- `.error()` and `.result()` now **report** when `.report()` was configured.
-  They still return the error/result, but no longer suppress the Sentry report.
-  The browser / bare-core / Next.js Edge legacy path is unchanged
-  (`.error()`/`.result()` remain non-reporting there).
+- `.error()` and `.result()` now **report** when `.report()` was configured, on
+  **every** platform — previously they reported only on the Node / Next.js
+  collector path and were silent on the browser / bare-core / Edge legacy path.
+  They still return the error/result. `.report()` alone decides *whether* an
+  error is reported; the platform decides only once-vs-live and the terminal
+  only the return shape.
+- The Next.js entry now **forces** its `@sentry/nextjs` reporter as the default
+  (load-order-independent) instead of first-wins, so a transitively-loaded
+  `/node` entry can no longer win and route a Next.js app's events to an
+  uninitialized `@sentry/node`. A pure-Node app that transitively imports
+  `/nextjs` should set its reporter explicitly via `Try.setDefaultReporter`.
 - Breadcrumbs on the collector path are attached to the single assembled event
   via an isolated Sentry scope, instead of being added to the global Sentry
   breadcrumb trail.
@@ -27,5 +34,15 @@ layer. The leaf preserves the innermost original error (and its own application
   collector-path emit; reporters without it fall back to per-root `report()`.
 - The Next.js entry installs the collector via a runtime-guarded dynamic import
   of `node:async_hooks`, so Edge/client bundles never reference it.
+
+**Hardening:**
+
+- A report-once scope caps buffered errors and overflow-flushes in batches, so a
+  long-lived boundary cannot grow the buffer unbounded or lose every buffered
+  error if the process dies before the boundary settles.
+- The shared registry symbol is versioned and reads are defensive, so a skewed
+  cross-version install cannot throw out of a never-throw terminal.
+- A custom `ScopeProvider` that throws falls back to the legacy path instead of
+  breaking the never-throw contract.
 
 **Removed:** the deprecated, unexported `ErrorReporter` utility.

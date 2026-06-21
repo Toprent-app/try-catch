@@ -28,8 +28,8 @@ describe('report-once robustness (/node)', () => {
     Try.throwThroughErrorTypes([]);
   });
 
-  describe('error-like de-dup', () => {
-    it('same-content error-like roots dedup to one event', async () => {
+  describe('non-Error and error-like throws', () => {
+    it('emits independent error-like failures separately (identity grouping)', async () => {
       const make = () => ({ name: 'GraphQLError', message: 'gql', code: 'E1' });
       async function boundaryFn(): Promise<string> {
         await new Try(async (): Promise<never> => {
@@ -47,18 +47,70 @@ describe('report-once robustness (/node)', () => {
 
       await new Try(boundaryFn).value();
 
+      // Distinct objects → distinct roots → two events (no false content merge).
+      expect(captureException).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not crash and still reports when throwing null (value)', async () => {
+      const out = await new Try(async (): Promise<never> => {
+        throw null;
+      })
+        .report('null failed')
+        .value();
+
+      expect(out).toBeUndefined();
+      expect(captureException).toHaveBeenCalledTimes(1);
+      const head = captureException.mock.calls[0][0] as Error;
+      expect(head.message).toBe('null failed');
+      expect(head.cause).toBeNull();
+    });
+
+    it('does not crash when throwing undefined (value)', async () => {
+      const out = await new Try(async (): Promise<never> => {
+        throw undefined;
+      })
+        .report('undef failed')
+        .value();
+
+      expect(out).toBeUndefined();
       expect(captureException).toHaveBeenCalledTimes(1);
     });
 
-    it('different-content error-like roots stay separate', async () => {
+    it('error() returns the raw null throw and still reports once', async () => {
+      const error = await new Try(async (): Promise<never> => {
+        throw null;
+      })
+        .report('null failed')
+        .error();
+
+      expect(error).toBeNull();
+      expect(captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a primitive throw as the cause', async () => {
+      await new Try(async (): Promise<never> => {
+        throw 'oops';
+      })
+        .report('string failed')
+        .value();
+
+      expect(captureException).toHaveBeenCalledTimes(1);
+      const head = captureException.mock.calls[0][0] as Error;
+      expect(head.cause).toBe('oops');
+    });
+
+    it('emits independent failures throwing the SAME primitive separately', async () => {
+      // Two distinct logical failures that happen to throw an equal primitive
+      // value. Primitives carry no identity, so they must NOT merge into one
+      // event the way a shared Error instance would — each is its own root.
       async function boundaryFn(): Promise<string> {
         await new Try(async (): Promise<never> => {
-          throw { name: 'E', message: 'a', code: '1' };
+          throw 'boom';
         })
           .report('A')
           .value();
         await new Try(async (): Promise<never> => {
-          throw { name: 'E', message: 'b', code: '2' };
+          throw 'boom';
         })
           .report('B')
           .value();
@@ -68,26 +120,6 @@ describe('report-once robustness (/node)', () => {
       await new Try(boundaryFn).value();
 
       expect(captureException).toHaveBeenCalledTimes(2);
-    });
-
-    it('error-like roots missing fields dedup by empty content', async () => {
-      async function boundaryFn(): Promise<string> {
-        await new Try(async (): Promise<never> => {
-          throw {};
-        })
-          .report('A')
-          .value();
-        await new Try(async (): Promise<never> => {
-          throw {};
-        })
-          .report('B')
-          .value();
-        return 'done';
-      }
-
-      await new Try(boundaryFn).value();
-
-      expect(captureException).toHaveBeenCalledTimes(1);
     });
   });
 

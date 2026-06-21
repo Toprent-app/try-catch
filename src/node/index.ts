@@ -1,10 +1,12 @@
 export { Try, Try as default, TryResult } from '../core/Try';
-import { Try as TryClass } from '../core/Try';
 import { NodeReporter } from '../adapters/node/reporter';
 import { installNodeScopeProvider } from '../adapters/node/scopeProvider';
+import { setDefaultReporterIfAbsent } from '../core/scope';
 
-// Set up the Node reporter as the default for Node.js environments
-TryClass.setDefaultReporter(new NodeReporter());
+// Install the Node reporter as the default unless one is already set (first-wins
+// across entry bundles in one realm; an explicit Try.setDefaultReporter still
+// overrides).
+setDefaultReporterIfAbsent(new NodeReporter());
 // Enable report-once aggregation via AsyncLocalStorage (Node runtime).
 installNodeScopeProvider();
 
