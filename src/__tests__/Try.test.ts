@@ -1814,6 +1814,79 @@ describe('Try', () => {
     });
   });
 
+  describe('hostile throwables — never-throw + Error-contract hardening', () => {
+    const throwingSync = (value: unknown) =>
+      new Try(() => {
+        throw value;
+      });
+    const throwingAsync = (value: unknown) =>
+      new Try(async () => {
+        throw value;
+      });
+
+    it('never throws on a throwing Symbol.toStringTag getter (sync + async)', async () => {
+      // The tag read in isErrorLike invokes the @@toStringTag getter; a hostile
+      // one must not escape toError and break the never-throw contract.
+      const hostileTagged = {
+        name: 'TaggedError',
+        message: 'tagged boom',
+        get [Symbol.toStringTag](): string {
+          throw new Error('toStringTag blew up');
+        },
+      };
+      const syncError = throwingSync(hostileTagged).error();
+      const asyncError = await throwingAsync(hostileTagged).error();
+      for (const error of [syncError, asyncError]) {
+        expect(error).toBeInstanceOf(Error);
+        // Falls through the throwing tag to the duck-typed name/message reads.
+        expect(error?.name).toBe('TaggedError');
+        expect(error?.message).toBe('tagged boom');
+      }
+    });
+
+    it('never throws when a thrown Proxy traps ownKeys', () => {
+      const hostileProxy = new Proxy(
+        { name: 'ProxyError', message: 'proxy boom' },
+        {
+          ownKeys() {
+            throw new Error('ownKeys trap blew up');
+          },
+        },
+      );
+      const error = throwingSync(hostileProxy).error();
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.name).toBe('ProxyError');
+      expect(error?.message).toBe('proxy boom');
+    });
+
+    it('keeps the result instanceof Error when an error-like carries an own __proto__ key', () => {
+      // A JSON-deserialized error-like (`throw await res.json()`) carries a real
+      // own enumerable `__proto__` key. Copying it by assignment would repoint
+      // the new Error's prototype (→ not instanceof Error); the normalizer must
+      // skip it and copy benign fields instead.
+      const fromJson = JSON.parse(
+        '{"name":"DbError","message":"db boom","code":"E_DB","__proto__":{"polluted":true}}',
+      );
+      const error = throwingSync(fromJson).error();
+      expect(error).toBeInstanceOf(Error);
+      expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
+      expect(error?.name).toBe('DbError');
+      expect(error?.message).toBe('db boom');
+      expect((error as { code?: string }).code).toBe('E_DB');
+      // No global prototype pollution from the malicious key.
+      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+    });
+
+    it('does not let an own constructor key shadow the Error constructor', () => {
+      const fromJson = JSON.parse(
+        '{"name":"X","message":"m","constructor":"pwned"}',
+      );
+      const error = throwingSync(fromJson).error();
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.constructor).toBe(Error);
+    });
+  });
+
   describe('breadcrumbs + report — Next.js double-add regression', () => {
     // The original bug: the nextjs reporter re-added breadcrumbs the core had
     // already added, so a reported failure emitted each breadcrumb twice. This

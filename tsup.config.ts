@@ -72,6 +72,10 @@ const common: Options = {
   // Force esbuild to emit .js for both formats (override tsup's default .mjs for ESM)
   esbuildOptions(options) {
     options.outExtension = { '.js': '.js' };
+    // Preserve function/class names under minify so this library's own frames
+    // stay readable in consumers' Sentry stack traces (identifiers are mangled
+    // otherwise, and we ship no sourcemaps).
+    options.keepNames = true;
   },
 };
 

@@ -52,6 +52,14 @@ function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
 /** Own-Error keys handled explicitly so the prop copy never clobbers them. */
 const PRESERVED_ERROR_KEYS = new Set(['name', 'message', 'stack', 'cause']);
 
+/**
+ * Keys that must never be copied onto the reconstructed Error. Assigning
+ * `__proto__` repoints the prototype (→ the result fails `instanceof Error`);
+ * `constructor`/`prototype` shadow structural internals. A JSON-parsed payload
+ * (`throw await res.json()`) carries a real own enumerable `__proto__` key.
+ */
+const UNSAFE_COPY_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /** Read a property without ever throwing (the value may be a throwing getter). */
 function safeGet(value: object, key: string): unknown {
   try {
@@ -71,17 +79,29 @@ function safeMessage(value: unknown): string {
 }
 
 /**
+ * `Object.prototype.toString` tag, never throwing. The `Symbol.toStringTag`
+ * read can invoke a throwing getter on a hostile object.
+ */
+function safeToStringTag(value: object): string {
+  try {
+    return Object.prototype.toString.call(value);
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Structural test for values that carry Error semantics but fail
  * `instanceof Error`: cross-realm / multi-bundle Error instances, transpiled
  * `extends Error` subclasses, and library "error-like" objects
- * (`{ name, message, stack, code, ... }`). The toString-tag read never throws;
- * the duck-typed reads are guarded by {@link safeGet}.
+ * (`{ name, message, stack, code, ... }`). Every reflective read is guarded so
+ * a hostile getter (including a throwing `Symbol.toStringTag`) can't throw.
  */
 function isErrorLike(value: unknown): value is object {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
-  if (Object.prototype.toString.call(value) === '[object Error]') {
+  if (safeToStringTag(value) === '[object Error]') {
     return true;
   }
   return (
@@ -112,15 +132,30 @@ function errorFromErrorLike(value: object): Error {
   }
 
   // Carry custom fields so reporters (and ignore-by-type) see the originals.
-  for (const key of Object.keys(value)) {
-    if (PRESERVED_ERROR_KEYS.has(key)) {
+  // `Object.keys` can throw (e.g. a Proxy with a throwing ownKeys trap), so it
+  // is guarded too. Skip prototype-mutating keys and define each field as a
+  // plain own data property — assignment would invoke the `__proto__`/setter
+  // path and could repoint the prototype, breaking `instanceof Error`.
+  let ownKeys: string[];
+  try {
+    ownKeys = Object.keys(value);
+  } catch {
+    ownKeys = [];
+  }
+  for (const key of ownKeys) {
+    if (PRESERVED_ERROR_KEYS.has(key) || UNSAFE_COPY_KEYS.has(key)) {
       continue;
     }
     const own = safeGet(value, key);
     try {
-      (error as unknown as Record<string, unknown>)[key] = own;
+      Object.defineProperty(error, key, {
+        value: own,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     } catch {
-      // skip props with a throwing/non-writable setter
+      // skip props that can't be (re)defined
     }
   }
 
