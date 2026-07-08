@@ -82,7 +82,7 @@
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
     "type-fest": "^5.1.0",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.0",
     "vitest": "^4.0.3"
   },
   "engines": {
