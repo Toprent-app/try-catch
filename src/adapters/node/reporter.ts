@@ -33,7 +33,7 @@ export class NodeReporter implements Reporter {
   createWrappedError(error: Error, message: string): Error {
     const wrapped = new Error(message);
     wrapped.cause = error;
-    wrapped.stack = error.stack;
+    wrapped.stack = (error as Error | null | undefined)?.stack;
     return wrapped;
   }
 

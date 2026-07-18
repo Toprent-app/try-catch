@@ -517,9 +517,19 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     this.runReportSideEffects(result);
 
     if (!result.success) {
+      // `result.error` may be a non-object throw (`null`, `undefined`, a
+      // primitive); those carry no usable `name` and can never match the
+      // throw-through list, so read the name defensively instead of crashing.
+      const errorName =
+        result.error !== null && typeof result.error === 'object'
+          ? (result.error as { name?: unknown }).name
+          : undefined;
       if (
         this.config.message &&
-        !readIgnoreErrorTypes().includes(result.error.name)
+        !(
+          typeof errorName === 'string' &&
+          readIgnoreErrorTypes().includes(errorName)
+        )
       ) {
         throw Try.getDefaultReporter().createWrappedError(
           result.error,
@@ -751,7 +761,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     try {
       if (provider.collects) {
         const store = provider.getStore();
-        this.isBoundary = store === undefined;
+        // An already-flushed store is a dead scope (e.g. a callback scheduled
+        // inside a boundary firing after that boundary settled): treat it as
+        // absent so this Try opens a fresh boundary instead of lateEmit-ing
+        // every layer separately.
+        this.isBoundary = store === undefined || store.flushed;
         this.scope = this.isBoundary ? { errors: [], flushed: false } : store;
       }
     } catch {
@@ -1004,13 +1018,29 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       return;
     }
 
-    for (const group of this.groupByRoot(scope.errors)) {
-      if (group.some((entry) => entry.message)) {
-        this.emitGroup(group);
+    // Grouping and assembly read hostile-controllable error properties; a
+    // throw here must neither escape (never-throw contract) nor leave the
+    // buffer dirty (every later terminal would re-throw the stale batch). One
+    // malformed group must not prevent the remaining groups from emitting.
+    try {
+      for (const group of this.groupByRoot(scope.errors)) {
+        try {
+          if (group.some((entry) => entry.message)) {
+            this.emitGroup(group);
+          }
+        } catch (err) {
+          if (this.config.debug) {
+            console.error('Error in report-once flush', err);
+          }
+        }
       }
+    } catch (err) {
+      if (this.config.debug) {
+        console.error('Error in report-once flush', err);
+      }
+    } finally {
+      scope.errors.length = 0;
     }
-
-    scope.errors.length = 0;
   }
 
   /**
@@ -1022,16 +1052,20 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private rootOf(error: unknown): unknown {
     const seen = new Set<unknown>();
     let current: unknown = error;
-    while (
-      current != null &&
-      typeof current === 'object' &&
-      (current as { cause?: unknown }).cause instanceof Error
-    ) {
-      if (seen.has(current)) {
+    while (current != null && typeof current === 'object') {
+      let cause: unknown;
+      try {
+        cause = (current as { cause?: unknown }).cause;
+      } catch {
+        // A hostile `cause` getter must not break the never-throw contract:
+        // treat the current node as the root and stop walking.
+        break;
+      }
+      if (!(cause instanceof Error) || seen.has(current)) {
         break;
       }
       seen.add(current);
-      current = (current as { cause?: unknown }).cause;
+      current = cause;
     }
     return current;
   }
@@ -1101,17 +1135,27 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
     const reporter = Try.getDefaultReporter();
     try {
+      let outcome: unknown;
       if (reporter.capture) {
-        reporter.capture(assembled, {
+        outcome = reporter.capture(assembled, {
           tags,
           breadcrumbs: breadcrumbs.length > 0 ? breadcrumbs : undefined,
         });
       } else {
-        reporter.report(leaf, {
+        outcome = reporter.report(leaf, {
           message: messages[0],
           tags,
           breadcrumbData: entries[0].breadcrumbData,
           functionName: entries[0].functionName,
+        });
+      }
+      // A structurally-valid async reporter returns a promise; a rejection
+      // must not escape as an unhandledRejection after the terminal settled.
+      if (isPromiseLike(outcome)) {
+        Promise.resolve(outcome).catch((err) => {
+          if (this.config.debug) {
+            console.error('Error in report-once flush', err);
+          }
         });
       }
     } catch (err) {
@@ -1127,10 +1171,16 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * `Try`/assembly frames never appear. Tolerates a non-object leaf.
    */
   private buildCauseChain(messages: string[], leaf: unknown): Error {
-    const leafStack =
-      leaf != null && typeof leaf === 'object'
-        ? (leaf as { stack?: string }).stack
-        : undefined;
+    let leafStack: string | undefined;
+    if (leaf != null && typeof leaf === 'object') {
+      try {
+        leafStack = (leaf as { stack?: string }).stack;
+      } catch {
+        // A hostile `stack` getter must not break the never-throw contract:
+        // assemble the chain without copying the leaf's stack.
+        leafStack = undefined;
+      }
+    }
     let current: unknown = leaf;
     for (let i = messages.length - 1; i >= 0; i--) {
       const wrapper = new Error(messages[i]);

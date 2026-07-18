@@ -48,7 +48,7 @@ export class SentryReporter implements Reporter {
   createWrappedError(error: Error, message: string): Error {
     const wrappedError = new Error(message);
     wrappedError.cause = error;
-    wrappedError.stack = error.stack;
+    wrappedError.stack = (error as Error | null | undefined)?.stack;
     return wrappedError;
   }
 

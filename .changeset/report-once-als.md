@@ -44,5 +44,14 @@ layer. The leaf preserves the innermost original error (and its own application
   cross-version install cannot throw out of a never-throw terminal.
 - A custom `ScopeProvider` that throws falls back to the legacy path instead of
   breaking the never-throw contract.
+- Errors with hostile `stack`/`cause` getters can no longer break a terminal or
+  poison the scope buffer: flush assembly reads defensively and the buffer is
+  always cleared, so one malformed group cannot block the others.
+- `throw null` (or any non-object throw) with `.report().unwrap()` now throws
+  the wrapped error instead of a library `TypeError`.
+- A callback scheduled inside a boundary that fires after that boundary flushed
+  now opens a fresh boundary (dead scopes no longer disable aggregation).
+- A structurally-valid async `Reporter.capture()`/`report()` that rejects is
+  caught during flush instead of surfacing as an `unhandledRejection`.
 
 **Removed:** the deprecated, unexported `ErrorReporter` utility.
