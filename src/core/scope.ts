@@ -192,5 +192,7 @@ export function setIgnoreErrorTypes(types: string[]): void {
 }
 
 export function getIgnoreErrorTypes(): string[] {
-  return getRegistry().ignoreErrorTypes ?? [];
+  // Always an array: getRegistry() coalesces `ignoreErrorTypes` to `[]`
+  // before returning (its skew-hardening contract).
+  return getRegistry().ignoreErrorTypes;
 }
