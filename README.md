@@ -407,8 +407,10 @@ stack is the failed function's stack — `Try`/wrapper frames are not added.
 | `/nextjs` | Next.js Edge / client | Legacy per-terminal report |
 | `/browser`, bare `.` | anywhere | Legacy per-terminal report |
 
-The Next.js entry loads `node:async_hooks` only via a runtime-guarded dynamic
-import, so the Edge and client bundles never reference it.
+The Next.js entry installs the collector synchronously at module evaluation
+via `process.getBuiltinModule('node:async_hooks')` (no `node:` import ever
+reaches the Edge or client bundles), falling back to a runtime-guarded dynamic
+import on Node versions without `getBuiltinModule`.
 
 ### Custom providers & reporters
 
@@ -426,11 +428,12 @@ import, so the Edge and client bundles never reference it.
   silently lost.
 - **Sync boundaries** aggregate only synchronously-collected nested errors; an
   async nested `Try` under a sync boundary emits separately.
-- **Next.js cold start.** The collector is installed via a runtime-guarded
-  dynamic import that resolves during module initialization — before request
-  handling — so the collector is live by the first request in practice. A `Try`
-  that runs in the same synchronous tick as module load would use the legacy
-  path until the import resolves.
+- **Next.js cold start.** The collector is installed synchronously at
+  entry-module evaluation (via `process.getBuiltinModule`), so even a `Try`
+  running in the same tick as module load aggregates. Only on Node versions
+  without `getBuiltinModule` (< 20.16) does the async dynamic-import fallback
+  apply, where a `Try` in the load tick itself would briefly use the legacy
+  path.
 - **Grouping is by identity.** Distinct root failures produce distinct events,
   even two independent failures with the same message. Non-`Error` throws
   (`null`, `undefined`, strings, plain objects) are reported safely and grouped

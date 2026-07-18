@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, afterAll } from 'vitest';
 
-// Node runtime, but the dynamic import resolves a module without
-// AsyncLocalStorage → the installer must stay on the legacy path, not crash.
+// Node runtime, but AsyncLocalStorage is unavailable → the installer must stay
+// on the legacy path, not crash. Disable the synchronous install path
+// (process.getBuiltinModule) and resolve the dynamic-import fallback to a
+// module without AsyncLocalStorage.
 vi.hoisted(() => {
   process.env.NEXT_RUNTIME = 'nodejs';
+  (process as { getBuiltinModule?: unknown }).getBuiltinModule = undefined;
 });
 
 vi.mock('@sentry/nextjs', () => ({
