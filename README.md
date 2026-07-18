@@ -362,6 +362,120 @@ const result = await new Try(complexOperation, data)
   .value();
 ```
 
+## Report-once aggregation (Node / Next.js)
+
+On the **Node** (`@power-rent/try-catch/node`) and **Next.js Node runtime**
+(`@power-rent/try-catch/nextjs`) entries, nested `Try` calls that wrap the same
+root failure are aggregated into **exactly one Sentry event**, assembled as a
+nested `cause` chain. This solves the "one root error reported N times up the
+call stack" problem.
+
+```ts
+// level 3 throws → each layer reports → ONE Sentry event:
+//   "outer failed" → "mid failed" → "inner failed" → Error('db down')
+async function level3() { throw new Error('db down'); }
+async function level2() { return new Try(level3).report('inner failed').unwrap(); }
+async function level1() { return new Try(level2).report('mid failed').unwrap(); }
+await new Try(level1).report('outer failed').value();
+```
+
+**How it works.** The outermost `Try` in an `AsyncLocalStorage` context opens a
+scope (the *boundary*); nested `Try` calls collect into it instead of emitting;
+the boundary emits **one event per distinct root failure** when it settles. The
+leaf of the chain is the innermost original error, so a pre-existing application
+`cause` chain (e.g. `DomainError(cause: dbError)`) is preserved. The reported
+stack is the failed function's stack — `Try`/wrapper frames are not added.
+
+### Behavior changes on the collector path
+
+- **`.error()` and `.result()` now honor `.report()`.** Previously these two
+  terminals ignored a configured `.report()` and never sent to Sentry; now they
+  report — but **only when `.report()` is in the chain** — while still returning
+  the error/result to you. Without `.report()` they never report. This holds on
+  **every** platform: the collector path emits the boundary's single aggregated
+  event; the browser / bare-core / Edge legacy path reports this layer's error
+  directly.
+- **Graceful recovery still reports.** `.report().default().value()` returns the
+  default *and* reports — recovery no longer means silence.
+- **Breadcrumbs are event-scoped.** On the collector path breadcrumb data is
+  attached to the one assembled event via an isolated Sentry scope, instead of
+  added to the global Sentry breadcrumb trail.
+
+### Entries & runtimes
+
+| Entry | Runtime | Behavior |
+| --- | --- | --- |
+| `/node` | Node.js | Collector (report-once) |
+| `/nextjs` | Next.js Node runtime | Collector (report-once) |
+| `/nextjs` | Next.js Edge / client | Legacy per-terminal report |
+| `/browser`, bare `.` | anywhere | Legacy per-terminal report |
+
+The Next.js entry installs the collector synchronously at module evaluation
+via `process.getBuiltinModule('node:async_hooks')` (no `node:` import ever
+reaches the Edge or client bundles), falling back to a runtime-guarded dynamic
+import on Node versions without `getBuiltinModule`.
+
+### Forcing one boundary across siblings: `Try.scope()`
+
+Aggregation normally happens through nesting: the outermost `Try` is the
+boundary. Two *sibling* top-level `Try`s are each their own boundary and report
+separately. `Try.scope(fn)` runs `fn` inside a single fresh aggregation scope,
+so every `Try` created inside it — siblings included — collects into one
+boundary that flushes exactly once when `fn` settles:
+
+```typescript
+// e.g. one request-level boundary: siblings sharing a root → ONE event
+await Try.scope(async () => {
+  await new Try(stepOne).report('step one failed').value();
+  await new Try(stepTwo).report('step two failed').value();
+});
+```
+
+`fn`'s result is passed through unchanged; if `fn` throws/rejects, the scope is
+flushed first and the error propagates normally (`Try.scope` is a scope
+wrapper, not an error handler). A nested `Try.scope` always opens its own fresh
+boundary. On the legacy path (browser / Edge / bare core) it simply runs `fn`.
+
+### Custom providers & reporters
+
+- `Try.setScopeProvider(provider)` installs a custom scope provider (advanced;
+  Node/Next.js only). The default no-op provider keeps the legacy path.
+- A custom `Reporter` may implement the optional `capture(assembledError, { tags, breadcrumbs })`
+  method to receive the assembled event; reporters without it fall back to the
+  per-root `report()`.
+
+### Limitations
+
+- **Fire-and-forget / detached work.** A nested `Try` that settles *after* its
+  boundary has already flushed (e.g. not `await`-ed, or scheduled via a timer)
+  emits its own event separately rather than joining the aggregate. It is never
+  silently lost.
+- **Sync boundaries** aggregate only synchronously-collected nested errors; an
+  async nested `Try` under a sync boundary emits separately.
+- **Next.js cold start.** The collector is installed synchronously at
+  entry-module evaluation (via `process.getBuiltinModule`), so even a `Try`
+  running in the same tick as module load aggregates. Only on Node versions
+  without `getBuiltinModule` (< 20.16) does the async dynamic-import fallback
+  apply, where a `Try` in the load tick itself would briefly use the legacy
+  path.
+- **Grouping is by identity.** Distinct root failures produce distinct events,
+  even two independent failures with the same message. Non-`Error` throws
+  (`null`, `undefined`, strings, plain objects) are reported safely and grouped
+  by identity.
+- **Distinct primitive throws never merge.** Two separate `throw 'x'` throws
+  that are logically the same failure re-thrown across layers cannot be
+  deduplicated: primitives have no identity, and merging them by value would
+  wrongly merge genuinely independent primitive throws. This is fundamental —
+  throw `Error` instances to get chain dedup.
+- **`TryResult.error` typing is unsound.** `error` is typed `Error`, but
+  non-`Error` throws (`null`, `undefined`, primitives) pass through unchanged,
+  so `.error()` can return `null`/`undefined` at runtime. All runtime paths
+  handle this defensively; fixing the declared types is a breaking change
+  deferred to a major.
+- **Sentry linked-exception depth.** Very deep chains may be truncated by
+  Sentry's rendering; configure `linkedErrorsIntegration({ limit })` if your
+  layer depth is large.
+
 ## Features
 
 - 🚀 **Promise-like interface** - Can be awaited directly

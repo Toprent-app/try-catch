@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { Reporter, ErrorReportConfig } from '../core/reporter';
+import { Reporter, ErrorReportConfig, CaptureOptions } from '../core/reporter';
 
 /**
  * Sentry-specific implementation of the Reporter interface
@@ -48,7 +48,24 @@ export class SentryReporter implements Reporter {
   createWrappedError(error: Error, message: string): Error {
     const wrappedError = new Error(message);
     wrappedError.cause = error;
-    wrappedError.stack = error.stack;
+    wrappedError.stack = (error as Error | null | undefined)?.stack;
     return wrappedError;
+  }
+
+  /**
+   * Collector-path emit: report one pre-assembled event with its tags and
+   * breadcrumbs attached in an isolated Sentry scope.
+   */
+  capture(assembledError: Error, opts: CaptureOptions): void {
+    Sentry.withScope((scope) => {
+      scope.setTags({ ...opts.tags, library: '@power-rent/try-catch' });
+      opts.breadcrumbs?.forEach((breadcrumb) => {
+        scope.addBreadcrumb({
+          message: `Calling ${breadcrumb.functionName ?? 'anonymous'} function`,
+          data: breadcrumb.data,
+        });
+      });
+      Sentry.captureException(assembledError);
+    });
   }
 }

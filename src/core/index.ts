@@ -3,4 +3,18 @@
  */
 
 export { Try, TryResult } from './Try';
-export { Reporter, NoopReporter, ErrorReportConfig } from './reporter';
+export {
+  Reporter,
+  NoopReporter,
+  ErrorReportConfig,
+  CaptureOptions,
+  CaptureBreadcrumb,
+} from './reporter';
+export {
+  Scope,
+  Collected,
+  ScopeProvider,
+  NoopScopeProvider,
+  setScopeProvider,
+  getScopeProvider,
+} from './scope';

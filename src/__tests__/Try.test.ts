@@ -719,16 +719,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', async () => {
+      it('reports via result() + report() on the legacy path (report-everywhere)', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .report('should be reported')
           .result();
 
-        expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+        // `.report()` decides whether-reported on every terminal; the terminal
+        // only decides the return shape. result() therefore reports too.
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'should be reported' }),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              library: '@power-rent/try-catch',
+            }),
+          }),
+        );
       });
 
       it('should work with type guards for discriminated union', async () => {
@@ -788,6 +797,44 @@ describe('Try', () => {
         if (result1.success) {
           expect(result1.value).toEqual({ cached: true });
         }
+      });
+
+      it('reuses the in-flight promise for concurrent terminals before settle', async () => {
+        let calls = 0;
+        const slow = () =>
+          new Promise<string>((resolve) =>
+            setTimeout(() => {
+              calls += 1;
+              resolve('done');
+            }, 10),
+          );
+
+        const tryInstance = new Try(slow);
+        // Both terminals call execute() before the first settles, so the second
+        // must return the already in-flight cachedPromise (fn runs once).
+        const valuePromise = tryInstance.value();
+        const resultPromise = tryInstance.result();
+
+        const [value, result] = await Promise.all([
+          valuePromise,
+          resultPromise,
+        ]);
+
+        expect(value).toBe('done');
+        expect(result).toEqual({ success: true, value: 'done' });
+        expect(calls).toBe(1);
+      });
+
+      it('then() tolerates missing and explicit handlers', async () => {
+        // No handlers → onfulfilled/onrejected coalesce to undefined.
+        const bare = await new Try(() => 'ok').then();
+        expect(bare).toBe('ok');
+
+        // Explicit onrejected is forwarded but never fires (value() never rejects).
+        const onRejected = vi.fn();
+        const mapped = await new Try(() => 'ok').then((x) => x, onRejected);
+        expect(mapped).toBe('ok');
+        expect(onRejected).not.toHaveBeenCalled();
       });
 
       it('should work with async finally callbacks', async () => {
@@ -1547,16 +1594,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', () => {
+      it('reports via result() + report() on the legacy path (report-everywhere)', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .report('should be reported')
           .result();
 
-        expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+        // `.report()` decides whether-reported on every terminal; the terminal
+        // only decides the return shape. result() therefore reports too.
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'should be reported' }),
+          expect.objectContaining({
+            tags: expect.objectContaining({
+              library: '@power-rent/try-catch',
+            }),
+          }),
+        );
       });
 
       it('should work with type guards for discriminated union', () => {
