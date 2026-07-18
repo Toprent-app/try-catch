@@ -32,8 +32,15 @@ layer. The leaf preserves the innermost original error (and its own application
   so multiple server entries in one realm share a single scope.
 - Optional `Reporter.capture(assembledError, { tags, breadcrumbs })` for
   collector-path emit; reporters without it fall back to per-root `report()`.
-- The Next.js entry installs the collector via a runtime-guarded dynamic import
-  of `node:async_hooks`, so Edge/client bundles never reference it.
+- `Try.scope(fn)`: runs `fn` inside a single fresh aggregation scope so
+  *sibling* top-level `Try`s (not just nested ones) collect into one boundary
+  that flushes exactly once when `fn` settles. Result/error pass through; on
+  the legacy provider it simply runs `fn`.
+- The Next.js entry installs the collector **synchronously** at module
+  evaluation via `process.getBuiltinModule('node:async_hooks')` (closing the
+  cold-start race where a `Try` in the load tick double-reported), falling back
+  to the runtime-guarded dynamic import on Node without `getBuiltinModule`.
+  Edge/client bundles still never reference `node:` modules.
 
 **Hardening:**
 
@@ -53,5 +60,14 @@ layer. The leaf preserves the innermost original error (and its own application
   now opens a fresh boundary (dead scopes no longer disable aggregation).
 - A structurally-valid async `Reporter.capture()`/`report()` that rejects is
   caught during flush instead of surfacing as an `unhandledRejection`.
+- An object root whose entries span an overflow flush now emits exactly once:
+  emitted object roots are tracked per scope and skipped by later batches.
+  Primitive roots are never tracked (they carry no identity and never merge).
+
+**Known limitations (documented):** `TryResult.error` is typed `Error` but
+non-`Error` throws pass through unchanged (`.error()` can return
+`null`/`undefined`; type fix deferred to a major), and two distinct primitive
+throws (`throw 'x'`) re-thrown across layers cannot be merged — primitives have
+no identity, so merging by value would wrongly merge independent failures.
 
 **Removed:** the deprecated, unexported `ErrorReporter` utility.

@@ -43,6 +43,13 @@ interface TryConfig<TArgs extends readonly unknown[] = unknown[]> {
 
 /**
  * Result of Try execution
+ *
+ * Known limitation (type unsoundness): `error` is typed `Error`, but
+ * JavaScript can `throw` anything — non-`Error` throws (`null`, `undefined`,
+ * primitives, POJOs) pass through unchanged, so `error` may hold a non-`Error`
+ * at runtime and `.error()` can return `null`/`undefined`. All runtime paths
+ * handle such throws defensively; widening the declared types (`unknown`) is a
+ * breaking change deferred to a major.
  */
 export type TryResult<T> =
   | {

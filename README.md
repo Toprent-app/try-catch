@@ -459,6 +459,16 @@ boundary. On the legacy path (browser / Edge / bare core) it simply runs `fn`.
   even two independent failures with the same message. Non-`Error` throws
   (`null`, `undefined`, strings, plain objects) are reported safely and grouped
   by identity.
+- **Distinct primitive throws never merge.** Two separate `throw 'x'` throws
+  that are logically the same failure re-thrown across layers cannot be
+  deduplicated: primitives have no identity, and merging them by value would
+  wrongly merge genuinely independent primitive throws. This is fundamental —
+  throw `Error` instances to get chain dedup.
+- **`TryResult.error` typing is unsound.** `error` is typed `Error`, but
+  non-`Error` throws (`null`, `undefined`, primitives) pass through unchanged,
+  so `.error()` can return `null`/`undefined` at runtime. All runtime paths
+  handle this defensively; fixing the declared types is a breaking change
+  deferred to a major.
 - **Sentry linked-exception depth.** Very deep chains may be truncated by
   Sentry's rendering; configure `linkedErrorsIntegration({ limit })` if your
   layer depth is large.
