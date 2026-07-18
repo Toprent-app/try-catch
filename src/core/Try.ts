@@ -86,10 +86,13 @@ type IfPromise<T, True, False> = [T] extends [never]
 const MAX_SCOPE_ERRORS = 100;
 
 /**
- * Walk an error's `.cause` chain to its deepest `Error` (the root), with a
- * cycle guard. Tolerates non-object throws (`null`, `undefined`, strings,
- * numbers, POJOs) by returning them unchanged. Used only as a de-dup key —
- * the emitted leaf is still the innermost collected error.
+ * Walk an error's `.cause` chain to its deepest object (an `Error` or an
+ * error-like plain object — both carry identity), with a cycle guard. The walk
+ * stops only at a primitive / `null` / `undefined` / absent cause: primitives
+ * have no identity, so the object holding them is the root key. Tolerates
+ * non-object throws (`null`, `undefined`, strings, numbers) by returning them
+ * unchanged. Used only as a de-dup key — the emitted leaf is still the
+ * innermost collected error.
  */
 function rootOfError(error: unknown): unknown {
   const seen = new Set<unknown>();
@@ -103,7 +106,7 @@ function rootOfError(error: unknown): unknown {
       // treat the current node as the root and stop walking.
       break;
     }
-    if (!(cause instanceof Error) || seen.has(current)) {
+    if (cause === null || typeof cause !== 'object' || seen.has(current)) {
       break;
     }
     seen.add(current);

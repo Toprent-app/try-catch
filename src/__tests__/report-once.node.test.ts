@@ -16,6 +16,7 @@ import Try from '../node';
 import { NodeReporter } from '../adapters/node/reporter';
 import { installNodeScopeProvider } from '../adapters/node/scopeProvider';
 import { NoopScopeProvider, getScopeProvider } from '../core/scope';
+import { NoopReporter, type ErrorReportConfig } from '../core/reporter';
 
 const captureException = Sentry.captureException as unknown as Mock;
 const withScope = Sentry.withScope as unknown as Mock;
@@ -269,6 +270,26 @@ describe('report-once on /node (collector path)', () => {
     expect(captureException).not.toHaveBeenCalled();
   });
 
+  it('a NoopReporter subclass overriding only report() still receives events', async () => {
+    // Regression: NoopReporter must not define a no-op capture() — a subclass
+    // that overrides only report() would inherit it and every report-once
+    // event would be silently dropped.
+    const seen = vi.fn();
+    class ReportOnlyReporter extends NoopReporter {
+      override report(error: Error, config: ErrorReportConfig): void {
+        seen(error, config);
+      }
+    }
+    Try.setDefaultReporter(new ReportOnlyReporter());
+
+    await new Try(asyncThrow).report('failed').value();
+
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(seen.mock.calls[0][0].message).toBe('boom');
+    expect(seen.mock.calls[0][1].message).toBe('failed');
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
   it('nested Try contributes to the boundary; one event at the boundary', async () => {
     async function inner(): Promise<never> {
       throw new Error('boom');
@@ -285,6 +306,36 @@ describe('report-once on /node (collector path)', () => {
     const assembled = assembledFrom(0);
     expect(assembled.message).toBe('inner failed');
     expect((assembled.cause as Error).message).toBe('boom');
+  });
+
+  it('nested report() over an error-like object throw emits ONE event', async () => {
+    // The root-identity walk must follow non-Error object causes too: the
+    // inner wrap puts the thrown object in its wrapper's `.cause`, and stopping
+    // the walk at "not an Error" would key inner and outer entries differently,
+    // splitting one root failure into two events.
+    const errorLike = { name: 'DbError', message: 'conn refused', code: 42 };
+
+    async function inner(): Promise<never> {
+      throw errorLike;
+    }
+    async function mid(): Promise<never> {
+      return new Try(inner).report('inner failed').unwrap();
+    }
+    async function outer(): Promise<never> {
+      return new Try(mid).report('mid failed').unwrap();
+    }
+
+    await new Try(outer).report('outer failed').value();
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+    const assembled = assembledFrom(0);
+    expect(assembled.message).toBe('outer failed');
+    // The leaf of the assembled chain is the original object, identity intact.
+    let leaf: unknown = assembled;
+    while ((leaf as Error).cause !== undefined) {
+      leaf = (leaf as Error).cause;
+    }
+    expect(leaf).toBe(errorLike);
   });
 
   it('overflow-flushes a long-lived boundary in batches (bounded buffer, no loss)', async () => {
