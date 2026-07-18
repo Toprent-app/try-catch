@@ -390,8 +390,9 @@ stack is the failed function's stack — `Try`/wrapper frames are not added.
 
 - **`.error()` and `.result()` now report** when `.report()` was called. They
   still return the error/result to you, but no longer suppress the Sentry
-  report. (On the browser / bare-core / Edge legacy path they remain
-  non-reporting, exactly as before.)
+  report. This holds on **every** platform: the collector path emits the
+  boundary's single aggregated event; the browser / bare-core / Edge legacy
+  path reports this layer's error directly.
 - **Graceful recovery still reports.** `.report().default().value()` returns the
   default *and* reports — recovery no longer means silence.
 - **Breadcrumbs are event-scoped.** On the collector path breadcrumb data is
