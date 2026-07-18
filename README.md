@@ -412,6 +412,27 @@ via `process.getBuiltinModule('node:async_hooks')` (no `node:` import ever
 reaches the Edge or client bundles), falling back to a runtime-guarded dynamic
 import on Node versions without `getBuiltinModule`.
 
+### Forcing one boundary across siblings: `Try.scope()`
+
+Aggregation normally happens through nesting: the outermost `Try` is the
+boundary. Two *sibling* top-level `Try`s are each their own boundary and report
+separately. `Try.scope(fn)` runs `fn` inside a single fresh aggregation scope,
+so every `Try` created inside it — siblings included — collects into one
+boundary that flushes exactly once when `fn` settles:
+
+```typescript
+// e.g. one request-level boundary: siblings sharing a root → ONE event
+await Try.scope(async () => {
+  await new Try(stepOne).report('step one failed').value();
+  await new Try(stepTwo).report('step two failed').value();
+});
+```
+
+`fn`'s result is passed through unchanged; if `fn` throws/rejects, the scope is
+flushed first and the error propagates normally (`Try.scope` is a scope
+wrapper, not an error handler). A nested `Try.scope` always opens its own fresh
+boundary. On the legacy path (browser / Edge / bare core) it simply runs `fn`.
+
 ### Custom providers & reporters
 
 - `Try.setScopeProvider(provider)` installs a custom scope provider (advanced;

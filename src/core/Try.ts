@@ -79,6 +79,233 @@ type IfPromise<T, True, False> = [T] extends [never]
 const MAX_SCOPE_ERRORS = 100;
 
 /**
+ * Walk an error's `.cause` chain to its deepest `Error` (the root), with a
+ * cycle guard. Tolerates non-object throws (`null`, `undefined`, strings,
+ * numbers, POJOs) by returning them unchanged. Used only as a de-dup key —
+ * the emitted leaf is still the innermost collected error.
+ */
+function rootOfError(error: unknown): unknown {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current != null && typeof current === 'object') {
+    let cause: unknown;
+    try {
+      cause = (current as { cause?: unknown }).cause;
+    } catch {
+      // A hostile `cause` getter must not break the never-throw contract:
+      // treat the current node as the root and stop walking.
+      break;
+    }
+    if (!(cause instanceof Error) || seen.has(current)) {
+      break;
+    }
+    seen.add(current);
+    current = cause;
+  }
+  return current;
+}
+
+/**
+ * Group collected entries by their root failure's identity so each distinct
+ * root becomes one event. Real `Error`s and non-`Error` throws alike key by
+ * identity (`Map` value equality), so independent failures never merge.
+ * Entry order within a group is preserved (innermost first); groups are
+ * returned in first-seen order.
+ *
+ * Caveat: identity keying means two genuinely independent failures that reuse
+ * the *same* `Error` instance as their root (e.g. a cached/singleton error
+ * object observed by two operations) merge into one event — non-leaf entries'
+ * identity (stack, own props) is then discarded and only their `.message`
+ * survives in the assembled chain. Throwing fresh errors avoids this.
+ *
+ * Known limitation (fundamental): the inverse also holds — two DISTINCT
+ * primitive throws (`throw 'x'`) that are logically the same failure re-thrown
+ * across layers can NOT be merged. Primitives have no identity, and merging
+ * them by value would wrongly merge genuinely independent primitive throws.
+ * Throw `Error` instances to get chain dedup.
+ */
+function groupCollectedByRoot(entries: Collected[]): Collected[][] {
+  const groups: Collected[][] = [];
+  const byRoot = new Map<unknown, Collected[]>();
+  for (const entry of entries) {
+    const root = rootOfError(entry.error);
+    // Only object roots dedup by identity. Primitive/null/undefined throws
+    // carry no identity, so two independent failures that happen to throw the
+    // same primitive value (`throw 'boom'`, `NaN`, …) must NOT merge — give
+    // each its own group rather than collapsing them on Map value-equality.
+    if (root === null || typeof root !== 'object') {
+      groups.push([entry]);
+      continue;
+    }
+    let group = byRoot.get(root);
+    if (!group) {
+      group = [];
+      byRoot.set(root, group);
+      groups.push(group);
+    }
+    group.push(entry);
+  }
+  return groups;
+}
+
+/**
+ * Build a nested-cause chain `messages[0]` (outermost) → … → `leaf`. Each
+ * wrapper copies the leaf's stack (when the leaf is an object with one) so
+ * `Try`/assembly frames never appear. Tolerates a non-object leaf.
+ */
+function buildCauseChainFor(messages: string[], leaf: unknown): Error {
+  let leafStack: string | undefined;
+  if (leaf != null && typeof leaf === 'object') {
+    try {
+      leafStack = (leaf as { stack?: string }).stack;
+    } catch {
+      // A hostile `stack` getter must not break the never-throw contract:
+      // assemble the chain without copying the leaf's stack.
+      leafStack = undefined;
+    }
+  }
+  let current: unknown = leaf;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const wrapper = new Error(messages[i]);
+    wrapper.cause = current;
+    if (leafStack !== undefined) {
+      wrapper.stack = leafStack;
+    }
+    current = wrapper;
+  }
+  return current as Error;
+}
+
+/**
+ * Assemble one event from a group of collected entries (innermost first) and
+ * hand it to the default reporter. Never throws; `debug` (default off) gates
+ * console logging of reporter failures.
+ */
+function emitCollectedGroup(entries: Collected[], debug?: boolean): void {
+  const messages = entries
+    .filter((entry) => entry.message)
+    .map((entry) => entry.message as string)
+    .reverse();
+
+  const leaf = entries[0].error;
+  const assembled = buildCauseChainFor(messages, leaf);
+  const tags = entries.reduce<Record<string, string>>(
+    (acc, entry) => ({ ...acc, ...entry.tags }),
+    {},
+  );
+  const breadcrumbs = entries
+    .filter(
+      (entry) =>
+        entry.breadcrumbData && Object.keys(entry.breadcrumbData).length > 0,
+    )
+    .map((entry) => ({
+      data: entry.breadcrumbData as Record<string, unknown>,
+      functionName: entry.functionName,
+    }));
+
+  const reporter = readDefaultReporter();
+  try {
+    let outcome: unknown;
+    if (reporter.capture) {
+      outcome = reporter.capture(assembled, {
+        tags,
+        breadcrumbs: breadcrumbs.length > 0 ? breadcrumbs : undefined,
+      });
+    } else {
+      outcome = reporter.report(leaf, {
+        message: messages[0],
+        tags,
+        breadcrumbData: entries[0].breadcrumbData,
+        functionName: entries[0].functionName,
+      });
+    }
+    // A structurally-valid async reporter returns a promise; a rejection
+    // must not escape as an unhandledRejection after the terminal settled.
+    if (isPromiseLike(outcome)) {
+      Promise.resolve(outcome).catch((err) => {
+        if (debug) {
+          console.error('Error in report-once flush', err);
+        }
+      });
+    }
+  } catch (err) {
+    if (debug) {
+      console.error('Error in report-once flush', err);
+    }
+  }
+}
+
+/**
+ * Emit one event per distinct root failure currently buffered, then clear the
+ * buffer. The `group`/`emit` hooks let the instance path route through its
+ * (test-observable) prototype methods while {@link Try.scope} emits without an
+ * owning instance.
+ */
+function flushScopeEntries(
+  scope: Scope,
+  group: (entries: Collected[]) => Collected[][],
+  emit: (entries: Collected[]) => void,
+  debug?: boolean,
+): void {
+  if (scope.errors.length === 0) {
+    return;
+  }
+
+  // Grouping and assembly read hostile-controllable error properties; a
+  // throw here must neither escape (never-throw contract) nor leave the
+  // buffer dirty (every later terminal would re-throw the stale batch). One
+  // malformed group must not prevent the remaining groups from emitting.
+  try {
+    for (const entries of group(scope.errors)) {
+      try {
+        // Skip a group whose object root already emitted in an earlier
+        // (overflow) batch of this scope — report-once must hold across
+        // overflow flushes. Primitive roots are never tracked (they never
+        // merge; see Scope.emittedRoots).
+        const root = rootOfError(entries[0].error);
+        const isObjectRoot = root !== null && typeof root === 'object';
+        if (isObjectRoot && scope.emittedRoots?.has(root as object)) {
+          continue;
+        }
+        if (entries.some((entry) => entry.message)) {
+          emit(entries);
+          if (isObjectRoot) {
+            (scope.emittedRoots ??= new Set()).add(root as object);
+          }
+        }
+      } catch (err) {
+        if (debug) {
+          console.error('Error in report-once flush', err);
+        }
+      }
+    }
+  } catch (err) {
+    if (debug) {
+      console.error('Error in report-once flush', err);
+    }
+  } finally {
+    scope.errors.length = 0;
+  }
+}
+
+/**
+ * Flush a {@link Try.scope} boundary, which has no owning `Try` instance.
+ * Marks the scope flushed first (so late settles route to the late-collection
+ * guard) and never throws: the scope machinery must never mask `fn`'s own
+ * outcome. Debug logging is off — there is no instance config to opt in.
+ */
+function flushDetachedScope(scope: Scope): void {
+  try {
+    scope.flushed = true;
+    flushScopeEntries(scope, groupCollectedByRoot, (entries) =>
+      emitCollectedGroup(entries),
+    );
+  } catch {
+    // never-throw: a hostile getter/reporter error must not escape Try.scope
+  }
+}
+
+/**
  * Core Try class for simplified async error handling.
  * This implementation is framework-agnostic and uses a Reporter interface
  * to decouple error reporting from specific services.
@@ -132,6 +359,76 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    */
   static getScopeProvider(): ScopeProvider {
     return readScopeProvider();
+  }
+
+  /**
+   * Run `fn` inside a single fresh report-once aggregation scope. Every `Try`
+   * created inside `fn` — including *sibling* top-level `Try`s that would
+   * otherwise each open their own boundary — collects into this scope, which
+   * flushes exactly once when `fn` settles (sync return, resolution, throw, or
+   * rejection). Without it, only nested (`.cause`-chained) `Try`s aggregate;
+   * two sibling failures produce two separate reports.
+   *
+   * `fn`'s result is passed through unchanged; if `fn` throws or rejects, the
+   * scope is flushed first and the error then propagates normally —
+   * `Try.scope` is a scope wrapper, not an error handler. The flush itself
+   * never throws (hostile getters / failing reporters are swallowed).
+   *
+   * A fresh scope is always opened: a nested `Try.scope` starts its own
+   * boundary and flushes independently. On the legacy/no-collect provider
+   * (browser / Edge / bare core) it simply runs `fn` — no aggregation.
+   *
+   * @param fn The function to run inside the aggregation scope
+   * @returns `fn`'s return value (a wrapped promise when `fn` is async, so the
+   *   flush can await settlement)
+   *
+   * @example
+   * ```typescript
+   * // Two sibling failures with one root → ONE aggregated event
+   * await Try.scope(async () => {
+   *   await new Try(stepOne).report('step one failed').value();
+   *   await new Try(stepTwo).report('step two failed').value();
+   * });
+   * ```
+   */
+  static scope<T>(fn: () => T): T {
+    let provider: ScopeProvider | undefined;
+    try {
+      const candidate = readScopeProvider();
+      if (candidate.collects) {
+        provider = candidate;
+      }
+    } catch {
+      // A hostile provider must not break Try.scope: run fn without a scope.
+    }
+    if (!provider) {
+      return fn();
+    }
+
+    const scope: Scope = { errors: [], flushed: false };
+    let result: T;
+    try {
+      result = provider.run(scope, fn);
+    } catch (error) {
+      flushDetachedScope(scope);
+      throw error;
+    }
+
+    if (isPromiseLike(result)) {
+      return Promise.resolve(result).then(
+        (value) => {
+          flushDetachedScope(scope);
+          return value;
+        },
+        (error: unknown) => {
+          flushDetachedScope(scope);
+          throw error;
+        },
+      ) as T;
+    }
+
+    flushDetachedScope(scope);
+    return result;
   }
 
   /**
@@ -1011,198 +1308,33 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * Emit one event per distinct root failure currently buffered, then clear the
    * buffer. Shared by the boundary flush ({@link flushScope}) and the overflow
    * flush in {@link collectError}; the overflow caller leaves `scope.flushed`
-   * false so the scope keeps collecting after the batch.
+   * false so the scope keeps collecting after the batch. Delegates to
+   * {@link flushScopeEntries}, routing grouping/emit through the prototype
+   * methods below so they stay observable (and stubbable) per instance.
    */
   private emitScope(scope: Scope): void {
-    if (scope.errors.length === 0) {
-      return;
-    }
-
-    // Grouping and assembly read hostile-controllable error properties; a
-    // throw here must neither escape (never-throw contract) nor leave the
-    // buffer dirty (every later terminal would re-throw the stale batch). One
-    // malformed group must not prevent the remaining groups from emitting.
-    try {
-      for (const group of this.groupByRoot(scope.errors)) {
-        try {
-          // Skip a group whose object root already emitted in an earlier
-          // (overflow) batch of this scope — report-once must hold across
-          // overflow flushes. Primitive roots are never tracked (they never
-          // merge; see Scope.emittedRoots).
-          const root = this.rootOf(group[0].error);
-          const isObjectRoot = root !== null && typeof root === 'object';
-          if (isObjectRoot && scope.emittedRoots?.has(root as object)) {
-            continue;
-          }
-          if (group.some((entry) => entry.message)) {
-            this.emitGroup(group);
-            if (isObjectRoot) {
-              (scope.emittedRoots ??= new Set()).add(root as object);
-            }
-          }
-        } catch (err) {
-          if (this.config.debug) {
-            console.error('Error in report-once flush', err);
-          }
-        }
-      }
-    } catch (err) {
-      if (this.config.debug) {
-        console.error('Error in report-once flush', err);
-      }
-    } finally {
-      scope.errors.length = 0;
-    }
+    flushScopeEntries(
+      scope,
+      (entries) => this.groupByRoot(entries),
+      (entries) => this.emitGroup(entries),
+      this.config.debug,
+    );
   }
 
   /**
-   * Walk an error's `.cause` chain to its deepest `Error` (the root), with a
-   * cycle guard. Tolerates non-object throws (`null`, `undefined`, strings,
-   * numbers, POJOs) by returning them unchanged. Used only as a de-dup key —
-   * the emitted leaf is still the innermost collected error.
-   */
-  private rootOf(error: unknown): unknown {
-    const seen = new Set<unknown>();
-    let current: unknown = error;
-    while (current != null && typeof current === 'object') {
-      let cause: unknown;
-      try {
-        cause = (current as { cause?: unknown }).cause;
-      } catch {
-        // A hostile `cause` getter must not break the never-throw contract:
-        // treat the current node as the root and stop walking.
-        break;
-      }
-      if (!(cause instanceof Error) || seen.has(current)) {
-        break;
-      }
-      seen.add(current);
-      current = cause;
-    }
-    return current;
-  }
-
-  /**
-   * Group collected entries by their root failure's identity so each distinct
-   * root becomes one event. Real `Error`s and non-`Error` throws alike key by
-   * identity (`Map` value equality), so independent failures never merge.
-   * Entry order within a group is preserved (innermost first); groups are
-   * returned in first-seen order.
-   *
-   * Caveat: identity keying means two genuinely independent failures that reuse
-   * the *same* `Error` instance as their root (e.g. a cached/singleton error
-   * object observed by two operations) merge into one event — non-leaf entries'
-   * identity (stack, own props) is then discarded and only their `.message`
-   * survives in the assembled chain. Throwing fresh errors avoids this.
+   * Group collected entries by their root failure's identity; see
+   * {@link groupCollectedByRoot} for semantics and caveats.
    */
   private groupByRoot(entries: Collected[]): Collected[][] {
-    const groups: Collected[][] = [];
-    const byRoot = new Map<unknown, Collected[]>();
-    for (const entry of entries) {
-      const root = this.rootOf(entry.error);
-      // Only object roots dedup by identity. Primitive/null/undefined throws
-      // carry no identity, so two independent failures that happen to throw the
-      // same primitive value (`throw 'boom'`, `NaN`, …) must NOT merge — give
-      // each its own group rather than collapsing them on Map value-equality.
-      if (root === null || typeof root !== 'object') {
-        groups.push([entry]);
-        continue;
-      }
-      let group = byRoot.get(root);
-      if (!group) {
-        group = [];
-        byRoot.set(root, group);
-        groups.push(group);
-      }
-      group.push(entry);
-    }
-    return groups;
+    return groupCollectedByRoot(entries);
   }
 
   /**
    * Assemble one event from a group of collected entries (innermost first) and
-   * hand it to the reporter.
+   * hand it to the reporter; see {@link emitCollectedGroup}.
    */
   private emitGroup(entries: Collected[]): void {
-    const messages = entries
-      .filter((entry) => entry.message)
-      .map((entry) => entry.message as string)
-      .reverse();
-
-    const leaf = entries[0].error;
-    const assembled = this.buildCauseChain(messages, leaf);
-    const tags = entries.reduce<Record<string, string>>(
-      (acc, entry) => ({ ...acc, ...entry.tags }),
-      {},
-    );
-    const breadcrumbs = entries
-      .filter(
-        (entry) =>
-          entry.breadcrumbData && Object.keys(entry.breadcrumbData).length > 0,
-      )
-      .map((entry) => ({
-        data: entry.breadcrumbData as Record<string, unknown>,
-        functionName: entry.functionName,
-      }));
-
-    const reporter = Try.getDefaultReporter();
-    try {
-      let outcome: unknown;
-      if (reporter.capture) {
-        outcome = reporter.capture(assembled, {
-          tags,
-          breadcrumbs: breadcrumbs.length > 0 ? breadcrumbs : undefined,
-        });
-      } else {
-        outcome = reporter.report(leaf, {
-          message: messages[0],
-          tags,
-          breadcrumbData: entries[0].breadcrumbData,
-          functionName: entries[0].functionName,
-        });
-      }
-      // A structurally-valid async reporter returns a promise; a rejection
-      // must not escape as an unhandledRejection after the terminal settled.
-      if (isPromiseLike(outcome)) {
-        Promise.resolve(outcome).catch((err) => {
-          if (this.config.debug) {
-            console.error('Error in report-once flush', err);
-          }
-        });
-      }
-    } catch (err) {
-      if (this.config.debug) {
-        console.error('Error in report-once flush', err);
-      }
-    }
-  }
-
-  /**
-   * Build a nested-cause chain `messages[0]` (outermost) → … → `leaf`. Each
-   * wrapper copies the leaf's stack (when the leaf is an object with one) so
-   * `Try`/assembly frames never appear. Tolerates a non-object leaf.
-   */
-  private buildCauseChain(messages: string[], leaf: unknown): Error {
-    let leafStack: string | undefined;
-    if (leaf != null && typeof leaf === 'object') {
-      try {
-        leafStack = (leaf as { stack?: string }).stack;
-      } catch {
-        // A hostile `stack` getter must not break the never-throw contract:
-        // assemble the chain without copying the leaf's stack.
-        leafStack = undefined;
-      }
-    }
-    let current: unknown = leaf;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const wrapper = new Error(messages[i]);
-      wrapper.cause = current;
-      if (leafStack !== undefined) {
-        wrapper.stack = leafStack;
-      }
-      current = wrapper;
-    }
-    return current as Error;
+    emitCollectedGroup(entries, this.config.debug);
   }
 
   /**
