@@ -22,7 +22,7 @@ The `Try` library already supplies the *mechanism* to handle each failure; nothi
 - That single event carries the **nested cause chain** of every layer's message AND preserves any **pre-existing application `cause` chain** on the original error.
 - Errors are reported even when a layer **recovers gracefully** (`.report().default().value()`), so recovery no longer means silence.
 - The **real failed-function stack** is preserved on the leaf; `Try`/wrapper frames are not added.
-- **Node + Next.js (Node runtime) only.** Browser, bare core, and Next.js Edge are unchanged (legacy path).
+- **Report-once aggregation: Node + Next.js (Node runtime) only.** Browser, bare core, and Next.js Edge keep the legacy live-report path — no aggregation. The `.report()`-gating of every terminal (including `error()`/`result()`) applies on all platforms; only once-vs-live differs.
 
 **Non-goals**
 
@@ -33,7 +33,7 @@ The `Try` library already supplies the *mechanism* to handle each failure; nothi
 ## 3. Decisions baked in (from review)
 
 - **Boundary model: implicit only, hardened.** The outermost `Try` in the async context tree opens the scope; no new public boundary API. Hardened with a `globalThis` registry (§7.1) and a `flushed` guard (§4.6).
-- **`.report()` always contributes.** Collection is gated on `.report()` having been called, **not** on terminal type. `error()` and `result()` still return the error/result to the caller, but no longer suppress the report. **This reverses today's "`error()`/`result()` are non-reporting" contract on the collector path** (§10) — intended.
+- **`.report()` always contributes.** Collection/reporting is gated on `.report()` having been called, **not** on terminal type. `error()` and `result()` still return the error/result to the caller, but no longer suppress the report. **This reverses today's "`error()`/`result()` are non-reporting" contract on every platform** (§10) — intended. The collector path (Node / Next.js Node runtime) aggregates it into the boundary's single event; the legacy path (browser / bare core / Edge) reports this layer's error directly.
 - **Preserve application cause chains.** The emitted leaf is the innermost collected *original* error with its native `.cause` chain intact (§5), not the deepest-walked root.
 - **Tag-as-hint is treated as unverified, not a known bug** (§11 D4): `@sentry/core` `captureException(error, captureContext)` appears to accept `tags`; verify against pinned peer versions before changing anything.
 
@@ -80,7 +80,7 @@ type Registry = { scopeProvider: ScopeProvider; defaultReporter: Reporter };
 
 Core branches once on `registry.scopeProvider.collects`:
 
-- **`false` (legacy path)** — browser, bare core, Next.js Edge. **Exactly today's behavior**: report at the terminal (`value()`/`unwrap()` only) via `defaultReporter.report`, breadcrumbs added live, `error()`/`result()` non-reporting. No scope, no collection.
+- **`false` (legacy path)** — browser, bare core, Next.js Edge. Report at the terminal via `defaultReporter.report` when `.report()` was set — for **all** terminals (`value`/`unwrap`/`error`/`result`), gated by `.report()` not terminal type — with breadcrumbs added live. No scope, no report-once collection.
 - **`true` (collector path)** — Node + Next.js Node runtime. Everything below applies.
 
 ### 4.4 Boundary detection & running the function (collector path)
@@ -198,11 +198,14 @@ per-root `report`, so third-party reporters keep working without changes.
 
 ## 10. Backward compatibility & breaking changes
 
-- **Legacy path unchanged.** Browser, bare core, and Next.js Edge behave exactly
-  as before (path gate on `scopeProvider.collects`, §4.3).
-- **Breaking (collector path):** `.error()` / `.result()` now report when
-  `.report()` was set (§3); breadcrumbs are event-scoped rather than global
-  (§6). These ship as a **major** release with README + test updates.
+- **Legacy path: no report-once aggregation.** Browser, bare core, and Next.js
+  Edge keep the live per-layer report path — no scope, no collection (path gate
+  on `scopeProvider.collects`, §4.3).
+- **Breaking (every platform):** `.error()` / `.result()` now report when
+  `.report()` was set (§3) — the collector path aggregates it into the
+  boundary's single event, the legacy path reports this layer's error directly.
+  On the collector path, breadcrumbs are additionally event-scoped rather than
+  global (§6). These ship as a **major** release with README + test updates.
 - **Removed:** the deprecated, unexported `ErrorReporter` utility (also removes a
   transitive `@sentry/nextjs` import from the browser-safe core graph).
 
@@ -287,10 +290,9 @@ Boundary terminals additionally flush (§4.6) regardless of type. `throwThroughE
 
 ## 10. Backward compatibility & test impact
 
-- **Browser / bare core / Edge:** legacy path, byte-identical.
-- **Node / Next.js — intended breaking changes (collector path):**
-  1. **`error()`/`result()` with `.report()` now emit** (previously non-reporting). Existing tests asserting `captureException` NOT called for `result()+report()` must be updated; README line 197 reversed.
-  2. **Breadcrumbs become event-scoped.** A breadcrumb attached to a failure reaches that failure's event; a breadcrumbs-only failure with no report anywhere in the scope no longer adds a *global* breadcrumb (that global add was the cross-request leak). Tests asserting live `addBreadcrumb` for breadcrumbs-only-no-report on the node/nextjs entry change accordingly.
+- **Legacy path (browser / bare core / Edge): no report-once aggregation.** Keeps the live per-layer report path — no scope, no collection. **Not** byte-identical, though: `error()`/`result()` now honor `.report()` here too, reporting this layer's error directly.
+- **Breaking (every platform):** `error()`/`result()` with `.report()` now report (previously non-reporting) — the collector path (Node / Next.js Node runtime) aggregates it into the boundary's single event, the legacy path reports this layer's error directly. Existing tests asserting `captureException` NOT called for `result()+report()` must be updated; README line 197 reversed.
+- **Breaking (collector path only):** breadcrumbs become event-scoped. A breadcrumb attached to a failure reaches that failure's event; a breadcrumbs-only failure with no report anywhere in the scope no longer adds a *global* breadcrumb (that global add was the cross-request leak). Tests asserting live `addBreadcrumb` for breadcrumbs-only-no-report on the node/nextjs entry change accordingly.
 - **Node / Next.js — preserved invariants:** a standalone un-nested `Try` is its own boundary → one event at its terminal, same count/shape as today (`toHaveBeenCalledTimes(1)` tests stay green); 1-layer assembled error equals today's `createWrappedError` output + tag injection; breadcrumb double-add regression stays fixed (one add per breadcrumb, now at flush).
 - **`Reporter.capture` is optional** → existing custom reporters keep compiling (fallback to `report()` per root). Still note in changelog.
 - **New tests:** multi-layer nested cause chain + app-cause-chain preservation; one-event-per-root dedup incl. error-like `{name,message,code}` through 3 layers; recovered-nested-under-successful-boundary; `error()`/`result()`+`.report()` now emit; sync/async; late/fire-and-forget → separate emit (not lost); `flushed` idempotency (multiple terminals on one instance); `throwThroughErrorTypes` still emits; 6+ layer chain vs Sentry depth; dual `/node`+`/nextjs` import shares one scope.
