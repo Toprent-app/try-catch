@@ -11,13 +11,14 @@ layer. The leaf preserves the innermost original error (and its own application
 
 **Breaking changes:**
 
-- `.error()` and `.result()` now **report** when `.report()` was configured, on
-  **every** platform — previously these terminals never reported. They still
-  return the error/result. On the Node / Next.js Node collector path the report
-  is the boundary's single aggregated event; on the browser / bare-core / Edge
-  legacy path this layer's error is reported directly. `.report()` alone
-  decides *whether* an error is reported; the platform decides only
-  once-vs-live and the terminal only the return shape.
+- `.error()` and `.result()` now **honor a configured `.report()`**. Previously
+  these two terminals ignored `.report()` and never sent to Sentry; now they
+  report **only when `.report()` is in the chain** — matching `.value()` /
+  `.unwrap()` — while still returning the error/result. Without `.report()` they
+  never report. Reporting is gated solely by `.report()`; the platform decides
+  only once-vs-live (Node / Next.js Node collector path: the boundary's single
+  aggregated event; browser / bare-core / Edge legacy path: this layer's error
+  reported directly), and the terminal decides only the return shape.
 - The Next.js entry now **forces** its `@sentry/nextjs` reporter as the default
   (load-order-independent) instead of first-wins, so a transitively-loaded
   `/node` entry can no longer win and route a Next.js app's events to an
