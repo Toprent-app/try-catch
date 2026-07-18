@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { NoopReporter, CaptureOptions } from '../core/reporter';
+import { NoopReporter, type Reporter } from '../core/reporter';
 
 describe('core/reporter — NoopReporter', () => {
   it('report() does nothing and does not throw', () => {
@@ -30,13 +30,11 @@ describe('core/reporter — NoopReporter', () => {
     expect(wrapped.stack).toBe('ROOT_STACK');
   });
 
-  it('capture() is a no-op and does not throw', () => {
-    const reporter = new NoopReporter();
-    const opts: CaptureOptions = {
-      tags: { library: '@power-rent/try-catch' },
-      breadcrumbs: [{ data: { id: 1 }, functionName: 'fn' }],
-    };
-
-    expect(reporter.capture(new Error('assembled'), opts)).toBeUndefined();
+  it('does not define capture(), so the collector flush routes to report()', () => {
+    // A no-op capture here would be inherited by subclasses that override only
+    // report(), silently dropping every report-once event. Absence is the
+    // contract: emitGroup must take the report() fallback.
+    const reporter: Reporter = new NoopReporter();
+    expect(reporter.capture).toBeUndefined();
   });
 });

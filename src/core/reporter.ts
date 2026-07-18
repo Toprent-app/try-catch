@@ -81,7 +81,8 @@ export class NoopReporter implements Reporter {
     return wrappedError;
   }
 
-  capture(_assembledError: Error, _opts: CaptureOptions): void {
-    // Do nothing
-  }
+  // Deliberately no `capture`: the collector path picks `capture` whenever it
+  // exists, so a no-op here would make any subclass that overrides only
+  // `report()` silently drop every report-once event. Absence routes the
+  // collector flush to the `report()` fallback instead.
 }
