@@ -1025,8 +1025,20 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     try {
       for (const group of this.groupByRoot(scope.errors)) {
         try {
+          // Skip a group whose object root already emitted in an earlier
+          // (overflow) batch of this scope — report-once must hold across
+          // overflow flushes. Primitive roots are never tracked (they never
+          // merge; see Scope.emittedRoots).
+          const root = this.rootOf(group[0].error);
+          const isObjectRoot = root !== null && typeof root === 'object';
+          if (isObjectRoot && scope.emittedRoots?.has(root as object)) {
+            continue;
+          }
           if (group.some((entry) => entry.message)) {
             this.emitGroup(group);
+            if (isObjectRoot) {
+              (scope.emittedRoots ??= new Set()).add(root as object);
+            }
           }
         } catch (err) {
           if (this.config.debug) {

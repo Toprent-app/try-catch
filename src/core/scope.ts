@@ -24,6 +24,20 @@ export interface Scope {
   readonly errors: Collected[];
   /** Set `true` after the boundary emits; guards late/repeat flush. */
   flushed: boolean;
+  /**
+   * Object roots already emitted from this scope, so a root whose entries span
+   * an overflow flush is not emitted again by a later batch (report-once holds
+   * across overflow boundaries). Only object roots are tracked — primitive
+   * throws carry no identity and never merge, so tracking them would wrongly
+   * suppress genuinely independent failures. Lazily created on first emit.
+   *
+   * Memory tradeoff: the set holds strong references to emitted roots for the
+   * scope's lifetime. It grows only by one entry per *emitted distinct root*
+   * (not per collected error), and the scope dies with its boundary/request,
+   * so a long-lived boundary under pathological volume trades a bounded set of
+   * root references for the report-once guarantee.
+   */
+  emittedRoots?: Set<object>;
 }
 
 /**

@@ -317,6 +317,51 @@ describe('report-once on /node (collector path)', () => {
     // Every distinct root emits exactly once — overflow batching loses/dupes none.
     expect(captureException).toHaveBeenCalledTimes(COUNT);
   });
+
+  it('a root spanning an overflow flush emits exactly once (report-once holds)', async () => {
+    // 101 entries sharing ONE Error instance: the overflow flush at 100 emits
+    // the root's group, then the final boundary flush sees the 101st entry with
+    // the same root — which must NOT produce a second event.
+    const COUNT = 101; // MAX_SCOPE_ERRORS + 1
+    const shared = new Error('shared root');
+
+    async function boundary(): Promise<string> {
+      for (let i = 0; i < COUNT; i++) {
+        await new Try(async (): Promise<never> => {
+          throw shared;
+        })
+          .report(`m${i}`)
+          .value();
+      }
+      return 'done';
+    }
+
+    const out = await new Try(boundary).report('boundary').value();
+
+    expect(out).toBe('done');
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('independent primitive throws keep per-entry events across overflow flushes', async () => {
+    // Primitives carry no identity, so equal primitive throws never merge —
+    // including across an overflow boundary (no root tracking for them).
+    const COUNT = 101; // MAX_SCOPE_ERRORS + 1
+
+    async function boundary(): Promise<string> {
+      for (let i = 0; i < COUNT; i++) {
+        await new Try(async (): Promise<never> => {
+          throw 'boom';
+        })
+          .report(`m${i}`)
+          .value();
+      }
+      return 'done';
+    }
+
+    await new Try(boundary).report('boundary').value();
+
+    expect(captureException).toHaveBeenCalledTimes(COUNT);
+  });
 });
 
 describe('NodeReporter legacy (non-collector) methods', () => {
