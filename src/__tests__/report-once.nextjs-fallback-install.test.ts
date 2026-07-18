@@ -24,7 +24,8 @@ describe('nextjs collector async dynamic-import fallback', () => {
   });
 
   it('installs the collector via dynamic import when getBuiltinModule is unavailable', async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(getScopeProvider().collects).toBe(true);
+    await vi.waitFor(() => expect(getScopeProvider().collects).toBe(true), {
+      timeout: 1000,
+    });
   });
 });

@@ -31,7 +31,7 @@ describe.skipIf(!built)('bundle packaging guards', () => {
       expect(src).not.toMatch(/require\(["']node:async_hooks["']\)/);
       // Any reference must be the dynamic import().
       if (/async_hooks/.test(src)) {
-        expect(src).toMatch(/import\(["']\w*async_hooks["']\)/);
+        expect(src).toMatch(/import\(\s*["'](?:node:)?async_hooks["']\s*\)/);
       }
     }
   });

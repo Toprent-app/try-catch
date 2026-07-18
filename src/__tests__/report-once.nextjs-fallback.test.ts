@@ -26,7 +26,12 @@ describe('nextjs collector fallback', () => {
   });
 
   it('stays on the legacy path when AsyncLocalStorage is unavailable', async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Settle the installer's guarded dynamic-import fallback first: awaiting
+    // the same (mocked) module and yielding a macrotask orders this assertion
+    // after the installer's .then chain, so the negative expectation is
+    // meaningful instead of trivially true at t=0.
+    await import('node:async_hooks');
+    await new Promise((resolve) => setImmediate(resolve));
     expect(getScopeProvider().collects).toBe(false);
   });
 });
