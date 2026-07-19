@@ -169,9 +169,10 @@ try {
   const unwrapped = await new Try(asyncFunction, arg1, arg2)
     .report('Failed to execute business logic')
     .unwrap();
-} catch (err) {
-  // err.message will be 'Failed to execute business logic'
-  // err.cause will be the original error
+} catch (error) {
+  // Handle the error
+  // error.message will be 'Failed to execute business logic'
+  // error.cause will be the original error
 }
 ```
 
@@ -372,9 +373,26 @@ function add(a: number, b: number): number {
 }
 const sum = new Try(add, 5, 3).value();
 
+// Mixed parameter types
+function formatMessage(id: number, message: string, urgent: boolean): string {
+  const prefix = urgent ? '[URGENT]' : '[INFO]';
+  return `${prefix} #${id}: ${message}`;
+}
+const formatted = new Try(formatMessage, 123, 'System error', true)
+  .report('Message formatting failed')
+  .tag('component', 'notification')
+  .default('Unexpected error')
+  .value();
+
+// No parameters
+function getCurrentTime(): number {
+  return Date.now();
+}
+const timestamp = new Try(getCurrentTime).value();
+
 // Object parameters (key extraction available)
 const user = await new Try(fetchUser, { userId: 123, includeProfile: true })
-  .breadcrumbs(['userId'])
+  .breadcrumbs(['userId']) // ✅ Extract keys from object parameter
   .report('Failed to fetch user')
   .value();
 
@@ -386,6 +404,16 @@ const result = await new Try(processString, 'hello world')
   }))
   .report('String processing failed')
   .tag('operation', 'process')
+  .value();
+
+// Mixed parameter types with transformers
+const result = await new Try(processOrder, 'order-123', 99.50, true)
+  .breadcrumbs(
+    (id: string) => ({ orderId: id }),
+    (amount: number) => ({ priceCategory: amount > 100 ? 'high' : 'low' }),
+    (urgent: boolean) => ({ priority: urgent ? 'high' : 'normal' })
+  )
+  .report('Order processing failed')
   .value();
 ```
 
@@ -409,6 +437,7 @@ const error = await new Try(updateDatabase, data)
   .error();
 
 if (error) {
+  // Handle error case
   return { success: false, error: error.message };
 }
 
@@ -418,7 +447,7 @@ try {
     .report('Critical operation failed')
     .tag('critical', 'true')
     .unwrap();
-} catch (err) {
+} catch (error) {
   // Handle critical failure
 }
 ```
@@ -438,19 +467,18 @@ const result = await new Try(complexOperation, data)
 
 ## Features
 
-- 🚀 **Promise-like interface** — async instances can be `await`-ed directly
-- 🔍 **Automatic Sentry integration** — errors are reported via environment adapters
+- 🔍 **Automatic Sentry integration** - Errors are automatically reported
 - 🧱 **Non-Error normalization** — strings, numbers, objects thrown by callers become real `Error` instances with `.cause`
 - 🍞 **Consistent breadcrumbs** — recorded on every terminal method
-- 🏷️ **Tag support** — categorize reports with tags
-- 🎯 **TypeScript support** — full type safety
-- 🔄 **Flexible error handling** — ignore, default, inspect, or re-throw
+- 🏷️ **Tag support** - Add custom tags to Sentry reports
+- 🎯 **TypeScript support** - Full type safety
+- 🔄 **Flexible error handling** - Choose to ignore, use defaults, inspect errors, or let them bubble up
 
 ## Requirements
 
 - Node.js >= 20
 - TypeScript >= 4.5 (if using TypeScript)
-- Sentry or an alternative error reporting service (optional — `NoopReporter` is the default)
+- Sentry or an alternative error reporting service (optional — falls back to a no-op reporter if not configured)
 
 ## License
 

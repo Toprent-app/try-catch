@@ -314,7 +314,7 @@ describe('coverage gaps', () => {
   describe('extractDoctests untagged unterminated fence', () => {
     it('breaks scanning on untagged unterminated fence without throw', () => {
       const source = 'intro\n```js\nconst x = 1;\n';
-      expect(extractDoctests(source)).toHaveLength(0);
+      expect(() => extractDoctests(source)).toThrow(/unterminated/i);
     });
   });
 

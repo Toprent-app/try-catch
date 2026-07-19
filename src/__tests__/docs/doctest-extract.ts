@@ -61,13 +61,8 @@ export function extractDoctests(source: string): DoctestBlock[] {
     }
 
     if (j >= lines.length) {
-      if (tagged) {
-        throw new Error(
-          `extractDoctests: unterminated doctest fence opened at line ${openLine}`,
-        );
-      }
-      // Untagged + unterminated: treat as end of source, stop scanning.
-      break;
+      const kind = tagged ? 'doctest fence' : 'fence';
+      throw new Error(`extractDoctests: unterminated ${kind} opened at line ${openLine}`);
     }
 
     if (tagged) {

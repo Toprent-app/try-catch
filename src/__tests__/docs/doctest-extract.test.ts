@@ -100,6 +100,12 @@ describe('extractDoctests', () => {
     expect(() => extractDoctests(source)).toThrow(/unterminated/i);
   });
 
+  it('throws a descriptive error on an unterminated untagged fenced block', () => {
+    const source = ['```bash', 'echo "no close fence"'].join('\n');
+
+    expect(() => extractDoctests(source)).toThrow(/unterminated/i);
+  });
+
   it('ignores the doctest marker when the first token is neither ts nor typescript', () => {
     const source = [
       '```js doctest',

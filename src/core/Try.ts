@@ -735,7 +735,15 @@ export class Try<
     }
 
     if (this.exec.promise) {
-      return this.exec.promise;
+      // Another instance sharing this `exec` (via .default()) already
+      // started the async execution and it hasn't settled yet. Chain this
+      // instance's own finally onto it so it still fires exactly once when
+      // the shared promise resolves, instead of relying on whichever
+      // instance originally created the promise.
+      return this.exec.promise.then((result) => {
+        const ran = this.runFinallyCallback();
+        return isPromiseLike(ran) ? Promise.resolve(ran).then(() => result) : result;
+      });
     }
 
     try {
