@@ -4,7 +4,7 @@
 ## Prerequisites
 
 - Node.js `>= 20` (defined in `package.json` `engines.node`)
-- TypeScript `>= 4.5` when using TypeScript
+- TypeScript `>= 5.0` when using TypeScript (`const` type parameters are used)
 - A Sentry SDK for your runtime (`@sentry/node`, `@sentry/browser`, or `@sentry/nextjs` — version `>=8.0.0 <11.0.0`) if you want error reporting. The library works without Sentry via the built-in `NoopReporter`.
 
 ## Installation

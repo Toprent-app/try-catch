@@ -477,7 +477,7 @@ const result = await new Try(complexOperation, data)
 ## Requirements
 
 - Node.js >= 20
-- TypeScript >= 4.5 (if using TypeScript)
+- TypeScript >= 5.0 (if using TypeScript; `const` type parameters are used)
 - Sentry or an alternative error reporting service (optional — falls back to a no-op reporter if not configured)
 
 ## License
