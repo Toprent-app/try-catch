@@ -32,7 +32,7 @@ The examples have their own tsconfig so they can be verified independently of th
 npx tsc -p examples
 ```
 
-`examples/tsconfig.json` extends the project tsconfig, sets `noEmit: true`, and uses `paths` to resolve `@power-rent/try-catch` and its `/node`, `/browser`, `/nextjs` sub-paths to the local `src/` tree. That means examples import from the exact package name a consumer would use in application code (D-12) while still being fully type-checked against the current source (D-11).
+`examples/tsconfig.json` extends the project tsconfig, sets `noEmit: true`, and uses `paths` to resolve `@power-rent/try-catch` and its `/node`, `/browser`, `/nextjs` sub-paths to the local `src/` tree. That means examples import from the exact package name a consumer would use in application code while still being fully type-checked against the current source.
 
 The root `npx tsc --noEmit` only covers `src/**/*` (see `tsconfig.json`), so use `npx tsc -p examples` to verify changes to this directory.
 

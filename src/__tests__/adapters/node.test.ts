@@ -8,7 +8,7 @@ vi.mock('@sentry/node', () => ({
 import * as Sentry from '@sentry/node';
 import { NodeReporter } from '../../adapters/node/reporter';
 
-describe('NodeReporter (SENT-01, SENT-02, ENTRY-01)', () => {
+describe('NodeReporter', () => {
   let reporter: NodeReporter;
 
   beforeEach(() => {

@@ -8,7 +8,7 @@ vi.mock('@sentry/nextjs', () => ({
 import * as Sentry from '@sentry/nextjs';
 import { SentryReporter } from '../../nextjs/SentryReporter';
 
-describe('SentryReporter / nextjs (SENT-01, SENT-02, SENT-03, ENTRY-03)', () => {
+describe('SentryReporter / nextjs', () => {
   let reporter: SentryReporter;
 
   beforeEach(() => {
@@ -67,7 +67,7 @@ describe('SentryReporter / nextjs (SENT-01, SENT-02, SENT-03, ENTRY-03)', () => 
     expect(wrapped.stack).toBe(original.stack);
   });
 
-  it('report() does NOT internally call Sentry.addBreadcrumb (D-07)', () => {
+  it('report() does NOT internally call Sentry.addBreadcrumb', () => {
     const original = new Error('boom');
     reporter.report(original, {
       message: 'wrapped',

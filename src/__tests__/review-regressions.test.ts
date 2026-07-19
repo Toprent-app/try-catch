@@ -34,9 +34,9 @@ describe('Regression: multi-CLI review findings', () => {
   /**
    * Cursor (CRITICAL) + Codex (HIGH): throw-through must short-circuit
    * Sentry on `.value()` and on the thenable-await path, not only on
-   * `.unwrap()`. HI-02 fix covered only unwrap().
+   * `.unwrap()`. Previous fix covered only unwrap().
    */
-  describe('R-01 throw-through on .value() / await', () => {
+  describe('throw-through on .value() / await', () => {
     it('async: .value() does NOT captureException for throw-through error', async () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const fn = async () => {
@@ -86,7 +86,7 @@ describe('Regression: multi-CLI review findings', () => {
    * against the shared `exec.promise`, and `exec.finallyRan` suppresses
    * the other.
    */
-  describe('R-02 .default() finally isolation', () => {
+  describe('.default() finally isolation', () => {
     it('async: parent .finally and child .default().finally both run exactly once', async () => {
       const parentFinally = vi.fn();
       const childFinally = vi.fn();
@@ -123,7 +123,7 @@ describe('Regression: multi-CLI review findings', () => {
    * `local.breadcrumbsAdded`. Parent + child with the same breadcrumb
    * config consuming the same failed execution emit breadcrumbs twice.
    */
-  describe('R-03 .default() breadcrumb idempotence', () => {
+  describe('.default() breadcrumb idempotence', () => {
     it('parent + child .default() emit breadcrumbs only once for shared failure', async () => {
       const fn = async (_ctx: { context: string }) => {
         throw new Error('boom');
@@ -144,7 +144,7 @@ describe('Regression: multi-CLI review findings', () => {
    * `Function.prototype.bind` output (constructor name = 'Function').
    * Bound async methods should still be thenable.
    */
-  describe('R-04 bound async functions resolve via .value()', () => {
+  describe('bound async functions resolve via .value()', () => {
     it('new Try(asyncMethod.bind(instance)).value() executes and resolves', async () => {
       class C {
         async run() {

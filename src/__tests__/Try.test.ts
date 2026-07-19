@@ -1867,7 +1867,7 @@ describe('Try', () => {
     });
   });
 
-  describe('breadcrumb consistency (SENT-03, D-06)', () => {
+  describe('breadcrumb consistency', () => {
     let mockAddBreadcrumbs: import('../core/reporter').Reporter['addBreadcrumbs'];
     let savedReporter: import('../core/reporter').Reporter;
 

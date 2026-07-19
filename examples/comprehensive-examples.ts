@@ -4,17 +4,15 @@
  * This file is type-checked via `npx tsc -p examples` and demonstrates every
  * method currently on the `Try` class plus key reporter-related patterns.
  *
- * All imports use published package paths (D-12) and every pattern shown
- * matches the current `src/` behavior (D-11). The synthetic fixtures below
+ * All imports use published package paths and every pattern shown
+ * matches the current `src/` behavior. The synthetic fixtures below
  * (e.g. `fetchUser`) never perform real I/O.
  *
  * Behaviors referenced in this file:
- *   - D-07: non-Error throws are normalized to `Error` with
- *           `message === "Non-Error thrown (<typeof>)"` and `cause === original`.
- *   - D-08: breadcrumbs record on every terminal method
- *           (.value / .unwrap / .error / .result) — not only on .unwrap.
- *   - D-11: every pattern matches the current API surface.
- *   - D-12: imports come from the package name, never from `../src/...`.
+ *   - non-Error throws are normalized to `Error` with
+ *     `message === "Non-Error thrown (<typeof>)"` and `cause === original`.
+ *   - breadcrumbs record on every terminal method
+ *     (.value / .unwrap / .error / .result) — not only on .unwrap.
  *
  * Swap `NoopReporter` for `ConsoleReporter` (see ./custom-reporter.ts) to see
  * reports printed to stdout; in production swap for a real Sentry/etc. reporter.
@@ -227,7 +225,7 @@ export async function breadcrumbsVariants(): Promise<void> {
     .value();
 }
 
-// === Section: Breadcrumbs record on every terminal method (D-08) ===
+// === Section: Breadcrumbs record on every terminal method ===
 
 export async function breadcrumbsOnEveryTerminal(): Promise<void> {
   // .value()
@@ -255,7 +253,7 @@ export async function breadcrumbsOnEveryTerminal(): Promise<void> {
     .result();
 }
 
-// === Section: Non-Error normalization (D-07) ===
+// === Section: Non-Error normalization ===
 
 export async function nonErrorThrows(): Promise<void> {
   // Throwing a string is normalized to an `Error` with:

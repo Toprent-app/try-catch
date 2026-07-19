@@ -3,13 +3,8 @@
  * docs/*.md, and __fixtures__/*.md under a Noop reporter with all
  * @sentry/* packages mocked.
  *
- * Design references: D-03 (vitest-based harness), D-04 (marker = ts doctest),
- * D-05 (package-name imports via vitest aliases), D-06 (Noop default
- * reporter + mocked Sentry adapters).
- *
  * Zero-snippet policy: if no tagged snippet is found across the entire
- * tracked doc surface, the suite fails. The seed fixture keeps Wave 1
- * green before real docs carry the marker.
+ * tracked doc surface, the suite fails.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
@@ -17,7 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-// Per D-06: mock Sentry entry points so snippets never hit real Sentry.
+// mock Sentry entry points so snippets never hit real Sentry.
 vi.mock('@sentry/node', () => ({
   captureException: vi.fn(),
   addBreadcrumb: vi.fn(),
@@ -82,8 +77,8 @@ function discoverFiles(): DiscoveredFile[] {
 const files = discoverFiles();
 const totalBlocks = files.reduce((n, f) => n + f.blocks.length, 0);
 
-describe('doctest harness (DX-01)', () => {
-  it('configures vitest aliases for @power-rent/try-catch (D-05)', async () => {
+describe('doctest harness', () => {
+  it('configures vitest aliases for @power-rent/try-catch', async () => {
     // Verify the vitest alias config is wired so snippets can import the
     // package by name. We assert on the config rather than via a dynamic
     // import so we don't accidentally hit `dist/` via Node resolution.
@@ -106,7 +101,7 @@ describe('doctest harness (DX-01)', () => {
   it('discovers at least one tagged snippet across the tracked surface', () => {
     if (totalBlocks === 0) {
       throw new Error(
-        'No doctest snippets found — DX-01 harness requires at least one tagged snippet. ' +
+        'No doctest snippets found — the harness requires at least one tagged snippet. ' +
           'Expected coverage: README.md + docs/*.md + src/__tests__/docs/__fixtures__/*.md.',
       );
     }
@@ -141,7 +136,7 @@ afterEach(() => {
 for (const file of files) {
   if (file.blocks.length === 0) continue;
 
-  describe(`${file.relPath} doctest (DX-01)`, () => {
+  describe(`${file.relPath} doctest`, () => {
     it.each(file.blocks.map((b) => [b.startLine, b] as const))(
       'line %i',
       async (_startLine, block) => {

@@ -1,13 +1,11 @@
 /**
- * Doctest extractor — the marker-based fenced-block reader for the DX-01 harness.
+ * Doctest extractor — the marker-based fenced-block reader for the doctest harness.
  *
- * Design decisions referenced:
- *   - D-03: vitest suite executes tagged snippets from README + docs/*.md.
- *   - D-04: tagging convention chosen here is ```ts doctest``` — info-string
- *           must start with `ts` or `typescript` AND contain `doctest` as a
- *           whitespace-separated token. Any other fenced block is skipped.
- *   - D-05: extractor returns raw code; the harness wires imports to local src
- *           via vitest aliases rather than rewriting snippets.
+ * The vitest suite executes tagged snippets from README + docs/*.md. The
+ * tagging convention is ```ts doctest``` — info-string must start with `ts`
+ * or `typescript` AND contain `doctest` as a whitespace-separated token. Any
+ * other fenced block is skipped. The extractor returns raw code; the harness
+ * wires imports to local src via vitest aliases rather than rewriting snippets.
  *
  * Kept intentionally small (no markdown parser dependency). Walks lines,
  * detects fence open/close, accumulates body for matching blocks.

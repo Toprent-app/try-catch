@@ -8,7 +8,7 @@ vi.mock('@sentry/browser', () => ({
 import * as Sentry from '@sentry/browser';
 import { BrowserReporter } from '../../adapters/browser/reporter';
 
-describe('BrowserReporter (SENT-01, SENT-02, ENTRY-02)', () => {
+describe('BrowserReporter', () => {
   let reporter: BrowserReporter;
 
   beforeEach(() => {

@@ -1,4 +1,4 @@
-# Doctest Harness (DX-01)
+# Doctest Harness
 
 This directory contains the Vitest-based doctest harness that executes
 fenced code snippets embedded in the project's user-facing docs, so CI
@@ -6,8 +6,7 @@ fails the moment a snippet stops matching real behavior.
 
 ## Marker Convention
 
-Only fenced blocks tagged with the doctest marker are extracted and run
-(per decision **D-04**):
+Only fenced blocks tagged with the doctest marker are extracted and run:
 
 ````markdown
 ```ts doctest
@@ -31,14 +30,14 @@ Rules:
 Every tagged snippet runs inside the vitest suite `doctest.test.ts`:
 
 - **Reporter:** `Try.setDefaultReporter(new NoopReporter())` before each
-  snippet; prior reporter restored after (D-06).
+  snippet; prior reporter restored after.
 - **Sentry:** `@sentry/node`, `@sentry/browser`, `@sentry/nextjs` are
-  `vi.mock`-ed at module scope — no real Sentry traffic (D-06).
+  `vi.mock`-ed at module scope — no real Sentry traffic.
 - **Imports:** snippets must use the package names
   (`@power-rent/try-catch`, `@power-rent/try-catch/node`,
   `@power-rent/try-catch/browser`, `@power-rent/try-catch/nextjs`).
   The vitest alias config wires these to local `src/` so snippets stay
-  copy-pasteable for users while still exercising real code (D-05).
+  copy-pasteable for users while still exercising real code.
 - **Assertions:** snippets self-assert with plain `if (...) throw new Error(...)`;
   keep them small and independent.
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractDoctests } from './doctest-extract';
 
-describe('extractDoctests (DX-01, D-04)', () => {
+describe('extractDoctests', () => {
   it('extracts a single tagged ```ts doctest``` fenced block', () => {
     const source = [
       '# Title',

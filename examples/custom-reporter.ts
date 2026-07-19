@@ -11,8 +11,6 @@
  * `src/nextjs/SentryReporter`) implements exactly this contract. A custom reporter
  * for any other backend (Datadog, Honeycomb, console, in-memory test collector, …)
  * follows the same shape.
- *
- * References: D-11 (examples match current src/ API), D-12 (package-path imports).
  */
 import {
   Try,

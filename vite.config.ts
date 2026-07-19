@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
-// Per D-05: vitest aliases map the package's public entry points to local
+// vitest aliases map the package's public entry points to local
 // `src/` so README / docs snippets can import from `@power-rent/try-catch[/sub]`
 // and still execute against real source during the doctest harness.
 // Order matters — sub-path aliases must be matched before the bare package
