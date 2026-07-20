@@ -89,8 +89,8 @@ A changeset is a file that describes what changes you've made and what type of v
    - Select which packages to include (this project has one package: `@power-rent/try-catch`)
    - Choose the version bump type:
      - **Major**: Breaking changes that require users to update their code
-     - **Minor**: New features that are backward compatible
-     - **Patch**: Bug fixes that are backward compatible
+     - **Minor**: New features that are backward-compatible
+     - **Patch**: Bug fixes that are backward-compatible
    - Write a description of your changes
 
 3. **The command will create a file** in the `.changeset/` directory with a random name like `cool-cats-sing.md`
@@ -264,8 +264,8 @@ npx changeset publish
 This project follows [Semantic Versioning](https://semver.org/):
 
 - **MAJOR** (1.0.0 → 2.0.0): Breaking changes
-- **MINOR** (1.0.0 → 1.1.0): New features, backward compatible
-- **PATCH** (1.0.0 → 1.0.1): Bug fixes, backward compatible
+- **MINOR** (1.0.0 → 1.1.0): New features, backward-compatible
+- **PATCH** (1.0.0 → 1.0.1): Bug fixes, backward-compatible
 
 ### Version Bump Guidelines
 
