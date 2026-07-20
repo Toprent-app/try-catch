@@ -396,6 +396,59 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
+    it('should report to Sentry and still return the error when error() has .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(throwingFunction, params)
+        .debug(false)
+        .report('failed')
+        .error();
+
+      // The original error is still returned, unchanged.
+      expect(result).toEqual(new Error('boom'));
+
+      const expectedError = new Error('failed');
+      expectedError.cause = new Error('boom');
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        tags: {
+          library: '@power-rent/try-catch',
+        },
+      });
+    });
+
+    it('should not report when error() is used without .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params).debug(false).error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should not report when error() succeeds', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(successfulFunction, params)
+        .report('failed')
+        .error();
+
+      expect(result).toBeUndefined();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params)
+        .debug(false)
+        .breadcrumbs(['parameterKey'])
+        .error();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('should return the actual error', async () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
@@ -719,16 +772,46 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', async () => {
+      it('should report errors to Sentry and still return the result when result() has .report()', async () => {
+        const params = { parameterKey: 'alpha' };
+
+        const result = await new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .result();
+
+        // The original failure result is still returned, unchanged.
+        expect(result).toEqual({ success: false, error: new Error('boom') });
+
+        const expectedError = new Error('failed');
+        expectedError.cause = new Error('boom');
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+          tags: {
+            library: '@power-rent/try-catch',
+          },
+        });
+      });
+
+      it('should not report when result() is used without .report()', async () => {
+        const params = { parameterKey: 'alpha' };
+
+        await new Try(throwingFunction, params).debug(false).result();
+
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+      });
+
+      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .breadcrumbs(['parameterKey'])
           .result();
 
+        expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
         expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
       it('should work with type guards for discriminated union', async () => {
@@ -1232,6 +1315,59 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
+    it('should report to Sentry and still return the error when error() has .report()', () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = new Try(throwingFunction, params)
+        .debug(false)
+        .report('failed')
+        .error();
+
+      // The original error is still returned, unchanged.
+      expect(result).toEqual(new Error('boom'));
+
+      const expectedError = new Error('failed');
+      expectedError.cause = new Error('boom');
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        tags: {
+          library: '@power-rent/try-catch',
+        },
+      });
+    });
+
+    it('should not report when error() is used without .report()', () => {
+      const params = { parameterKey: 'alpha' };
+
+      new Try(throwingFunction, params).debug(false).error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should not report when error() succeeds', () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = new Try(successfulFunction, params)
+        .report('failed')
+        .error();
+
+      expect(result).toBeUndefined();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', () => {
+      const params = { parameterKey: 'alpha' };
+
+      new Try(throwingFunction, params)
+        .debug(false)
+        .breadcrumbs(['parameterKey'])
+        .error();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('should return the actual error', () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
@@ -1547,16 +1683,46 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', () => {
+      it('should report errors to Sentry and still return the result when result() has .report()', () => {
+        const params = { parameterKey: 'alpha' };
+
+        const result = new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .result();
+
+        // The original failure result is still returned, unchanged.
+        expect(result).toEqual({ success: false, error: new Error('boom') });
+
+        const expectedError = new Error('failed');
+        expectedError.cause = new Error('boom');
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+          tags: {
+            library: '@power-rent/try-catch',
+          },
+        });
+      });
+
+      it('should not report when result() is used without .report()', () => {
+        const params = { parameterKey: 'alpha' };
+
+        new Try(throwingFunction, params).debug(false).result();
+
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+      });
+
+      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .breadcrumbs(['parameterKey'])
           .result();
 
+        expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
         expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
       it('should work with type guards for discriminated union', () => {
