@@ -2,7 +2,7 @@
   // Configuration for CommonJS build
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
+    "module": "preserve",
     "lib": ["ES2022"],
     "outDir": "dist",
     "declaration": true,
@@ -14,7 +14,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "moduleResolution": "node"
+    "moduleResolution": "bundler"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

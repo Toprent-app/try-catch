@@ -651,7 +651,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Execute the function and return a result object containing either the value or error.
    * This method never throws - it returns a discriminated union that you can pattern match on.
-   * Errors are not reported when using this method.
+   * If `.report()` was configured, errors will be reported before the result is returned.
+   * If breadcrumbs were configured, they will be added to the reporting context.
    *
    * @returns A result object with success flag, value (on success), or error (on failure)
    *
@@ -688,7 +689,31 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     Promise<TryResult<TReturn>>,
     TryResult<TReturn>
   > {
-    return this.execute() as IfPromise<
+    const result = this.execute();
+
+    if (isPromiseLike<TryResult<TReturn>>(result)) {
+      return result.then((resolved) => {
+        if (!resolved.success) {
+          if (this.config.message) {
+            this.reportError(resolved.error);
+          } else if (this.config.breadcrumbConfig) {
+            this.addBreadcrumbsIfConfigured();
+          }
+        }
+
+        return resolved;
+      }) as IfPromise<TReturn, Promise<TryResult<TReturn>>, TryResult<TReturn>>;
+    }
+
+    if (!result.success) {
+      if (this.config.message) {
+        this.reportError(result.error);
+      } else if (this.config.breadcrumbConfig) {
+        this.addBreadcrumbsIfConfigured();
+      }
+    }
+
+    return result as IfPromise<
       TReturn,
       Promise<TryResult<TReturn>>,
       TryResult<TReturn>
@@ -698,7 +723,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   /**
    * Execute the function and return the error if one occurred, or undefined if successful.
    * This method never throws - it returns the error as a value instead.
-   * Errors are not reported when using this method.
+   * If `.report()` was configured, errors will be reported before being returned.
+   * If breadcrumbs were configured, they will be added to the reporting context.
    *
    * @returns The error if execution failed, undefined if successful
    *
@@ -724,12 +750,36 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) =>
-        resolved.success ? undefined : resolved.error,
-      ) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+      return result.then((resolved) => {
+        if (resolved.success) {
+          return undefined;
+        }
+
+        if (this.config.message) {
+          this.reportError(resolved.error);
+        } else if (this.config.breadcrumbConfig) {
+          this.addBreadcrumbsIfConfigured();
+        }
+
+        return resolved.error;
+      }) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
     }
 
-    return (result.success ? undefined : result.error) as IfPromise<
+    if (result.success) {
+      return undefined as IfPromise<
+        TReturn,
+        Promise<Error | undefined>,
+        Error | undefined
+      >;
+    }
+
+    if (this.config.message) {
+      this.reportError(result.error);
+    } else if (this.config.breadcrumbConfig) {
+      this.addBreadcrumbsIfConfigured();
+    }
+
+    return result.error as IfPromise<
       TReturn,
       Promise<Error | undefined>,
       Error | undefined
@@ -980,9 +1030,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       | undefined
       | null,
     onrejected?:
-      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
-      | undefined
-      | null,
+      ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
   ): Promise<TResult1 | TResult2> {
     return Promise.resolve(
       this.value() as

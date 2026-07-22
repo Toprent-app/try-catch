@@ -18,7 +18,7 @@ class GraphQLError extends Error {
 }
 
 class TestClass {
-  private name: string;
+  private readonly name: string;
 
   constructor(name: string) {
     this.name = name;
@@ -396,6 +396,38 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
+    it('should not report when error() is used without .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params).debug(false).error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should not report when error() succeeds', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = await new Try(successfulFunction, params)
+        .report('failed')
+        .error();
+
+      expect(result).toBeUndefined();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params)
+        .debug(false)
+        .breadcrumbs(['parameterKey'])
+        .error();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('should return the actual error', async () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
@@ -719,16 +751,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', async () => {
+      it('should not report when result() is used without .report()', async () => {
+        const params = { parameterKey: 'alpha' };
+
+        await new Try(throwingFunction, params).debug(false).result();
+
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+      });
+
+      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .breadcrumbs(['parameterKey'])
           .result();
 
+        expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
         expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
       it('should work with type guards for discriminated union', async () => {
@@ -1232,6 +1273,38 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
+    it('should not report when error() is used without .report()', () => {
+      const params = { parameterKey: 'alpha' };
+
+      new Try(throwingFunction, params).debug(false).error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should not report when error() succeeds', () => {
+      const params = { parameterKey: 'alpha' };
+
+      const result = new Try(successfulFunction, params)
+        .report('failed')
+        .error();
+
+      expect(result).toBeUndefined();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', () => {
+      const params = { parameterKey: 'alpha' };
+
+      new Try(throwingFunction, params)
+        .debug(false)
+        .breadcrumbs(['parameterKey'])
+        .error();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('should return the actual error', () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
@@ -1547,16 +1620,25 @@ describe('Try', () => {
         });
       });
 
-      it('should not report errors to Sentry when using result()', () => {
+      it('should not report when result() is used without .report()', () => {
+        const params = { parameterKey: 'alpha' };
+
+        new Try(throwingFunction, params).debug(false).result();
+
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+      });
+
+      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params)
           .debug(false)
-          .report('should not be reported')
+          .breadcrumbs(['parameterKey'])
           .result();
 
+        expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
         expect(Sentry.captureException).not.toHaveBeenCalled();
-        expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
       it('should work with type guards for discriminated union', () => {

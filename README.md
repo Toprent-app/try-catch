@@ -256,7 +256,7 @@ Execute the function and return the result, the configured default value, or `un
 
 #### `.error(): Error | undefined | Promise<Error | undefined>`
 
-Execute the function and return the error if one occurred, or `undefined` if successful.
+Execute the function and return the error if one occurred, or `undefined` if successful. If `.report()` was configured, the error is reported before being returned.
 
 #### `.result(): TryResult<T> | Promise<TryResult<T>>`
 
