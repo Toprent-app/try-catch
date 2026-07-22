@@ -1,5 +1,6 @@
 import type { BreadcrumbTransformer } from './types';
 import { BreadcrumbTransformationError } from './types';
+import { normalizeThrown } from './normalize';
 
 /**
  * Predefined transformer functions for common use cases
@@ -53,7 +54,7 @@ export class TransformerRegistry {
    * Apply a custom transformer function safely
    */
   static apply(
-    transformer: BreadcrumbTransformer<any>,
+    transformer: BreadcrumbTransformer<unknown>,
     value: unknown,
     debug = false,
   ): Record<string, unknown> {
@@ -61,10 +62,16 @@ export class TransformerRegistry {
       return transformer(value);
     } catch (error) {
       const transformationError = new BreadcrumbTransformationError(
-        error as Error,
+        normalizeThrown(error),
         'custom',
       );
 
+      // Always warn: a thrown transformer yields empty data, which trips the
+      // guard in addBreadcrumbsIfConfigured and silently drops the breadcrumb.
+      console.warn(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        transformationError,
+      );
       if (debug) {
         console.error('Error in breadcrumb transformer:', transformationError);
       }
@@ -87,11 +94,15 @@ export class TransformerRegistry {
       return transformer(value, paramIndex);
     } catch (error) {
       const transformationError = new BreadcrumbTransformationError(
-        error as Error,
+        normalizeThrown(error),
         transformerType,
         paramIndex,
       );
 
+      console.warn(
+        '[try-catch] predefined breadcrumb transformer threw; breadcrumb dropped:',
+        transformationError,
+      );
       if (debug) {
         console.error('Error in predefined transformer:', transformationError);
       }
