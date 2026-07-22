@@ -19,7 +19,8 @@ CoreTry.setDefaultReporter(new SentryReporter());
 export class Try<
   T,
   TArgs extends readonly unknown[] = unknown[],
-> extends CoreTry<T, TArgs> {
+  TDefault = undefined,
+> extends CoreTry<T, TArgs, TDefault> {
   /**
    * Configure error types that should be thrown through without being wrapped.
    * When using `.report()`, errors matching these types will be re-thrown as-is

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "preserve",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
@@ -14,7 +14,8 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

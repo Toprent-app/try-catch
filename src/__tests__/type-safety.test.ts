@@ -23,7 +23,7 @@ const formatMessage = (id: number, message: string, urgent: boolean) => {
 function processRequest(
   endpoint: string,
   payload: { userId: number; data: string },
-  headers: any,
+  headers: Record<string, string>,
 ) {
   throw new Error('test');
 }
@@ -121,5 +121,15 @@ describe('Try README type safety', () => {
         { param: 2, transform: (priority: boolean) => ({ priority }) },
       ])
       .value();
+  });
+});
+
+describe('Nextjs Try subclass generics', () => {
+  it('default() preserves nextjs subclass type with third generic', async () => {
+    const t = new Try(async (): Promise<number> => 42);
+    const withDefault = t.default('fallback' as const);
+    // Narrowed return via TDefault
+    const v = await withDefault.value();
+    expectTypeOf(v).toEqualTypeOf<number | 'fallback'>();
   });
 });
