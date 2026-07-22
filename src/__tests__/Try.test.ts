@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import Try from '../nextjs';
 
@@ -224,7 +224,8 @@ describe('Try', () => {
 
       await new Try(throwingFunction, params)
         .debug(false)
-        .breadcrumbs(['parameterKey']);
+        .breadcrumbs(['parameterKey'])
+        .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -272,7 +273,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           name: 'value',
@@ -300,7 +301,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           component: 'payment-service',
@@ -327,7 +328,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           module: 'data-processor',
@@ -353,7 +354,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           version: '2.0', // overridden value
@@ -378,7 +379,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           single: 'tag',
@@ -403,6 +404,17 @@ describe('Try', () => {
 
       expect(Sentry.captureException).not.toHaveBeenCalled();
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+    });
+
+    it('should report when error() is used with .report()', async () => {
+      const params = { parameterKey: 'alpha' };
+
+      await new Try(throwingFunction, params)
+        .debug(false)
+        .report('failed')
+        .error();
+
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
     it('should not report when error() succeeds', async () => {
@@ -438,6 +450,7 @@ describe('Try', () => {
         .unwrap();
 
       await expect(exec).rejects.toThrow('validation error');
+      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', async () => {
@@ -760,6 +773,17 @@ describe('Try', () => {
         expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
+      it('should report when result() is used with .report()', async () => {
+        const params = { parameterKey: 'alpha' };
+
+        await new Try(throwingFunction, params)
+          .debug(false)
+          .report('failed')
+          .result();
+
+        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+      });
+
       it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', async () => {
         const params = { parameterKey: 'alpha' };
 
@@ -882,7 +906,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'test',
@@ -923,7 +947,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'payment',
@@ -1151,7 +1175,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           name: 'value',
@@ -1179,7 +1203,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           component: 'payment-service',
@@ -1206,7 +1230,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           module: 'data-processor',
@@ -1232,7 +1256,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           version: '2.0', // overridden value
@@ -1257,7 +1281,7 @@ describe('Try', () => {
       const expectedError = new Error('failed');
       expectedError.cause = new Error('boom');
 
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
+      expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
         tags: {
           library: '@power-rent/try-catch',
           single: 'tag',
@@ -1315,6 +1339,7 @@ describe('Try', () => {
           .report('failed')
           .unwrap();
       }).toThrow('validation error');
+      expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
     it('should not give typescript error', () => {
@@ -1729,7 +1754,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'test',
@@ -1770,7 +1795,7 @@ describe('Try', () => {
         const expectedError = new Error('failed');
         expectedError.cause = new Error('boom');
 
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
+        expect(Sentry.captureException).toHaveBeenCalledWith(expectedError, {
           tags: {
             library: '@power-rent/try-catch',
             component: 'payment',
@@ -1779,6 +1804,295 @@ describe('Try', () => {
           },
         });
       });
+    });
+  });
+
+  describe('Promise-returning non-async functions', () => {
+    it('non-async fn returning a Promise is NOT thenable', () => {
+      function returnsPromise(): Promise<number> {
+        return Promise.resolve(42);
+      }
+
+      const t = new Try(returnsPromise);
+      expect('then' in t).toBe(false);
+    });
+
+    it('await on non-async Try does not execute the wrapped fn (no side effects)', async () => {
+      let calls = 0;
+      function returnsPromise(): Promise<number> {
+        calls += 1;
+        return Promise.resolve(42);
+      }
+
+      const t = new Try(returnsPromise);
+      const awaited = await t;
+
+      expect(awaited).toBe(t);
+      expect(calls).toBe(0);
+    });
+
+    it('Promise-returning sync fn is consumed via .unwrap() / .value()', async () => {
+      function returnsPromise(): Promise<number> {
+        return Promise.resolve(42);
+      }
+      function returnsRejectedPromise(): Promise<number> {
+        return Promise.reject(new Error('boom'));
+      }
+
+      await expect(new Try(returnsPromise).unwrap()).resolves.toBe(42);
+      await expect(
+        new Try(returnsRejectedPromise).default(-1).value(),
+      ).resolves.toBe(-1);
+    });
+
+    it('await still yields the Try instance for truly synchronous fn', async () => {
+      function syncFn(): number {
+        return 42;
+      }
+
+      const t = new Try(syncFn);
+      const awaited = await t;
+
+      expect(awaited).toBe(t);
+    });
+  });
+
+  describe('.default() shares exec state with parent', () => {
+    it('does not re-invoke fn when both parent and child are read', async () => {
+      const fn = vi.fn(async (n: number) => n * 2);
+
+      const parent = new Try(fn, 5);
+      const child = parent.default(-1);
+
+      const parentValue = await parent.value();
+      const childValue = await child.value();
+
+      expect(parentValue).toBe(10);
+      expect(childValue).toBe(10);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child returns parent.value() on success even when default is set', async () => {
+      const fn = vi.fn((n: number) => n + 1);
+
+      const parent = new Try(fn, 41);
+      const child = parent.default(-1);
+
+      expect(child.value()).toBe(42);
+      expect(parent.value()).toBe(42);
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child default value is used when parent fn throws (sync)', () => {
+      const fn = vi.fn((_n: number) => {
+        throw new Error('boom');
+      });
+
+      const parent = new Try(fn, 1);
+      const child = parent.default('fallback');
+
+      expect(child.value()).toBe('fallback');
+      // Trigger parent; should reuse cached error result without re-running fn.
+      expect(parent.value()).toBeUndefined();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+
+    it('child default value is used when parent fn rejects (async)', async () => {
+      const fn = vi.fn(async (_n: number) => {
+        throw new Error('boom');
+      });
+
+      const parent = new Try(fn, 1);
+      const child = parent.default('fallback');
+
+      await expect(child.value()).resolves.toBe('fallback');
+      await expect(parent.value()).resolves.toBeUndefined();
+      expect(fn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('non-Error normalization (DIAG-01)', () => {
+    it('sync: thrown string is normalized to Error with cause', async () => {
+      const result = new Try(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'oops';
+      }).result();
+      expect(result).not.toBeInstanceOf(Promise);
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (string)');
+      expect(r.error.cause).toBe('oops');
+    });
+
+    it('sync: thrown number is normalized to Error with cause', () => {
+      const result = new Try(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 42;
+      }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (number)');
+      expect(r.error.cause).toBe(42);
+    });
+
+    it('sync: thrown plain object is normalized to Error with cause', () => {
+      const obj = { code: 42 };
+      const result = new Try(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw obj;
+      }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBeInstanceOf(Error);
+      expect(r.error.message).toBe('Non-Error thrown (object)');
+      expect(r.error.cause).toBe(obj);
+    });
+
+    it('async: rejected string is normalized to Error with cause', async () => {
+      const result = await new Try(async () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'oops';
+      }).result();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toBe('Non-Error thrown (string)');
+        expect(result.error.cause).toBe('oops');
+      }
+    });
+
+    it('sync: real Error passes through unchanged (no re-wrap)', () => {
+      const real = new Error('real');
+      const result = new Try(() => {
+        throw real;
+      }).result();
+      const r = result as { success: false; error: Error };
+      expect(r.error).toBe(real);
+      expect(r.error.message).toBe('real');
+    });
+
+    it('async: real Error passes through unchanged', async () => {
+      const real = new Error('real');
+      const result = await new Try(async () => {
+        throw real;
+      }).result();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBe(real);
+        expect(result.error.message).toBe('real');
+      }
+    });
+  });
+
+  describe('breadcrumb consistency', () => {
+    let mockAddBreadcrumbs: import('../core/reporter').Reporter['addBreadcrumbs'];
+    let savedReporter: import('../core/reporter').Reporter;
+
+    beforeEach(() => {
+      savedReporter = Try.getDefaultReporter();
+      mockAddBreadcrumbs = vi.fn();
+      Try.setDefaultReporter({
+        report: vi.fn(),
+        addBreadcrumbs: mockAddBreadcrumbs,
+        createWrappedError: (error: Error, message: string) => {
+          const w = new Error(message);
+          w.cause = error;
+          w.stack = error.stack;
+          return w;
+        },
+      });
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(savedReporter);
+    });
+
+    it('async unwrap: breadcrumbs called once when .breadcrumbs() configured', async () => {
+      await expect(
+        new Try(
+          async (_p: { x: number }) => {
+            throw new Error('boom');
+          },
+          { x: 1 },
+        )
+          .breadcrumbs(['x'])
+          .unwrap(),
+      ).rejects.toThrow('boom');
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('sync unwrap: breadcrumbs called once when .breadcrumbs() configured', () => {
+      expect(() =>
+        new Try(
+          (_p: { x: number }) => {
+            throw new Error('boom');
+          },
+          { x: 1 },
+        )
+          .breadcrumbs(['x'])
+          .unwrap(),
+      ).toThrow('boom');
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('async error(): breadcrumbs called once; returns normalized Error', async () => {
+      const err = await new Try(
+        async (_p: { x: number }) => {
+          throw new Error('boom');
+        },
+        { x: 1 },
+      )
+        .breadcrumbs(['x'])
+        .error();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('sync error(): breadcrumbs called once; returns normalized Error', () => {
+      const err = new Try(
+        (_p: { x: number }) => {
+          throw new Error('boom');
+        },
+        { x: 1 },
+      )
+        .breadcrumbs(['x'])
+        .error();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('result(): breadcrumbs called once on failure', async () => {
+      const r = await new Try(
+        async (_p: { x: number }) => {
+          throw new Error('boom');
+        },
+        { x: 1 },
+      )
+        .breadcrumbs(['x'])
+        .result();
+      expect(r.success).toBe(false);
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('.report().breadcrumbs(): addBreadcrumbs called exactly once total (no double-add)', async () => {
+      await expect(
+        new Try(
+          async (_p: { x: number }) => {
+            throw new Error('boom');
+          },
+          { x: 1 },
+        )
+          .report('msg')
+          .breadcrumbs(['x'])
+          .unwrap(),
+      ).rejects.toThrow();
+      expect(mockAddBreadcrumbs).toHaveBeenCalledTimes(1);
+    });
+
+    it('no .breadcrumbs(): addBreadcrumbs NEVER called', async () => {
+      await new Try(async () => {
+        throw new Error('boom');
+      }).result();
+      expect(mockAddBreadcrumbs).not.toHaveBeenCalled();
     });
   });
 });

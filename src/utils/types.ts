@@ -8,7 +8,7 @@
 export type BreadcrumbTransformer<T> = (value: T) => Record<string, unknown>;
 
 type ExtractStringKeys<T> =
-  T extends Record<string, any> ? Extract<keyof T, string> : never;
+  T extends Record<string, unknown> ? Extract<keyof T, string> : never;
 
 type KeyArrayFor<T> =
   ExtractStringKeys<T> extends never ? never : readonly ExtractStringKeys<T>[];
@@ -47,25 +47,24 @@ type TupleBreadcrumbExtractors<
 > = TArgs extends readonly []
   ? never
   : TArgs extends readonly [infer First, ...infer Rest]
-    ?
-        | (KeyArrayFor<First> extends never
-            ? never
-            : {
-                readonly param: IndexAcc['length'];
-                readonly keys: KeyArrayFor<First>;
-              })
-        | {
-            readonly param: IndexAcc['length'];
-            readonly transform: BreadcrumbTransformer<First>;
-          }
-        | {
-            readonly param: IndexAcc['length'];
-            readonly as: 'length' | 'type' | 'value' | 'toString';
-          }
-        | TupleBreadcrumbExtractors<
-            Rest extends readonly unknown[] ? Rest : [],
-            [...IndexAcc, unknown]
-          >
+    ? | (KeyArrayFor<First> extends never
+          ? never
+          : {
+              readonly param: IndexAcc['length'];
+              readonly keys: KeyArrayFor<First>;
+            })
+      | {
+          readonly param: IndexAcc['length'];
+          readonly transform: BreadcrumbTransformer<First>;
+        }
+      | {
+          readonly param: IndexAcc['length'];
+          readonly as: 'length' | 'type' | 'value' | 'toString';
+        }
+      | TupleBreadcrumbExtractors<
+          Rest extends readonly unknown[] ? Rest : [],
+          [...IndexAcc, unknown]
+        >
     : never;
 
 type GenericBreadcrumbKeys<TArgs extends readonly unknown[]> =
@@ -92,13 +91,13 @@ type GenericBreadcrumbExtractor<TArgs extends readonly unknown[]> =
 
 /**
  * Utility type that validates keys exist on the first parameter type.
- * Returns the key array type if valid, or never if any key is invalid.
+ * Returns the key array type if all keys are valid, or never if one is invalid.
  */
 export type ValidateKeys<
   TArgs extends readonly unknown[],
   Keys extends readonly string[],
 > =
-  TArgs[0] extends Record<string, any>
+  TArgs[0] extends Record<string, unknown>
     ? Keys extends readonly (keyof TArgs[0])[]
       ? Keys
       : never
@@ -134,9 +133,7 @@ export type BreadcrumbExtractor<TArgs extends readonly unknown[]> =
 // - string[] => extract keys from an object argument
 // - BreadcrumbExtractor => advanced per-entry extractor (still supported)
 export type PositionalBreadcrumbs<TArgs extends readonly unknown[]> = readonly (
-  | string
-  | readonly string[]
-  | BreadcrumbExtractor<TArgs>
+  string | readonly string[] | BreadcrumbExtractor<TArgs>
 )[];
 
 /**
