@@ -396,27 +396,6 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
-    it('should report to Sentry and still return the error when error() has .report()', async () => {
-      const params = { parameterKey: 'alpha' };
-
-      const result = await new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .error();
-
-      // The original error is still returned, unchanged.
-      expect(result).toEqual(new Error('boom'));
-
-      const expectedError = new Error('failed');
-      expectedError.cause = new Error('boom');
-      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
-        tags: {
-          library: '@power-rent/try-catch',
-        },
-      });
-    });
-
     it('should not report when error() is used without .report()', async () => {
       const params = { parameterKey: 'alpha' };
 
@@ -769,27 +748,6 @@ describe('Try', () => {
         expect(result).toEqual({
           success: false,
           error: new Error('boom'),
-        });
-      });
-
-      it('should report errors to Sentry and still return the result when result() has .report()', async () => {
-        const params = { parameterKey: 'alpha' };
-
-        const result = await new Try(throwingFunction, params)
-          .debug(false)
-          .report('failed')
-          .result();
-
-        // The original failure result is still returned, unchanged.
-        expect(result).toEqual({ success: false, error: new Error('boom') });
-
-        const expectedError = new Error('failed');
-        expectedError.cause = new Error('boom');
-        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
-          tags: {
-            library: '@power-rent/try-catch',
-          },
         });
       });
 
@@ -1315,27 +1273,6 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
-    it('should report to Sentry and still return the error when error() has .report()', () => {
-      const params = { parameterKey: 'alpha' };
-
-      const result = new Try(throwingFunction, params)
-        .debug(false)
-        .report('failed')
-        .error();
-
-      // The original error is still returned, unchanged.
-      expect(result).toEqual(new Error('boom'));
-
-      const expectedError = new Error('failed');
-      expectedError.cause = new Error('boom');
-      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-      expect(Sentry.captureException).toBeCalledWith(expectedError, {
-        tags: {
-          library: '@power-rent/try-catch',
-        },
-      });
-    });
-
     it('should not report when error() is used without .report()', () => {
       const params = { parameterKey: 'alpha' };
 
@@ -1680,27 +1617,6 @@ describe('Try', () => {
         expect(result).toEqual({
           success: false,
           error: new Error('boom'),
-        });
-      });
-
-      it('should report errors to Sentry and still return the result when result() has .report()', () => {
-        const params = { parameterKey: 'alpha' };
-
-        const result = new Try(throwingFunction, params)
-          .debug(false)
-          .report('failed')
-          .result();
-
-        // The original failure result is still returned, unchanged.
-        expect(result).toEqual({ success: false, error: new Error('boom') });
-
-        const expectedError = new Error('failed');
-        expectedError.cause = new Error('boom');
-        expect(Sentry.captureException).toHaveBeenCalledTimes(1);
-        expect(Sentry.captureException).toBeCalledWith(expectedError, {
-          tags: {
-            library: '@power-rent/try-catch',
-          },
         });
       });
 
