@@ -164,4 +164,81 @@ describe('Regression: multi-CLI review findings', () => {
       expect(result).toBe('ok');
     });
   });
+
+  /**
+   * `reportError` had no shared-exec dedup guard (unlike breadcrumbs), so a
+   * single settled failure consumed by both a `.default()` parent and its
+   * clone called `captureException` twice. Guard mirrors
+   * `exec.breadcrumbsEmitted`: one shared failure -> at most one capture.
+   */
+  describe('.default() report idempotence', () => {
+    it('async: parent + child .default() capture the shared failure only once', async () => {
+      const fn = async () => {
+        throw new Error('boom');
+      };
+
+      const parent = new Try(fn).report('failed');
+      const child = parent.default('fallback');
+
+      await parent.value();
+      await child.value();
+
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * throwThroughErrorTypes matches -> error is re-surfaced unwrapped and
+   * MUST NOT be reported. `value()`/`unwrap()` honored this; `result()` and
+   * `error()` did not (they reported on any `.report()`). Both paths fixed.
+   */
+  describe('throw-through on .result() / .error()', () => {
+    it('async: .result() does NOT captureException for throw-through error', async () => {
+      Try.throwThroughErrorTypes(['GraphQLError']);
+      const fn = async () => {
+        throw new GraphQLError('validation error');
+      };
+
+      const result = await new Try(fn).report('failed').result();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+    });
+
+    it('async: .error() does NOT captureException for throw-through error', async () => {
+      Try.throwThroughErrorTypes(['GraphQLError']);
+      const fn = async () => {
+        throw new GraphQLError('validation error');
+      };
+
+      const error = await new Try(fn).report('failed').error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(error).toBeInstanceOf(GraphQLError);
+    });
+
+    it('sync: .result() does NOT captureException for throw-through error', () => {
+      Try.throwThroughErrorTypes(['GraphQLError']);
+      const fn = () => {
+        throw new GraphQLError('validation error');
+      };
+
+      const result = new Try(fn).report('failed').result();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+    });
+
+    it('sync: .error() does NOT captureException for throw-through error', () => {
+      Try.throwThroughErrorTypes(['GraphQLError']);
+      const fn = () => {
+        throw new GraphQLError('validation error');
+      };
+
+      const error = new Try(fn).report('failed').error();
+
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(error).toBeInstanceOf(GraphQLError);
+    });
+  });
 });
