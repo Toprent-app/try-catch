@@ -18,7 +18,7 @@ class GraphQLError extends Error {
 }
 
 class TestClass {
-  private name: string;
+  private readonly name: string;
 
   constructor(name: string) {
     this.name = name;
