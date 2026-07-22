@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import Try from '../nextjs';
+import { BreadcrumbExtractorUtil } from '../utils';
 
 // Mock Sentry SDK
 vi.mock('@sentry/nextjs', () => {
@@ -45,12 +46,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(throwingFunction, params).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling throwingFunction function',
-          data: {},
-        }),
-      );
+      // Empty extracted data should short-circuit the reporter call.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
   });
 
@@ -308,9 +305,8 @@ describe('Flexible Breadcrumbs System', () => {
 
   describe('Error Handling', () => {
     it('should handle transformer errors gracefully with debug enabled', async () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       function testFunction(data: string) {
         throw new Error('test');
@@ -328,24 +324,24 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
         'Error in breadcrumb transformer:',
         expect.any(Error),
       );
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty data due to transformer error
-        }),
-      );
+      // Transformer error yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
-    it('should handle transformer errors gracefully with debug disabled', async () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+    it('should always warn on transformer errors even with debug disabled', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       function testFunction(data: string) {
         throw new Error('test');
@@ -362,21 +358,21 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(consoleSpy).not.toHaveBeenCalled();
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty data due to transformer error
-        }),
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
       );
+      expect(errorSpy).not.toHaveBeenCalled();
+      // Transformer error yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should handle predefined transformer errors gracefully', async () => {
-      const consoleSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       function testFunction(data: any) {
         throw new Error('test');
@@ -393,11 +389,16 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs([{ param: 0, as: 'toString' }])
         .value();
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[try-catch] predefined breadcrumb transformer threw; breadcrumb dropped:',
+        expect.any(Error),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
         'Error in predefined transformer:',
         expect.any(Error),
       );
-      consoleSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should handle non-object parameters for key extraction gracefully', async () => {
@@ -409,12 +410,8 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs([{ param: 0, keys: ['nonExistentKey'] } as any])
         .value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {}, // Empty because param 0 is not an object
-        }),
-      );
+      // No keys extracted from a primitive — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
   });
 
@@ -451,12 +448,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(testFunction, 'test').debug(false).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling testFunction function',
-          data: {},
-        }),
-      );
+      // Empty config yields empty data — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
     it('should handle mixed valid and invalid extractors', async () => {
@@ -518,11 +511,7 @@ describe('Flexible Breadcrumbs System', () => {
       // Mix positional strings with an extractor so config exercises
       // extractFromArray's positional-string branch (not extractFromKeys).
       await new Try(testFunction, 'defined', undefined, true)
-        .breadcrumbs([
-          'a',
-          'b',
-          { param: 2, as: 'value' },
-        ])
+        .breadcrumbs(['a', 'b', { param: 2, as: 'value' }])
         .value();
 
       expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
@@ -544,12 +533,8 @@ describe('Flexible Breadcrumbs System', () => {
 
       await new Try(noParams).debug(false).breadcrumbs([]).value();
 
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Calling noParams function',
-          data: {},
-        }),
-      );
+      // No data extracted — reporter call is short-circuited.
+      expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
     it('should handle anonymous functions properly', async () => {
@@ -592,6 +577,70 @@ describe('Flexible Breadcrumbs System', () => {
       // Transform should only be called once due to caching
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    });
+
+    it('child inherits breadcrumb config set before .default()', async () => {
+      const params = { userId: 123, action: 'update' };
+
+      // breadcrumbs configured before default() — not overridden after
+      const result = await new Try(throwingFunction, params)
+        .breadcrumbs(['userId', 'action'])
+        .default({ ok: false })
+        .value();
+
+      expect(result).toEqual({ ok: false });
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { userId: 123, action: 'update' },
+        }),
+      );
+    });
+
+    it('parent and child (via .default()) can have divergent breadcrumb configs', async () => {
+      const params = { userId: 123, action: 'update', role: 'admin' };
+
+      const parent = new Try(throwingFunction, params).breadcrumbs([
+        'userId',
+        'action',
+      ]);
+      const child = parent.default({ ok: false }).breadcrumbs(['role']);
+
+      // Parent runs first and caches its breadcrumbs.
+      await parent.value();
+      await child.value();
+
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(2);
+      expect(Sentry.addBreadcrumb).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: { userId: 123, action: 'update' },
+        }),
+      );
+      expect(Sentry.addBreadcrumb).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: { role: 'admin' },
+        }),
+      );
+    });
+  });
+
+  describe('Empty breadcrumb data idempotence', () => {
+    it('empty breadcrumb data does not re-extract on subsequent terminals', async () => {
+      const extractSpy = vi.spyOn(BreadcrumbExtractorUtil, 'extract');
+      const fn = async () => {
+        throw new Error('boom');
+      };
+
+      const t = new Try(fn).breadcrumbs(['nonexistent'] as never);
+      await t.value();
+      await t.unwrap().catch(() => {});
+      await t.result();
+
+      // Extractor should run at most once for a given (exec, config) pair.
+      expect(extractSpy).toHaveBeenCalledTimes(1);
+      extractSpy.mockRestore();
     });
   });
 });

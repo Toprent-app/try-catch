@@ -4,8 +4,6 @@
 export interface ErrorReportConfig {
   readonly message?: string;
   readonly tags: Readonly<Record<string, string>>;
-  readonly breadcrumbData?: Record<string, unknown>;
-  readonly functionName?: string;
 }
 
 /**

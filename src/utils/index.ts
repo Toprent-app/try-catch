@@ -5,4 +5,4 @@
 export * from './types';
 export * from './transformers';
 export * from './breadcrumbs';
-export * from './error-reporter';
+export * from './normalize';
