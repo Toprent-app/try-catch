@@ -96,6 +96,12 @@ export class Try<
     // a parent + child referencing the same config emit breadcrumbs only
     // once, while divergent configs each emit independently.
     breadcrumbsEmitted: Set<BreadcrumbOptions<TArgs>>;
+    // Whether this settled failure has already been reported to the
+    // Reporter for this shared execution. Shared across .default() clones
+    // (and guards repeated terminal calls on one instance) so a single
+    // failure triggers at most one captureException, mirroring the
+    // idempotence of `breadcrumbsEmitted`.
+    reportEmitted: boolean;
   };
   private readonly local: {
     breadcrumbData?: Record<string, unknown>;
@@ -161,6 +167,7 @@ export class Try<
       state: 'pending',
       finallyRan: new Set(),
       breadcrumbsEmitted: new Set(),
+      reportEmitted: false,
     };
     this.local = { breadcrumbsAdded: false };
   }
@@ -567,7 +574,10 @@ export class Try<
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (!resolved.success) {
-          if (this.config.message) {
+          const isThrowThrough = Try.ignoreErrorTypes.includes(
+            resolved.error.name,
+          );
+          if (this.config.message && !isThrowThrough) {
             this.reportError(resolved.error);
           } else if (this.config.breadcrumbConfig) {
             this.addBreadcrumbsIfConfigured();
@@ -579,7 +589,8 @@ export class Try<
     }
 
     if (!result.success) {
-      if (this.config.message) {
+      const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+      if (this.config.message && !isThrowThrough) {
         this.reportError(result.error);
       } else if (this.config.breadcrumbConfig) {
         this.addBreadcrumbsIfConfigured();
@@ -628,7 +639,10 @@ export class Try<
           return undefined;
         }
 
-        if (this.config.message) {
+        const isThrowThrough = Try.ignoreErrorTypes.includes(
+          resolved.error.name,
+        );
+        if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
         } else if (this.config.breadcrumbConfig) {
           this.addBreadcrumbsIfConfigured();
@@ -646,7 +660,8 @@ export class Try<
       >;
     }
 
-    if (this.config.message) {
+    const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+    if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
@@ -859,6 +874,17 @@ export class Try<
    * the original error from the caller.
    */
   private reportError(error: Error): void {
+    // Guard against duplicate reporting across shared execution. Parent and
+    // child clones (via .default()) share `exec`, and a terminal may be
+    // called more than once on one instance; either way a single settled
+    // failure must trigger at most one captureException, mirroring the
+    // idempotence of `addBreadcrumbsIfConfigured`.
+    if (this.exec.reportEmitted) {
+      this.addBreadcrumbsIfConfigured();
+      return;
+    }
+    this.exec.reportEmitted = true;
+
     this.addBreadcrumbsIfConfigured();
 
     try {
