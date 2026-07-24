@@ -1,10 +1,10 @@
 import { Try as CoreTry } from '../core/Try';
-import { SentryReporter } from './SentryReporter';
+import { sentryReporter } from './SentryReporter';
 
 export type { TryResult } from '../core/Try';
 
 // Set up the Sentry reporter as the default for NextJS
-CoreTry.setDefaultReporter(new SentryReporter());
+CoreTry.setDefaultReporter(sentryReporter);
 
 /**
  * NextJS-specific Try class with Sentry integration pre-configured.
