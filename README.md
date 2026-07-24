@@ -251,7 +251,10 @@ Execute the function and return the result, the configured default value, or `un
 
 Execute the function and return the error if one occurred, or `undefined` if successful. If `.report()` was configured, the error is reported before being returned.
 
-Sync functions return values immediately; async functions return Promises.
+Sync functions return plain values. Promise-typed functions may return a plain
+value or a Promise (e.g. a sync throw before a Promise is created) — prefer
+`await` so both shapes work. `.finally()` is on the public type surface only
+when the wrapped function's return type is fully Promise-like.
 
 ## Examples
 
