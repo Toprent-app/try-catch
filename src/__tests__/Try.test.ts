@@ -13,6 +13,15 @@ vi.mock('@sentry/nextjs', () => {
 import * as Sentry from '@sentry/nextjs';
 import type { TryResult } from '..';
 
+/** Runtime `finally` always exists; PublicTry omits it when TReturn is not Promise-like. */
+function withFinally<T>(attempt: T, callback: () => void | Promise<void>): T {
+  return (
+    attempt as T & {
+      finally(cb: () => void | Promise<void>): T;
+    }
+  ).finally(callback);
+}
+
 class GraphQLError extends Error {
   name = 'GraphQLError';
 }
@@ -59,12 +68,16 @@ describe('Try', () => {
       return { ok: true, ...params };
     }
 
-    function returnsPromiseOrThrows(shouldThrow: boolean): Promise<string> {
-      if (shouldThrow) {
+    function returnsPromiseOrRejects(shouldReject: boolean): Promise<string> {
+      if (shouldReject) {
         return Promise.reject(new Error('boom'));
       }
 
       return Promise.resolve('ok');
+    }
+
+    function throwsBeforePromise(): Promise<number> {
+      throw new Error('boom');
     }
 
     it('should return default value', async () => {
@@ -175,7 +188,7 @@ describe('Try', () => {
         const finallySpy = vi.fn();
         const tryInstance = new Try(() => 'ok');
 
-        const chained = tryInstance.finally(finallySpy);
+        const chained = withFinally(tryInstance, finallySpy);
         const value = tryInstance.value();
 
         expect(chained).toBe(tryInstance);
@@ -184,18 +197,33 @@ describe('Try', () => {
       });
     });
 
-    it('treats promise-returning functions as async even when they throw', async () => {
-      const valuePromise = new Try(returnsPromiseOrThrows, true).value();
+    it('treats promise-returning functions as async when they reject', async () => {
+      const valuePromise = new Try(returnsPromiseOrRejects, true).value();
 
       expect(valuePromise).toBeInstanceOf(Promise);
       await expect(valuePromise).resolves.toBeUndefined();
 
-      const errorPromise = new Try(returnsPromiseOrThrows, true).error();
+      const errorPromise = new Try(returnsPromiseOrRejects, true).error();
 
       expect(errorPromise).toBeInstanceOf(Promise);
       const error = await errorPromise;
       expect(error).toBeInstanceOf(Error);
       expect(error?.message).toBe('boom');
+    });
+
+    it('settles sync for Promise-typed functions that throw before returning', async () => {
+      const value = new Try(throwsBeforePromise).value();
+      expect(value).not.toBeInstanceOf(Promise);
+      expect(value).toBeUndefined();
+      await expect(Promise.resolve(value)).resolves.toBeUndefined();
+
+      const error = new Try(throwsBeforePromise).error();
+      expect(error).not.toBeInstanceOf(Promise);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('boom');
+      await expect(Promise.resolve(error)).resolves.toBeInstanceOf(Error);
+
+      expect(() => new Try(throwsBeforePromise).unwrap()).toThrow('boom');
     });
 
     it('should throw an error', async () => {
@@ -1070,7 +1098,7 @@ describe('Try', () => {
         const finallySpy = vi.fn();
         const tryInstance = new Try(() => 'ok');
 
-        const chained = tryInstance.finally(finallySpy);
+        const chained = withFinally(tryInstance, finallySpy);
         const value = tryInstance.value();
 
         expect(chained).toBe(tryInstance);
@@ -1334,7 +1362,7 @@ describe('Try', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
-      new Try(successfulFunction, params).finally(finallySpy).unwrap();
+      withFinally(new Try(successfulFunction, params), finallySpy).unwrap();
 
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
@@ -1344,10 +1372,10 @@ describe('Try', () => {
       const finallySpy = vi.fn();
 
       expect(() => {
-        new Try(throwingFunction, params)
-          .debug(false)
-          .finally(finallySpy)
-          .unwrap();
+        withFinally(
+          new Try(throwingFunction, params).debug(false),
+          finallySpy,
+        ).unwrap();
       }).toThrow('boom');
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
@@ -1456,10 +1484,10 @@ describe('Try', () => {
         throw new Error('finally error');
       };
 
-      new Try(successfulFunction, params)
-        .debug()
-        .finally(throwingFinally)
-        .value();
+      withFinally(
+        new Try(successfulFunction, params).debug(),
+        throwingFinally,
+      ).value();
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error in finally callback',
@@ -1477,7 +1505,7 @@ describe('Try', () => {
         throw new Error('finally error');
       };
 
-      new Try(successfulFunction, params).finally(throwingFinally).value();
+      withFinally(new Try(successfulFunction, params), throwingFinally).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
@@ -1527,7 +1555,7 @@ describe('Try', () => {
         finallySpy();
       };
 
-      new Try(successfulFunction, params).finally(asyncFinally).unwrap();
+      withFinally(new Try(successfulFunction, params), asyncFinally).unwrap();
 
       expect(asyncCallbackResolved).toBe(true);
       expect(finallySpy).toHaveBeenCalledTimes(1);
@@ -1545,10 +1573,10 @@ describe('Try', () => {
       };
 
       expect(() => {
-        new Try(throwingFunction, params)
-          .debug(false)
-          .finally(asyncFinally)
-          .unwrap();
+        withFinally(
+          new Try(throwingFunction, params).debug(false),
+          asyncFinally,
+        ).unwrap();
       }).toThrow('boom');
       expect(asyncCallbackResolved).toBe(true);
       expect(finallySpy).toHaveBeenCalledTimes(1);
@@ -1565,10 +1593,10 @@ describe('Try', () => {
         throw new Error('async finally error');
       };
 
-      new Try(successfulFunction, params)
-        .debug()
-        .finally(throwingAsyncFinally)
-        .value();
+      withFinally(
+        new Try(successfulFunction, params).debug(),
+        throwingAsyncFinally,
+      ).value();
 
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error in finally callback',
@@ -1588,10 +1616,10 @@ describe('Try', () => {
         throw new Error('async finally error');
       };
 
-      new Try(successfulFunction, params)
-        .debug(false)
-        .finally(throwingAsyncFinally)
-        .value();
+      withFinally(
+        new Try(successfulFunction, params).debug(false),
+        throwingAsyncFinally,
+      ).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
@@ -1673,9 +1701,10 @@ describe('Try', () => {
         const params = { parameterKey: 'alpha' };
         const finallySpy = vi.fn();
 
-        const result = new Try(successfulFunction, params)
-          .finally(finallySpy)
-          .result();
+        const result = withFinally(
+          new Try(successfulFunction, params),
+          finallySpy,
+        ).result();
 
         expect(result.success).toBe(true);
         expect(finallySpy).toHaveBeenCalledTimes(1);
