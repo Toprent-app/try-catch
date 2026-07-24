@@ -2,6 +2,7 @@
   "name": "@power-rent/try-catch",
   "version": "1.1.0",
   "description": "A TypeScript utility for simplified async error handling with Sentry integration",
+  "type": "commonjs",
   "main": "dist/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/index.d.ts",
@@ -64,7 +65,7 @@
     "try-catch",
     "error-reporting"
   ],
-  "author": "",
+  "author": "Power Rent (https://github.com/Toprent-app)",
   "license": "ISC",
   "repository": {
     "type": "git",
@@ -74,19 +75,22 @@
     "url": "https://github.com/Toprent-app/try-catch/issues"
   },
   "homepage": "https://github.com/Toprent-app/try-catch#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@sentry/browser": ">=8.0.0 <11.0.0",
     "@sentry/nextjs": ">=8.0.0 <11.0.0",
     "@sentry/node": ">=8.0.0 <11.0.0"
   },
   "peerDependenciesMeta": {
+    "@sentry/browser": {
+      "optional": true
+    },
     "@sentry/nextjs": {
       "optional": true
     },
     "@sentry/node": {
-      "optional": true
-    },
-    "@sentry/browser": {
       "optional": true
     }
   },
@@ -100,8 +104,7 @@
     "lint-staged": "^17.0.0",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
-    "type-fest": "^5.1.0",
-    "typescript": "^7.0.0",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.3"
   },
   "engines": {
