@@ -41,12 +41,13 @@ const value = await new Try(JSON.parse, raw)
 const value = await new Try(JSON.parse, raw)
   .value();
 
-// Try with flexible logic, the function will be executed once
+// Try with flexible logic, the function will be executed once.
+// Don't await the constructor — keep the instance, then await its terminals.
 const shouldThrow = someCustomLogic();
-const attempt = await new Try(chargeCard, { amount: 1000, currency: 'USD' })
-const result = attempt.value();
-const error = attempt.error();
-if (shouldThrow) {
+const attempt = new Try(chargeCard, { amount: 1000, currency: 'USD' });
+const result = await attempt.value();
+const error = await attempt.error();
+if (shouldThrow && error) {
   throw error;
 }
 return result;
@@ -60,7 +61,7 @@ npm install @power-rent/try-catch
 
 ## Usage
 
-The `Try` class provides a fluent interface for handling async operations with automatic error reporting to Sentry. Each method returns a new instance.
+The `Try` class provides a fluent interface for handling async operations with automatic error reporting to Sentry. Configuration methods mutate and return the **same** instance (a fluent builder), and the wrapped function runs **at most once** — its result is cached.
 
 ### Basic Usage
 
@@ -187,11 +188,13 @@ The constructor accepts any number of arguments of any type. Breadcrumbs functio
 
 ### Configuration Methods
 
-All configuration methods return a new `Try` instance, enabling method chaining:
+All configuration methods return the same `Try` instance (a mutable builder), enabling method chaining:
 
 #### `.report(message: string): Try<T, TArgs>`
 
-Report to Sentry with a custom error message, attach the original error as a cause
+Report to Sentry with a custom error message, attach the original error as a cause.
+
+> `.report()` records the reporting intent; the error is sent to Sentry when a terminal runs and the operation failed. Every terminal reports — `.value()`, `.unwrap()`, `.error()`, `.result()`, and `await` — so pair `.report()` with whichever return shape you need: `.value()` returns the value (`undefined` on failure), `.unwrap()` re-throws, `.error()` returns the `Error`, `.result()` returns the `{ success, ... }` object.
 
 #### `.breadcrumbs(config): Try<T, TArgs>`
 
@@ -227,11 +230,15 @@ Record breadcrumbs with flexible extraction from any function parameters. The fu
 Add a tag for Sentry error reporting. Can be called multiple times to add multiple tags.
 #### `.tags({ name1: 'value1', name2: 'value2' }): Try<T, TArgs>`
 
-Add multiple tags for Sentry error reporting. Each call overrides previous tags.
+Add multiple tags for Sentry error reporting. Tags are merged with any previously set tags; on a key conflict the later call wins.
 
 #### `.debug(enabled?: boolean): Try<T, TArgs>`
 
 Enable debug logging to console. When enabled, errors will be logged to console.error.
+
+#### `.finally(callback: () => void | Promise<void>): Try<T, TArgs>`
+
+Register a callback that runs once after the wrapped function settles (on success or failure), mirroring `Promise.prototype.finally`. It runs synchronously for sync functions and is awaited for async ones, before any error is re-thrown by `.unwrap()`.
 
 ### Execution Methods
 
@@ -250,6 +257,10 @@ Execute the function and return the result, the configured default value, or `un
 #### `.error(): Error | undefined | Promise<Error | undefined>`
 
 Execute the function and return the error if one occurred, or `undefined` if successful. If `.report()` was configured, the error is reported before being returned.
+
+#### `.result(): TryResult<T> | Promise<TryResult<T>>`
+
+Execute the function and return a discriminated union you can pattern-match on: `{ success: true, value }` or `{ success: false, error }`. Never throws; reports to Sentry when `.report()` is set and the function fails.
 
 Sync functions return values immediately; async functions return Promises.
 
@@ -364,8 +375,8 @@ const result = await new Try(complexOperation, data)
 
 ## Features
 
-- 🚀 **Promise-like interface** - Can be awaited directly
-- 🔍 **Automatic Sentry integration** - Errors are automatically reported
+- 🚀 **Promise-like interface** - Can be awaited directly (equivalent to `.value()`: resolves to the result, the configured default, or `undefined` — awaiting **never throws/rejects and discards the error**; use `.unwrap()` to throw or `.error()`/`.result()` to inspect)
+- 🔍 **Sentry integration** - Errors are reported to Sentry when you call `.report()` and the operation fails, on any terminal (`.value()`, `.unwrap()`, `.error()`, `.result()`, or `await`)
 - 🍞 **Flexible breadcrumb support** - Extract context from any parameter types using transformers
 - 🏷️ **Tag support** - Add custom tags to Sentry reports
 - 🎯 **TypeScript support** - Full type safety
