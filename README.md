@@ -376,7 +376,7 @@ const result = await new Try(complexOperation, data)
 ## Features
 
 - 🚀 **Promise-like interface** - Can be awaited directly (equivalent to `.value()`: resolves to the result, the configured default, or `undefined` — awaiting **never throws/rejects and discards the error**; use `.unwrap()` to throw or `.error()`/`.result()` to inspect)
-- 🔍 **Sentry integration** - Errors are reported to Sentry when you call `.report()` and end the chain with `.value()` or `.unwrap()`
+- 🔍 **Sentry integration** - Errors are reported to Sentry when you call `.report()` and the operation fails, on any terminal (`.value()`, `.unwrap()`, `.error()`, `.result()`, or `await`)
 - 🍞 **Flexible breadcrumb support** - Extract context from any parameter types using transformers
 - 🏷️ **Tag support** - Add custom tags to Sentry reports
 - 🎯 **TypeScript support** - Full type safety
