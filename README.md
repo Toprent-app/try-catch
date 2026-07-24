@@ -260,7 +260,7 @@ Execute the function and return the error if one occurred, or `undefined` if suc
 
 #### `.result(): TryResult<T> | Promise<TryResult<T>>`
 
-Execute the function and return a discriminated union you can pattern-match on: `{ success: true, value }` or `{ success: false, error }`. Never throws and never reports (it is an inspection terminal).
+Execute the function and return a discriminated union you can pattern-match on: `{ success: true, value }` or `{ success: false, error }`. Never throws; reports to Sentry when `.report()` is set and the function fails.
 
 Sync functions return values immediately; async functions return Promises.
 
