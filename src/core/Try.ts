@@ -191,20 +191,25 @@ function toError(value: unknown): Error {
 }
 
 /**
- * Resolves to True when T is or may be a Promise (so callers must handle async).
- * For Promise<T> | T (mixed return type), resolves to True so value()/unwrap()
- * are typed as returning Promise<...> and the value is handled via await.
+ * True when TReturn may include a Promise-like member (callers must handle async).
+ * Distinct from the `finally()` check, which requires the full return type to be
+ * Promise-like.
  */
-type IfPromise<T, True, False> = [T] extends [never]
-  ? False
-  : (T extends PromiseLike<unknown> ? True : False) extends False
-    ? False
-    : True;
+type MayReturnPromise<TReturn> =
+  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
 
 /**
- * Core Try class for simplified async error handling.
- * This implementation is framework-agnostic and uses a Reporter interface
- * to decouple error reporting from specific services.
+ * Terminal return type: plain TValue when TReturn is sync-only; otherwise
+ * TValue | Promise<TValue> so sync throws from Promise-typed functions remain sound.
+ */
+type MaybePromise<TReturn, TValue> =
+  MayReturnPromise<TReturn> extends true ? TValue | Promise<TValue> : TValue;
+
+/**
+ * Core Try implementation for simplified async error handling.
+ * Framework-agnostic; uses a Reporter interface for error reporting.
+ *
+ * Prefer constructing via the exported `Try` value, which returns {@link PublicTry}.
  *
  * Usage:
  *   const result = new Try(asyncFn, arg1, arg2)
@@ -212,7 +217,7 @@ type IfPromise<T, True, False> = [T] extends [never]
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
+export class TryImpl<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private readonly fn: (...args: TArgs) => TReturn;
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
@@ -230,14 +235,14 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * @param reporter The reporter implementation to use
    */
   static setDefaultReporter(reporter: Reporter): void {
-    Try.defaultReporter = reporter;
+    TryImpl.defaultReporter = reporter;
   }
 
   /**
    * Get the current default reporter
    */
   static getDefaultReporter(): Reporter {
-    return Try.defaultReporter;
+    return TryImpl.defaultReporter;
   }
 
   /**
@@ -338,8 +343,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  report(message: string): this {
-    return this.setConfig({ message });
+  report(message: string): PublicTry<TReturn, TArgs> {
+    return this.setConfig({ message }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -382,37 +387,39 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    */
   breadcrumbs<const Keys extends readonly string[]>(
     keys: ValidateKeys<TArgs, Keys>,
-  ): this;
+  ): PublicTry<TReturn, TArgs>;
 
   breadcrumbs<T extends VariadicBreadcrumbTransformers<TArgs>>(
     ...transformers: T
-  ): this;
+  ): PublicTry<TReturn, TArgs>;
 
-  breadcrumbs(config: readonly BreadcrumbExtractorType<TArgs>[]): this;
+  breadcrumbs(
+    config: readonly BreadcrumbExtractorType<TArgs>[],
+  ): PublicTry<TReturn, TArgs>;
 
-  breadcrumbs(config: BreadcrumbConfig<TArgs>): this;
+  breadcrumbs(config: BreadcrumbConfig<TArgs>): PublicTry<TReturn, TArgs>;
 
   breadcrumbs<const Config extends PositionalBreadcrumbs<TArgs>>(
     config: Config extends readonly string[] ? never : Config,
-  ): this;
+  ): PublicTry<TReturn, TArgs>;
 
   breadcrumbs(
     configOrFirstTransformer?:
       BreadcrumbOptions<TArgs> | BreadcrumbTransformer<any>,
     ...restTransformers: BreadcrumbTransformer<any>[]
-  ): this {
+  ): PublicTry<TReturn, TArgs> {
     // Handle variadic transformer functions
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
       return this.setConfig({
         breadcrumbConfig:
           allTransformers as unknown as BreadcrumbOptions<TArgs>,
-      });
+      }) as unknown as PublicTry<TReturn, TArgs>;
     }
 
     return this.setConfig({
       breadcrumbConfig: configOrFirstTransformer as BreadcrumbOptions<TArgs>,
-    });
+    }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -435,10 +442,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .unwrap();
    * ```
    */
-  tag(name: string, value: string): this {
+  tag(name: string, value: string): PublicTry<TReturn, TArgs> {
     return this.setConfig({
       tags: { ...this.config.tags, [name]: value },
-    });
+    }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -470,10 +477,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  tags(tagRecord: Record<string, string>): this {
+  tags(tagRecord: Record<string, string>): PublicTry<TReturn, TArgs> {
     return this.setConfig({
       tags: { ...this.config.tags, ...tagRecord },
-    });
+    }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -489,8 +496,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
    */
-  finally(callback: () => void | Promise<void>): this {
-    return this.setConfig({ finallyCallback: callback });
+  finally(callback: () => void | Promise<void>): PublicTry<TReturn, TArgs> {
+    return this.setConfig({
+      finallyCallback: callback,
+    }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -519,8 +528,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value();
    * ```
    */
-  debug(enabled: boolean = true): this {
-    return this.setConfig({ debug: enabled });
+  debug(enabled: boolean = true): PublicTry<TReturn, TArgs> {
+    return this.setConfig({
+      debug: enabled,
+    }) as unknown as PublicTry<TReturn, TArgs>;
   }
 
   /**
@@ -545,19 +556,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<D>(defaultValue: D): Omit<typeof this, 'value'> & {
-    value(): IfPromise<
-      TReturn,
-      Promise<Awaited<TReturn> | D>,
-      Awaited<TReturn> | D
-    >;
+  default<D>(defaultValue: D): Omit<PublicTry<TReturn, TArgs>, 'value'> & {
+    value(): MaybePromise<TReturn, Awaited<TReturn> | D>;
   } {
-    type WithGuaranteedValue = Omit<typeof this, 'value'> & {
-      value(): IfPromise<
-        TReturn,
-        Promise<Awaited<TReturn> | D>,
-        Awaited<TReturn> | D
-      >;
+    type WithGuaranteedValue = Omit<PublicTry<TReturn, TArgs>, 'value'> & {
+      value(): MaybePromise<TReturn, Awaited<TReturn> | D>;
     };
 
     // Cast is safe: runtime shape is unchanged; this only narrows the static
@@ -591,7 +594,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  unwrap(): IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>> {
+  unwrap(): MaybePromise<TReturn, Awaited<TReturn>> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
@@ -605,9 +608,9 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
           if (
             this.config.message &&
-            !Try.ignoreErrorTypes.includes(resolved.error.name)
+            !TryImpl.ignoreErrorTypes.includes(resolved.error.name)
           ) {
-            const wrappedError = Try.defaultReporter.createWrappedError(
+            const wrappedError = TryImpl.defaultReporter.createWrappedError(
               resolved.error,
               this.config.message,
             );
@@ -617,7 +620,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         }
 
         return resolved.value;
-      }) as IfPromise<TReturn, Promise<Awaited<TReturn>>, Awaited<TReturn>>;
+      }) as MaybePromise<TReturn, Awaited<TReturn>>;
     }
 
     if (!result.success) {
@@ -629,9 +632,9 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
       if (
         this.config.message &&
-        !Try.ignoreErrorTypes.includes(result.error.name)
+        !TryImpl.ignoreErrorTypes.includes(result.error.name)
       ) {
-        const wrappedError = Try.defaultReporter.createWrappedError(
+        const wrappedError = TryImpl.defaultReporter.createWrappedError(
           result.error,
           this.config.message,
         );
@@ -640,11 +643,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       throw result.error;
     }
 
-    return result.value as IfPromise<
-      TReturn,
-      Promise<Awaited<TReturn>>,
-      Awaited<TReturn>
-    >;
+    return result.value as MaybePromise<TReturn, Awaited<TReturn>>;
   }
 
   /**
@@ -683,11 +682,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   );
    * ```
    */
-  result(): IfPromise<
-    TReturn,
-    Promise<TryResult<TReturn>>,
-    TryResult<TReturn>
-  > {
+  result(): MaybePromise<TReturn, TryResult<TReturn>> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
@@ -701,7 +696,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         }
 
         return resolved;
-      }) as IfPromise<TReturn, Promise<TryResult<TReturn>>, TryResult<TReturn>>;
+      }) as MaybePromise<TReturn, TryResult<TReturn>>;
     }
 
     if (!result.success) {
@@ -712,11 +707,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       }
     }
 
-    return result as IfPromise<
-      TReturn,
-      Promise<TryResult<TReturn>>,
-      TryResult<TReturn>
-    >;
+    return result as MaybePromise<TReturn, TryResult<TReturn>>;
   }
 
   /**
@@ -745,7 +736,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * }
    * ```
    */
-  error(): IfPromise<TReturn, Promise<Error | undefined>, Error | undefined> {
+  error(): MaybePromise<TReturn, Error | undefined> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
@@ -761,15 +752,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         }
 
         return resolved.error;
-      }) as IfPromise<TReturn, Promise<Error | undefined>, Error | undefined>;
+      }) as MaybePromise<TReturn, Error | undefined>;
     }
 
     if (result.success) {
-      return undefined as IfPromise<
-        TReturn,
-        Promise<Error | undefined>,
-        Error | undefined
-      >;
+      return undefined as MaybePromise<TReturn, Error | undefined>;
     }
 
     if (this.config.message) {
@@ -778,11 +765,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       this.addBreadcrumbsIfConfigured();
     }
 
-    return result.error as IfPromise<
-      TReturn,
-      Promise<Error | undefined>,
-      Error | undefined
-    >;
+    return result.error as MaybePromise<TReturn, Error | undefined>;
   }
 
   /**
@@ -813,11 +796,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // undefined if failed, but error is reported
    * ```
    */
-  value(): IfPromise<
-    TReturn,
-    Promise<Awaited<TReturn> | undefined>,
-    Awaited<TReturn> | undefined
-  > {
+  value(): MaybePromise<TReturn, Awaited<TReturn> | undefined> {
     const result = this.execute();
 
     if (isPromiseLike<TryResult<TReturn>>(result)) {
@@ -833,17 +812,12 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         }
 
         return this.config.defaultValue;
-      }) as IfPromise<
-        TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
-      >;
+      }) as MaybePromise<TReturn, Awaited<TReturn> | undefined>;
     }
 
     if (result.success) {
-      return result.value as IfPromise<
+      return result.value as MaybePromise<
         TReturn,
-        Promise<Awaited<TReturn> | undefined>,
         Awaited<TReturn> | undefined
       >;
     }
@@ -854,9 +828,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       this.addBreadcrumbsIfConfigured();
     }
 
-    return this.config.defaultValue as IfPromise<
+    return this.config.defaultValue as MaybePromise<
       TReturn,
-      Promise<Awaited<TReturn> | undefined>,
       Awaited<TReturn> | undefined
     >;
   }
@@ -957,7 +930,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private reportError(error: Error): void {
     this.addBreadcrumbsIfConfigured();
 
-    Try.defaultReporter.report(error, {
+    TryImpl.defaultReporter.report(error, {
       message: this.config.message,
       tags: this.config.tags,
       breadcrumbData: this.cachedBreadcrumbData,
@@ -981,7 +954,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.cachedBreadcrumbData, functionName);
+    TryImpl.defaultReporter.addBreadcrumbs(
+      this.cachedBreadcrumbData,
+      functionName,
+    );
     this.breadcrumbsAdded = true;
   }
 
@@ -1039,3 +1015,35 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     ).then(onfulfilled ?? undefined, onrejected ?? undefined);
   }
 }
+
+/**
+ * Public Try surface: same fluent API as {@link TryImpl}, with `finally` only
+ * when the wrapped function's return type is fully Promise-like.
+ */
+export type PublicTry<
+  TReturn,
+  TArgs extends readonly unknown[] = unknown[],
+> = Omit<TryImpl<TReturn, TArgs>, 'finally'> &
+  ([TReturn] extends [PromiseLike<unknown>]
+    ? Pick<TryImpl<TReturn, TArgs>, 'finally'>
+    : {});
+
+export interface TryConstructor {
+  new <TReturn, TArgs extends readonly unknown[] = unknown[]>(
+    fn: (...args: TArgs) => TReturn,
+    ...args: TArgs
+  ): PublicTry<TReturn, TArgs>;
+  setDefaultReporter(reporter: Reporter): void;
+  getDefaultReporter(): Reporter;
+  throwThroughErrorTypes(ignoreErrorTypes: string[]): void;
+  prototype: TryImpl<any, any>;
+}
+
+/**
+ * Typed constructor that returns {@link PublicTry}. Runtime class is {@link TryImpl}.
+ */
+export const Try: TryConstructor = TryImpl as unknown as TryConstructor;
+export type Try<
+  TReturn = unknown,
+  TArgs extends readonly unknown[] = unknown[],
+> = PublicTry<TReturn, TArgs>;
