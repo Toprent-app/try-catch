@@ -194,7 +194,7 @@ All configuration methods return the same `Try` instance (a mutable builder), en
 
 Report to Sentry with a custom error message, attach the original error as a cause.
 
-> Reporting only happens when the chain ends in `.value()` or `.unwrap()`. `.error()` and `.result()` are non-reporting inspection terminals — `.report()` is a no-op when paired with them.
+> `.report()` records the reporting intent; the error is sent to Sentry when a terminal runs and the operation failed. Every terminal reports — `.value()`, `.unwrap()`, `.error()`, `.result()`, and `await` — so pair `.report()` with whichever return shape you need: `.value()` returns the value (`undefined` on failure), `.unwrap()` re-throws, `.error()` returns the `Error`, `.result()` returns the `{ success, ... }` object.
 
 #### `.breadcrumbs(config): Try<T, TArgs>`
 
