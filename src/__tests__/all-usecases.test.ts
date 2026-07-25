@@ -1,5 +1,14 @@
-import { describe, it, expect, expectTypeOf, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  expectTypeOf,
+  vi,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import { Try, NoopReporter } from '../core';
+import type { Reporter } from '../core';
 
 // --- Test fixtures -----------------------------------------------------
 
@@ -299,22 +308,54 @@ describe('.breadcrumbs()', () => {
 // --- .report / .tag / .tags / .finally / .debug -----------------------
 
 describe('chain methods', () => {
-  it('chain order independence', () => {
-    new Try(syncNoArgs)
-      .report('m')
-      .tag('a', 'b')
-      .tags({ c: 'd' })
-      .finally(() => undefined)
-      .debug(true)
-      .value();
+  it('produces the same configuration whichever order the chain methods are called in, so callers can order them freely', () => {
+    const reporter = {
+      report: vi.fn(),
+      addBreadcrumbs: vi.fn(),
+      createWrappedError: (e: Error) => e,
+    };
+    const prior = Try.getDefaultReporter();
+    Try.setDefaultReporter(reporter);
 
-    new Try(syncNoArgs)
-      .debug()
-      .finally(() => undefined)
-      .tags({ c: 'd' })
-      .tag('a', 'b')
-      .report('m')
-      .value();
+    const failing = (): number => {
+      throw new Error('boom');
+    };
+
+    try {
+      const forwardFinally = vi.fn();
+      const forwardValue = new Try(failing)
+        .report('m')
+        .tag('a', 'b')
+        .tags({ c: 'd' })
+        .finally(forwardFinally)
+        .default('fallback')
+        .value();
+
+      const reverseFinally = vi.fn();
+      const reverseValue = new Try(failing)
+        .default('fallback')
+        .finally(reverseFinally)
+        .tags({ c: 'd' })
+        .tag('a', 'b')
+        .report('m')
+        .value();
+
+      expect(forwardValue).toBe('fallback');
+      expect(reverseValue).toBe('fallback');
+      expect(forwardFinally).toHaveBeenCalledTimes(1);
+      expect(reverseFinally).toHaveBeenCalledTimes(1);
+      expect(reporter.report).toHaveBeenCalledTimes(2);
+      const [forwardConfig, reverseConfig] = reporter.report.mock.calls.map(
+        (call) => call[1],
+      );
+      expect(forwardConfig).toEqual(reverseConfig);
+      expect(forwardConfig).toMatchObject({
+        message: 'm',
+        tags: { a: 'b', c: 'd' },
+      });
+    } finally {
+      Try.setDefaultReporter(prior);
+    }
   });
 
   it('.tags({ a: "1" }) only string→string', () => {
@@ -342,12 +383,71 @@ describe('chain methods', () => {
 // --- Statics -----------------------------------------------------------
 
 describe('Statics', () => {
-  it('setDefaultReporter typechecks', () => {
-    Try.setDefaultReporter(new NoopReporter());
+  let priorReporter: Reporter;
+
+  beforeEach(() => {
+    priorReporter = Try.getDefaultReporter();
   });
 
-  it('throwThroughErrorTypes typechecks', () => {
+  afterEach(() => {
+    Try.setDefaultReporter(priorReporter);
+    Try.throwThroughErrorTypes([]);
+  });
+
+  it('routes reports to the reporter installed by setDefaultReporter, so an application can swap in its own backend', () => {
+    const reporter = {
+      report: vi.fn(),
+      addBreadcrumbs: vi.fn(),
+      createWrappedError: (e: Error) => e,
+    };
+    Try.setDefaultReporter(reporter);
+
+    expect(Try.getDefaultReporter()).toBe(reporter);
+
+    new Try((): number => {
+      throw new Error('boom');
+    })
+      .report('m')
+      .value();
+
+    expect(reporter.report).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a NoopReporter, so a consumer can opt out of reporting entirely', () => {
+    const noop = new NoopReporter();
+    Try.setDefaultReporter(noop);
+
+    expect(Try.getDefaultReporter()).toBe(noop);
+    expect(() =>
+      new Try((): number => {
+        throw new Error('boom');
+      })
+        .report('m')
+        .value(),
+    ).not.toThrow();
+  });
+
+  it('suppresses reporting for names registered with throwThroughErrorTypes, so expected domain errors never reach the backend', () => {
+    const reporter = {
+      report: vi.fn(),
+      addBreadcrumbs: vi.fn(),
+      createWrappedError: (e: Error) => e,
+    };
+    Try.setDefaultReporter(reporter);
     Try.throwThroughErrorTypes(['X']);
+
+    const throwX = (): number => {
+      const error = new Error('boom');
+      error.name = 'X';
+      throw error;
+    };
+
+    new Try(throwX).report('m').value();
+    expect(reporter.report).not.toHaveBeenCalled();
+
+    Try.throwThroughErrorTypes([]);
+    new Try(throwX).report('m').value();
+    expect(reporter.report).toHaveBeenCalledTimes(1);
   });
 });
 

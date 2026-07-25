@@ -15,7 +15,9 @@ vi.mock('@sentry/nextjs', () => ({
 
 import { Try } from '../core/Try';
 import { NoopReporter } from '../core/reporter';
+import type { Reporter } from '../core/reporter';
 import { BreadcrumbExtractorUtil } from '../utils';
+import { normalizeThrown } from '../utils/normalize';
 
 describe('coverage gaps', () => {
   describe('NoopReporter.createWrappedError', () => {
@@ -428,7 +430,10 @@ describe('coverage gaps', () => {
         .default('fallback')
         .value();
 
-      expect(spy).toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(
+        'Reporter.report threw:',
+        expect.any(Error),
+      );
       spy.mockRestore();
     });
 
@@ -479,6 +484,190 @@ describe('coverage gaps', () => {
         expect.any(Error),
       );
       spy.mockRestore();
+    });
+  });
+  /**
+   * PR #50: `ErrorReportConfig` is public API. A custom Reporter receives the
+   * extracted breadcrumb data and the wrapped function's name alongside the
+   * message and tags, so it can attach that context to its own event shape.
+   */
+  describe('ErrorReportConfig delivered to a custom reporter', () => {
+    let priorReporter: Reporter;
+
+    beforeEach(() => {
+      priorReporter = Try.getDefaultReporter();
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(priorReporter);
+    });
+
+    it('async: hands the reporter the breadcrumb data and function name for the failing call', async () => {
+      const report = vi.fn();
+      Try.setDefaultReporter({
+        report,
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e) => e,
+      });
+
+      async function fetchUser(_ctx: { id: string }): Promise<string> {
+        throw new Error('boom');
+      }
+
+      await new Try(fetchUser, { id: 'u1' })
+        .report('user lookup failed')
+        .tag('component', 'users')
+        .breadcrumbs(['id'])
+        .default('fallback')
+        .value();
+
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(report).toHaveBeenCalledWith(expect.any(Error), {
+        message: 'user lookup failed',
+        tags: { component: 'users' },
+        breadcrumbData: { id: 'u1' },
+        functionName: 'fetchUser',
+      });
+    });
+
+    it('sync: hands the reporter the function name even when no breadcrumbs are configured', () => {
+      const report = vi.fn();
+      Try.setDefaultReporter({
+        report,
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e) => e,
+      });
+
+      function chargeCard(): string {
+        throw new Error('boom');
+      }
+
+      new Try(chargeCard).report('charge failed').default('fallback').value();
+
+      expect(report).toHaveBeenCalledWith(expect.any(Error), {
+        message: 'charge failed',
+        tags: {},
+        breadcrumbData: undefined,
+        functionName: 'chargeCard',
+      });
+    });
+  });
+
+  /**
+   * PR #50: `Try.throwThroughErrorTypes` writes the same static slot every
+   * membership test reads, so configuring the registry through a subclass
+   * takes effect instead of silently populating a shadowing static.
+   */
+  describe('throw-through registry is shared with subclasses', () => {
+    let priorReporter: Reporter;
+
+    beforeEach(() => {
+      priorReporter = Try.getDefaultReporter();
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(priorReporter);
+      Try.throwThroughErrorTypes([]);
+    });
+
+    it('configuring the registry through a subclass suppresses reporting, so extending Try keeps the static configuration API working', () => {
+      class MyTry extends Try<string, []> {}
+
+      const report = vi.fn();
+      Try.setDefaultReporter({
+        report,
+        addBreadcrumbs: vi.fn(),
+        createWrappedError: (e) => e,
+      });
+
+      const throwValidation = (): string => {
+        const error = new Error('invalid');
+        error.name = 'ValidationError';
+        throw error;
+      };
+
+      MyTry.throwThroughErrorTypes(['ValidationError']);
+
+      new MyTry(throwValidation).report('m').value();
+      expect(report).not.toHaveBeenCalled();
+
+      // The base class reads the same registry the subclass wrote.
+      new Try(throwValidation).report('m').value();
+      expect(report).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * PR #50: `throw await res.json()` can carry own keys that shadow
+   * `Object.prototype` members or the thenable protocol. Copying them onto the
+   * reconstructed Error breaks language-level operations for the consumer.
+   */
+  describe('normalizeThrown skips keys that break the reconstructed Error', () => {
+    it('drops a payload toString so String(error) stays usable instead of throwing on primitive conversion', () => {
+      const payload = JSON.parse(
+        '{"message":"api failed","toString":"pwned","code":"E_LIMIT"}',
+      ) as unknown;
+
+      const error = normalizeThrown(payload);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe('api failed');
+      expect(() => String(error)).not.toThrow();
+      expect(String(error)).toBe('Error: api failed');
+      expect(`${error}`).toBe('Error: api failed');
+      // Custom fields still survive for the reporter.
+      expect((error as Error & { code?: string }).code).toBe('E_LIMIT');
+      expect(Object.hasOwn(error, 'toString')).toBe(false);
+    });
+
+    it('drops a payload valueOf so numeric coercion of the error stays usable', () => {
+      const payload = JSON.parse(
+        '{"message":"api failed","valueOf":"pwned"}',
+      ) as unknown;
+
+      const error = normalizeThrown(payload);
+
+      expect(() => String(error)).not.toThrow();
+      expect(Object.hasOwn(error, 'valueOf')).toBe(false);
+    });
+
+    it('drops a callable then so awaiting the error returned by .error() yields the error itself', async () => {
+      const payload = {
+        message: 'api failed',
+        then: (resolve: (value: unknown) => void) => {
+          resolve('hijacked');
+        },
+      };
+
+      const error = await new Try(async (): Promise<string> => {
+        // A non-Error payload carrying a callable `then` is the whole point.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw payload;
+      }).error();
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error?.message).toBe('api failed');
+    });
+
+    it('keeps the reconstructed value an Error when the payload shadows prototype internals', () => {
+      const payload = JSON.parse(
+        '{"message":"api failed","__proto__":{"x":1},"constructor":"c","prototype":"p","hasOwnProperty":true,"isPrototypeOf":true,"propertyIsEnumerable":true,"toLocaleString":"l"}',
+      ) as unknown;
+
+      const error = normalizeThrown(payload);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(() => String(error)).not.toThrow();
+      for (const key of [
+        'constructor',
+        'prototype',
+        'hasOwnProperty',
+        'isPrototypeOf',
+        'propertyIsEnumerable',
+        'toLocaleString',
+      ]) {
+        expect(Object.hasOwn(error, key), key).toBe(false);
+      }
     });
   });
 });

@@ -2,4 +2,4 @@
 '@power-rent/try-catch': patch
 ---
 
-Fix MD-05: `.breadcrumbs(...)` no longer invokes the reporter's `addBreadcrumbs` (`Sentry.addBreadcrumb`) when the extracted data is empty (e.g. `.breadcrumbs([])`, transformer errors, or extraction against a primitive). Empty breadcrumb events are now suppressed rather than recorded as no-op entries.
+Fix MD-05: `.breadcrumbs(...)` calls the reporter's `addBreadcrumbs` (`Sentry.addBreadcrumb`) only when the extracted data is non-empty. Configurations that yield nothing — `.breadcrumbs([])`, a throwing transformer, or extraction against a primitive — record no breadcrumb event.
