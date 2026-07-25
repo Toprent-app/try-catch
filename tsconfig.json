@@ -4,6 +4,7 @@
     "target": "ES2022",
     "module": "preserve",
     "lib": ["ES2022"],
+    "types": ["node"],
     "outDir": "dist",
     "declaration": true,
     "declarationMap": true,
@@ -14,7 +15,8 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -1,4 +1,5 @@
 import type { Reporter, ErrorReportConfig } from '../core/reporter';
+import { safeErrorStack } from '../utils/normalize';
 
 /**
  * Minimal subset of the Sentry SDK surface the reporters depend on. Kept loose
@@ -22,7 +23,7 @@ export function createSentryReporter(Sentry: SentryLike): Reporter {
   const createWrappedError = (error: Error, message: string): Error => {
     const wrapped = new Error(message);
     wrapped.cause = error;
-    wrapped.stack = error.stack;
+    wrapped.stack = safeErrorStack(error);
     return wrapped;
   };
 

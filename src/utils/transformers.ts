@@ -1,5 +1,6 @@
 import type { BreadcrumbTransformer } from './types';
 import { BreadcrumbTransformationError } from './types';
+import { normalizeThrown } from './normalize';
 
 /**
  * Predefined transformer functions for common use cases
@@ -53,7 +54,7 @@ export class TransformerRegistry {
    * Apply a custom transformer function safely
    */
   static apply(
-    transformer: BreadcrumbTransformer<any>,
+    transformer: BreadcrumbTransformer<unknown>,
     value: unknown,
     debug = false,
   ): Record<string, unknown> {
@@ -61,7 +62,7 @@ export class TransformerRegistry {
       return transformer(value);
     } catch (error) {
       const transformationError = new BreadcrumbTransformationError(
-        error as Error,
+        normalizeThrown(error),
         'custom',
       );
 
@@ -87,7 +88,7 @@ export class TransformerRegistry {
       return transformer(value, paramIndex);
     } catch (error) {
       const transformationError = new BreadcrumbTransformationError(
-        error as Error,
+        normalizeThrown(error),
         transformerType,
         paramIndex,
       );
