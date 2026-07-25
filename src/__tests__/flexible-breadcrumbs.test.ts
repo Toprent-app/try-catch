@@ -324,14 +324,11 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
-        expect.any(Error),
-      );
       expect(errorSpy).toHaveBeenCalledWith(
         'Error in breadcrumb transformer:',
         expect.any(Error),
       );
+      expect(warnSpy).not.toHaveBeenCalled();
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
@@ -339,7 +336,7 @@ describe('Flexible Breadcrumbs System', () => {
       warnSpy.mockRestore();
     });
 
-    it('should always warn on transformer errors even with debug disabled', async () => {
+    it('stays silent on transformer errors without debug, so a library consumer gets no unsolicited production log noise', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -358,11 +355,8 @@ describe('Flexible Breadcrumbs System', () => {
         ])
         .value();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[try-catch] breadcrumb transformer threw; breadcrumb dropped:',
-        expect.any(Error),
-      );
       expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 
@@ -389,14 +383,11 @@ describe('Flexible Breadcrumbs System', () => {
         .breadcrumbs([{ param: 0, as: 'toString' }])
         .value();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[try-catch] predefined breadcrumb transformer threw; breadcrumb dropped:',
-        expect.any(Error),
-      );
       expect(errorSpy).toHaveBeenCalledWith(
         'Error in predefined transformer:',
         expect.any(Error),
       );
+      expect(warnSpy).not.toHaveBeenCalled();
       errorSpy.mockRestore();
       warnSpy.mockRestore();
     });

@@ -8,7 +8,7 @@ import type {
   BreadcrumbExtractor as BreadcrumbExtractorType,
 } from '../utils/types';
 import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs';
-import { normalizeThrown } from '../utils/normalize';
+import { normalizeThrown, safeErrorName } from '../utils/normalize';
 import { Reporter, NoopReporter } from './reporter';
 
 /**
@@ -86,10 +86,9 @@ export class Try<
     promise?: Promise<TryResult<TReturn>>;
     isAsync?: boolean;
     // Callbacks that have already fired for this shared execution. When
-    // .default() produces a clone, both parent and child share `exec`; each
-    // instance's .finally() callback must still fire exactly once. Keying by
-    // callback reference keeps the guard per-instance while the state lives
-    // on the shared execution.
+    // .default() produces a clone, both parent and child share `exec`, so the
+    // guard is keyed by callback reference: one reference fires once across the
+    // whole chain, and divergent references each fire once.
     finallyRan: Set<() => void | Promise<void>>;
     // Set of breadcrumbConfig objects whose breadcrumbs have already been
     // emitted for this shared execution. Shared across .default() clones so
@@ -193,7 +192,7 @@ export class Try<
    * ```
    */
   public static throwThroughErrorTypes(ignoreErrorTypes: string[]) {
-    this.ignoreErrorTypes = ignoreErrorTypes;
+    Try.ignoreErrorTypes = ignoreErrorTypes;
   }
 
   /**
@@ -370,9 +369,13 @@ export class Try<
 
   /**
    * Register a callback that will run after the wrapped function finishes
-   * executing (successfully or with an error). The callback runs exactly once
-   * per {@link Try} instance, mirroring the behaviour of
+   * executing (successfully or with an error), mirroring the behaviour of
    * `Promise.prototype.finally`.
+   *
+   * The callback runs once per (execution, callback reference) pair. A
+   * {@link Try} and the clone produced by {@link default} share one execution,
+   * so passing them the same function reference yields a single call, while
+   * distinct references each run once.
    *
    * The callback is executed **after** the underlying function settles but
    * before the error is re-thrown from {@link unwrap}. It runs synchronously
@@ -477,7 +480,7 @@ export class Try<
       return result.then((resolved) => {
         if (!resolved.success) {
           const isThrowThrough = Try.ignoreErrorTypes.includes(
-            resolved.error.name,
+            safeErrorName(resolved.error),
           );
           const shouldCapture = this.config.message && !isThrowThrough;
 
@@ -502,7 +505,9 @@ export class Try<
     }
 
     if (!result.success) {
-      const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+      const isThrowThrough = Try.ignoreErrorTypes.includes(
+        safeErrorName(result.error),
+      );
       const shouldCapture = this.config.message && !isThrowThrough;
 
       if (shouldCapture) {
@@ -575,7 +580,7 @@ export class Try<
       return result.then((resolved) => {
         if (!resolved.success) {
           const isThrowThrough = Try.ignoreErrorTypes.includes(
-            resolved.error.name,
+            safeErrorName(resolved.error),
           );
           if (this.config.message && !isThrowThrough) {
             this.reportError(resolved.error);
@@ -589,7 +594,9 @@ export class Try<
     }
 
     if (!result.success) {
-      const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+      const isThrowThrough = Try.ignoreErrorTypes.includes(
+        safeErrorName(result.error),
+      );
       if (this.config.message && !isThrowThrough) {
         this.reportError(result.error);
       } else if (this.config.breadcrumbConfig) {
@@ -640,7 +647,7 @@ export class Try<
         }
 
         const isThrowThrough = Try.ignoreErrorTypes.includes(
-          resolved.error.name,
+          safeErrorName(resolved.error),
         );
         if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
@@ -660,7 +667,9 @@ export class Try<
       >;
     }
 
-    const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+    const isThrowThrough = Try.ignoreErrorTypes.includes(
+      safeErrorName(result.error),
+    );
     if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
@@ -716,7 +725,7 @@ export class Try<
         }
 
         const isThrowThrough = Try.ignoreErrorTypes.includes(
-          resolved.error.name,
+          safeErrorName(resolved.error),
         );
         if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
@@ -740,7 +749,9 @@ export class Try<
       >;
     }
 
-    const isThrowThrough = Try.ignoreErrorTypes.includes(result.error.name);
+    const isThrowThrough = Try.ignoreErrorTypes.includes(
+      safeErrorName(result.error),
+    );
     if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
@@ -893,6 +904,8 @@ export class Try<
       Try.defaultReporter.report(error, {
         message: this.config.message,
         tags: this.config.tags,
+        breadcrumbData: this.local.breadcrumbData,
+        functionName: this.fn.name,
       });
     } catch (reporterError) {
       if (this.config.debug) {

@@ -1,9 +1,18 @@
+import { safeErrorStack } from '../utils/normalize';
+
 /**
  * Configuration for error reporting
  */
 export interface ErrorReportConfig {
   readonly message?: string;
   readonly tags: Readonly<Record<string, string>>;
+  /**
+   * Breadcrumb data extracted for this call, when `.breadcrumbs()` is
+   * configured and this instance performed the extraction.
+   */
+  readonly breadcrumbData?: Record<string, unknown>;
+  /** Name of the wrapped function. */
+  readonly functionName?: string;
 }
 
 /**
@@ -50,7 +59,7 @@ export class NoopReporter implements Reporter {
   createWrappedError(error: Error, message: string): Error {
     const wrappedError = new Error(message);
     wrappedError.cause = error;
-    wrappedError.stack = error.stack;
+    wrappedError.stack = safeErrorStack(error);
     return wrappedError;
   }
 }

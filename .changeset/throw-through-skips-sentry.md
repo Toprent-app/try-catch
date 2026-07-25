@@ -1,5 +1,7 @@
 ---
-'@power-rent/try-catch': patch
+'@power-rent/try-catch': minor
 ---
 
-Fix HI-02: errors matching `Try.throwThroughErrorTypes` are no longer reported to Sentry when `.report()` is set. Previously the error was sent to `Sentry.captureException` before being re-thrown unwrapped, contradicting the "throw-through" name. Breadcrumbs configured via `.breadcrumbs()` are still recorded.
+Fix HI-02: errors whose `name` is registered with `Try.throwThroughErrorTypes` are exempt from reporting. With `.report()` set, a matching error is re-surfaced unwrapped and reaches no reporter, on all four terminals and on both the sync and async paths. Breadcrumbs configured via `.breadcrumbs()` are still recorded, so the context leading up to an expected domain error stays available.
+
+Sentry volume drops for applications that register throw-through types, and those errors stop appearing as issues.

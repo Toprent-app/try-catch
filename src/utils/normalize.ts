@@ -2,12 +2,32 @@
 const PRESERVED_ERROR_KEYS = new Set(['name', 'message', 'stack', 'cause']);
 
 /**
- * Keys that must never be copied onto the reconstructed Error. Assigning
- * `__proto__` repoints the prototype (→ the result fails `instanceof Error`);
- * `constructor`/`prototype` shadow structural internals. A JSON-parsed payload
- * (`throw await res.json()`) carries a real own enumerable `__proto__` key.
+ * Keys that must never be copied onto the reconstructed Error, because their
+ * presence as a plain data property changes how the language itself treats the
+ * value. A JSON-parsed payload (`throw await res.json()`) can carry any of them
+ * as a real own enumerable key.
+ *
+ * - `__proto__` repoints the prototype (→ the result fails `instanceof Error`);
+ *   `constructor`/`prototype` shadow structural internals.
+ * - `toString`, `valueOf`, `toLocaleString`, `hasOwnProperty`, `isPrototypeOf`
+ *   and `propertyIsEnumerable` shadow `Object.prototype` methods. A non-callable
+ *   `toString`/`valueOf` makes `String(error)` and `` `${error}` `` throw
+ *   `Cannot convert object to primitive value` in consumer and reporter code.
+ * - `then` makes the Error thenable, so `await` on a value holding it (e.g. the
+ *   `Error` returned by `.error()`) resolves the property instead of the error.
  */
-const UNSAFE_COPY_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const UNSAFE_COPY_KEYS = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+  'toString',
+  'valueOf',
+  'toLocaleString',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'then',
+]);
 
 /** Read a property without ever throwing (the value may be a throwing getter). */
 function safeGet(value: object, key: string): unknown {
@@ -144,4 +164,40 @@ export function normalizeThrown(value: unknown): Error {
     // cause non-writable on this Error — ignore
   }
   return error;
+}
+
+/**
+ * Read `error.name` without ever throwing.
+ *
+ * `normalizeThrown` passes `instanceof Error` values through untouched, so a
+ * caught error can carry a throwing `name` getter (a Proxy wrapper from an ORM,
+ * mock, or observability layer; a subclass with `get name()`). Every
+ * `Try.ignoreErrorTypes` membership test goes through here, keeping the
+ * never-throw contract of `.value()`, `.error()`, and `.result()` and the
+ * throws-only-the-wrapped-error contract of `.unwrap()`.
+ *
+ * @returns The error's `name` when it is a string, `''` otherwise.
+ */
+export function safeErrorName(error: Error): string {
+  try {
+    return typeof error.name === 'string' ? error.name : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Read `error.stack` without ever throwing, for the same reason as
+ * {@link safeErrorName}: a caught `instanceof Error` value can carry a throwing
+ * `stack` getter, and reporters copy the stack onto the wrapped error that
+ * `.unwrap()` throws.
+ *
+ * @returns The error's `stack` when it is a string, `undefined` otherwise.
+ */
+export function safeErrorStack(error: Error): string | undefined {
+  try {
+    return typeof error.stack === 'string' ? error.stack : undefined;
+  } catch {
+    return undefined;
+  }
 }
