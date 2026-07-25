@@ -96,12 +96,12 @@ export class Try<
     // a parent + child referencing the same config emit breadcrumbs only
     // once, while divergent configs each emit independently.
     breadcrumbsEmitted: Set<BreadcrumbOptions<TArgs>>;
-    // Whether this settled failure has already been reported to the
-    // Reporter for this shared execution. Shared across .default() clones
-    // (and guards repeated terminal calls on one instance) so a single
-    // failure triggers at most one captureException, mirroring the
-    // idempotence of `breadcrumbsEmitted`.
-    reportEmitted: boolean;
+    // Set of `.report()` messages already sent to the Reporter for this
+    // shared execution. Shared across .default() clones so a parent + child
+    // carrying the same message report only once, while divergent messages
+    // each report independently, mirroring the idempotence of
+    // `breadcrumbsEmitted`.
+    reportedMessages: Set<string>;
   };
   private readonly local: {
     breadcrumbData?: Record<string, unknown>;
@@ -167,7 +167,7 @@ export class Try<
       state: 'pending',
       finallyRan: new Set(),
       breadcrumbsEmitted: new Set(),
-      reportEmitted: false,
+      reportedMessages: new Set(),
     };
     this.local = { breadcrumbsAdded: false };
   }
@@ -877,13 +877,15 @@ export class Try<
     // Guard against duplicate reporting across shared execution. Parent and
     // child clones (via .default()) share `exec`, and a terminal may be
     // called more than once on one instance; either way a single settled
-    // failure must trigger at most one captureException, mirroring the
-    // idempotence of `addBreadcrumbsIfConfigured`.
-    if (this.exec.reportEmitted) {
+    // failure reports each distinct `.report()` message at most once,
+    // mirroring the idempotence of `addBreadcrumbsIfConfigured`. Clones
+    // configured with divergent messages each report their own.
+    const message = this.config.message ?? '';
+    if (this.exec.reportedMessages.has(message)) {
       this.addBreadcrumbsIfConfigured();
       return;
     }
-    this.exec.reportEmitted = true;
+    this.exec.reportedMessages.add(message);
 
     this.addBreadcrumbsIfConfigured();
 
