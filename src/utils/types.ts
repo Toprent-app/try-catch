@@ -7,8 +7,12 @@
  */
 export type BreadcrumbTransformer<T> = (value: T) => Record<string, unknown>;
 
-type ExtractStringKeys<T> =
-  T extends Record<string, unknown> ? Extract<keyof T, string> : never;
+/**
+ * String keys of an object-typed parameter, or never for non-object parameters.
+ * The `object` constraint admits interfaces and classes, which lack the implicit
+ * string index signature that object type aliases carry.
+ */
+type ExtractStringKeys<T> = T extends object ? Extract<keyof T, string> : never;
 
 type KeyArrayFor<T> =
   ExtractStringKeys<T> extends never ? never : readonly ExtractStringKeys<T>[];
@@ -92,16 +96,17 @@ type GenericBreadcrumbExtractor<TArgs extends readonly unknown[]> =
 /**
  * Utility type that validates keys exist on the first parameter type.
  * Returns the key array type if all keys are valid, or never if one is invalid.
+ * The `object` constraint admits interfaces and classes, which lack the implicit
+ * string index signature that object type aliases carry.
  */
 export type ValidateKeys<
   TArgs extends readonly unknown[],
   Keys extends readonly string[],
-> =
-  TArgs[0] extends Record<string, unknown>
-    ? Keys extends readonly (keyof TArgs[0])[]
-      ? Keys
-      : never
-    : never;
+> = TArgs[0] extends object
+  ? Keys extends readonly Extract<keyof TArgs[0], string>[]
+    ? Keys
+    : never
+  : never;
 
 /**
  * Utility type that creates a variadic tuple of breadcrumb transformers.

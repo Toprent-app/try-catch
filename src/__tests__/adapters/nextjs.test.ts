@@ -61,7 +61,6 @@ describe('SentryReporter / nextjs', () => {
     });
   });
 
-
   it('report() does NOT internally call Sentry.addBreadcrumb', () => {
     const original = new Error('boom');
     reporter.report(original, {

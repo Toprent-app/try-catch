@@ -20,6 +20,61 @@ const formatMessage = (id: number, message: string, urgent: boolean) => {
   return urgent ? `[URGENT] #${id}: ${message}` : `[INFO] #${id}: ${message}`;
 };
 
+interface AccountParams {
+  accountId: string;
+  region: string;
+}
+
+type AccountParamsAlias = {
+  accountId: string;
+  region: string;
+};
+
+const loadAccount = async (params: AccountParams): Promise<User> => {
+  return { id: 1, name: params.accountId };
+};
+
+const loadAccountAlias = async (params: AccountParamsAlias): Promise<User> => {
+  return { id: 1, name: params.accountId };
+};
+
+const trackVisit = (visitorId: string) => `visit:${visitorId}`;
+
+interface OrderCustomer {
+  id: number;
+  name: string;
+}
+
+type OrderCustomerAlias = {
+  id: number;
+  name: string;
+};
+
+function submitOrder(
+  _orderId: string,
+  _customer: OrderCustomer,
+  _priority: boolean,
+) {
+  throw new Error('test');
+}
+
+function submitOrderAlias(
+  _orderId: string,
+  _customer: OrderCustomerAlias,
+  _priority: boolean,
+) {
+  throw new Error('test');
+}
+
+const orderCustomer: OrderCustomer = { id: 1, name: 'Ada' };
+const orderCustomerAlias: OrderCustomerAlias = { id: 1, name: 'Ada' };
+
+const accountParams: AccountParams = { accountId: 'acc-1', region: 'eu' };
+const accountParamsAlias: AccountParamsAlias = {
+  accountId: 'acc-1',
+  region: 'eu',
+};
+
 function processRequest(
   endpoint: string,
   payload: { userId: number; data: string },
@@ -72,6 +127,76 @@ describe('Try README type safety', () => {
 
     // @ts-expect-error - breadcrumb keys must exist on parameter object
     new Try(fetchUser, { id: 123 }).breadcrumbs(['missingKey']);
+  });
+
+  it('accepts breadcrumb keys when the parameter is an interface, the most common way users declare object params', () => {
+    new Try(loadAccount, accountParams).breadcrumbs(['accountId']);
+  });
+
+  it('accepts breadcrumb keys when the parameter is an object type alias', () => {
+    new Try(loadAccountAlias, accountParamsAlias).breadcrumbs(['accountId']);
+  });
+
+  it('rejects keys absent from an interface parameter so key typos surface at compile time', () => {
+    // @ts-expect-error - accountid is not a key of AccountParams
+    new Try(loadAccount, accountParams).breadcrumbs(['accountid']);
+  });
+
+  it('rejects key arrays when the first parameter is not an object so arbitrary strings never pass as breadcrumbs', () => {
+    // @ts-expect-error - a string parameter exposes no breadcrumb keys
+    new Try(trackVisit, 'v-1').breadcrumbs(['visitorId']);
+  });
+
+  it('accepts object-syntax key arrays for an interface parameter, the most common way users declare object params', () => {
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs({
+      1: ['id', 'name'],
+    });
+  });
+
+  it('accepts object-syntax key arrays for an object type alias parameter', () => {
+    new Try(submitOrderAlias, 'o-1', orderCustomerAlias, true).breadcrumbs({
+      1: ['id', 'name'],
+    });
+  });
+
+  it('rejects object-syntax keys absent from an interface parameter so key typos surface at compile time', () => {
+    // @ts-expect-error - nam is not a key of OrderCustomer
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs({
+      1: ['id', 'nam'],
+    });
+  });
+
+  it('rejects object-syntax key arrays for a non-object parameter so arbitrary strings never pass as breadcrumbs', () => {
+    // @ts-expect-error - a string parameter exposes no breadcrumb keys
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs({
+      0: ['orderId'],
+    });
+  });
+
+  it('accepts explicit-extractor keys for an interface parameter, the most common way users declare object params', () => {
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs([
+      { param: 1, keys: ['id', 'name'] },
+    ]);
+  });
+
+  it('accepts explicit-extractor keys for an object type alias parameter', () => {
+    new Try(submitOrderAlias, 'o-1', orderCustomerAlias, true).breadcrumbs([
+      { param: 1, keys: ['id', 'name'] },
+    ]);
+  });
+
+  it('rejects explicit-extractor keys absent from an interface parameter so key typos surface at compile time', () => {
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs([
+      // @ts-expect-error - nam is not a key of OrderCustomer
+      { param: 1, keys: ['id', 'nam'] },
+    ]);
+  });
+
+  it('rejects explicit-extractor keys for a non-object parameter so arbitrary strings never pass as breadcrumbs', () => {
+    new Try(submitOrder, 'o-1', orderCustomer, true).breadcrumbs([
+      // @ts-expect-error - a string parameter exposes no breadcrumb keys
+      { param: 0, keys: ['orderId'] },
+    ]);
   });
 
   it('validates breadcrumbs functions parameters against object parameter types', () => {
