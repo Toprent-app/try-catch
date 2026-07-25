@@ -46,7 +46,10 @@ import { extractDoctests, type DoctestBlock } from './doctest-extract';
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 const DOCS_DIR = path.join(REPO_ROOT, 'docs');
 const FIXTURES_DIR = path.join(__dirname, '__fixtures__');
-const TEMP_DIR = path.join(REPO_ROOT, 'node_modules', '.doctest');
+// Scratch dir for extracted snippets. It lives inside the Vite project root
+// (and outside `node_modules`) so snippets are transformed as ordinary test
+// source and pick up the `@power-rent/try-catch*` -> `src/` aliases.
+const TEMP_DIR = path.join(REPO_ROOT, '.doctest-tmp');
 
 interface DiscoveredFile {
   readonly absPath: string;

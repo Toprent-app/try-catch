@@ -111,10 +111,19 @@ If you are unsure whether a function is async, using `.value()` without `await` 
 
 ## When your function throws something that isn't an `Error`
 
-Plenty of code throws strings, numbers, or bare objects. The library
-normalizes anything that isn't an `Error` into one: the wrapped error carries
-`message === 'Non-Error thrown (<type>)'` and preserves the original value on
-`.cause`. You never have to guess what `catch (e: unknown)` gave you.
+Plenty of code throws strings, numbers, or bare objects. The library normalizes
+anything that isn't an `Error` into one and preserves the original value on
+`.cause`, so you never have to guess what `catch (e: unknown)` gave you.
+
+- Error-like values — anything carrying a string `name` or `message`, such as a
+  cross-realm `Error` or a `{ name, message, stack, code }` object — are rebuilt
+  into a real `Error` that keeps their `name`, `message`, `stack`, and own
+  enumerable custom fields.
+- Every other value becomes an `Error` whose `message` is `String(thrown)`:
+  `throw 'boom'` gives `'boom'`, `throw 42` gives `'42'`, `throw { code: 500 }`
+  gives `'[object Object]'`. Values that resist stringification — a throwing
+  `toString`, a null-prototype object — give
+  `'Unknown non-Error thrown value'`.
 
 ```ts doctest
 import { Try } from '@power-rent/try-catch';
@@ -127,7 +136,7 @@ const error = new Try(misbehaves).error();
 if (!(error instanceof Error)) {
   throw new Error('expected an Error');
 }
-if (error.message !== 'Non-Error thrown (string)') {
+if (error.message !== 'boom') {
   throw new Error(`unexpected message: ${error.message}`);
 }
 if (error.cause !== 'boom') {

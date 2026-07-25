@@ -9,8 +9,9 @@
  * (e.g. `fetchUser`) never perform real I/O.
  *
  * Behaviors referenced in this file:
- *   - non-Error throws are normalized to `Error` with
- *     `message === "Non-Error thrown (<typeof>)"` and `cause === original`.
+ *   - non-Error throws are normalized to `Error`: error-like values keep their
+ *     `name`/`message`/`stack`, every other value gets
+ *     `message === String(thrown)`; `cause === original` in both cases.
  *   - breadcrumbs record on every terminal method
  *     (.value / .unwrap / .error / .result) — not only on .unwrap.
  *
@@ -114,9 +115,10 @@ export async function asyncBasics(): Promise<void> {
   const r = await new Try(fetchUser, 3).result(); // TryResult<User>
   console.log('asyncBasics result.success', r.success);
 
-  // `await new Try(asyncFn, ...)` is shorthand for `.value()`.
-  const u3 = await new Try(fetchUser, 4);
-  console.log('asyncBasics await shorthand', u3?.email);
+  // `Try` instances are not thenable. `.value()` executes the wrapped function
+  // and returns the promise `await` resolves.
+  const u3 = await new Try(fetchUser, 4).value();
+  console.log('asyncBasics terminal await', u3?.email);
 }
 
 // === Section: Fallback with .default() ===
@@ -251,23 +253,24 @@ export async function breadcrumbsOnEveryTerminal(): Promise<void> {
 
 export async function nonErrorThrows(): Promise<void> {
   // Throwing a string is normalized to an `Error` with:
-  //   - message === "Non-Error thrown (string)"
+  //   - message === "boom"
   //   - cause   === "boom"
   const r = await new Try(async () => {
     throw 'boom';
   }).result();
 
   if (!r.success) {
-    console.log('nonError message', r.error.message); // "Non-Error thrown (string)"
+    console.log('nonError message', r.error.message); // "boom"
     console.log('nonError cause', r.error.cause); // "boom"
   }
 
-  // Same contract for objects, numbers, null, undefined.
+  // Same contract for objects, numbers, null, undefined: the message is
+  // `String(thrown)` and the original value stays on `.cause`.
   const r2 = new Try(() => {
     throw { code: 500 };
   }).result();
   if (!r2.success) {
-    console.log('nonError object', r2.error.message); // "Non-Error thrown (object)"
+    console.log('nonError object', r2.error.message); // "[object Object]"
   }
 }
 

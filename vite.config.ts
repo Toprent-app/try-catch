@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { defaultExclude, defineConfig } from 'vitest/config';
 
 // vitest aliases map the package's public entry points to local
 // `src/` so README / docs snippets can import from `@power-rent/try-catch[/sub]`
@@ -30,6 +30,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // `.doctest-tmp/` holds snippet scratch files written by the doctest
+    // harness while it runs. Keep it out of test collection so a file landing
+    // there mid-run is never picked up as a suite.
+    exclude: [...defaultExclude, '.doctest-tmp/**'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
