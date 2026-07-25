@@ -60,5 +60,4 @@ describe('BrowserReporter', () => {
       data: { foo: 'bar' },
     });
   });
-
 });

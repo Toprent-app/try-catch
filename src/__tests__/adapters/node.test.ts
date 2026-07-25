@@ -60,5 +60,4 @@ describe('NodeReporter', () => {
       data: { foo: 'bar' },
     });
   });
-
 });
