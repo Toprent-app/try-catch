@@ -63,6 +63,16 @@ describe('coverage gaps', () => {
   });
 
   describe('Try.result() sync failure with breadcrumbs', () => {
+    let priorReporter: ReturnType<typeof Try.getDefaultReporter>;
+
+    beforeEach(() => {
+      priorReporter = Try.getDefaultReporter();
+    });
+
+    afterEach(() => {
+      Try.setDefaultReporter(priorReporter);
+    });
+
     it('emits breadcrumbs on sync failure through result()', () => {
       const addBreadcrumbs = vi.fn();
       Try.setDefaultReporter({

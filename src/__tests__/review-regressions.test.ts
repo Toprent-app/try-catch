@@ -169,7 +169,9 @@ describe('Regression: multi-CLI review findings', () => {
    * `reportError` had no shared-exec dedup guard (unlike breadcrumbs), so a
    * single settled failure consumed by both a `.default()` parent and its
    * clone called `captureException` twice. Guard mirrors
-   * `exec.breadcrumbsEmitted`: one shared failure -> at most one capture.
+   * `exec.breadcrumbsEmitted`: it is keyed by `.report()` message, so one
+   * shared failure captures each distinct message at most once and clones
+   * carrying divergent messages each report their own.
    */
   describe('.default() report idempotence', () => {
     it('async: parent + child .default() capture the shared failure only once', async () => {
@@ -184,6 +186,31 @@ describe('Regression: multi-CLI review findings', () => {
       await child.value();
 
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('async: parent and child (via .default()) with divergent .report() messages each reach Sentry', async () => {
+      const fn = async () => {
+        throw new Error('boom');
+      };
+
+      const parent = new Try(fn).report('parent failed');
+      const child = parent.default('fallback').report('child failed');
+
+      // Parent runs first and records its message on the shared execution.
+      await parent.value();
+      await child.value();
+
+      expect(Sentry.captureException).toHaveBeenCalledTimes(2);
+      expect(Sentry.captureException).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ message: 'parent failed' }),
+        expect.anything(),
+      );
+      expect(Sentry.captureException).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ message: 'child failed' }),
+        expect.anything(),
+      );
     });
   });
 
