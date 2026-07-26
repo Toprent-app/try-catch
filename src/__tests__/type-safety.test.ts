@@ -118,17 +118,26 @@ describe('Try README type safety', () => {
   });
 
   it('rejects assigning MaybePromise terminals to Promise without await', () => {
+    const terminal = new Try(fetchUser, { id: 123 }).value();
+
     // @ts-expect-error Promise-typed terminals may settle sync
-    const _p: Promise<User | undefined> = new Try(fetchUser, {
-      id: 123,
-    }).value();
+    const _p: Promise<User | undefined> = terminal;
+
+    expectTypeOf(terminal).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
+    expectTypeOf<Awaited<typeof terminal>>().toEqualTypeOf<User | undefined>();
   });
 
   it('validates breadcrumbs keys against object parameter types', () => {
-    new Try(fetchUser, { id: 123 }).breadcrumbs(['id']);
+    const withBreadcrumbs = new Try(fetchUser, { id: 123 }).breadcrumbs(['id']);
 
     // @ts-expect-error - breadcrumb keys must exist on parameter object
     new Try(fetchUser, { id: 123 }).breadcrumbs(['missingKey']);
+
+    expectTypeOf(withBreadcrumbs.value()).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
   });
 
   it('validates breadcrumbs functions parameters against object parameter types', () => {
@@ -158,6 +167,13 @@ describe('Try README type safety', () => {
 
     // @ts-expect-error - invalid argument types for chargeCard
     new Try(chargeCard, { amount: '1000', currency: 'USD' });
+
+    expectTypeOf(new Try(formatMessage, 1, 'Test', true).value()).toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf(
+      new Try(chargeCard, { amount: 1000, currency: 'USD' }).value(),
+    ).toEqualTypeOf<Receipt | undefined | Promise<Receipt | undefined>>();
   });
 
   it('should extract from multiple parameters using keys', async () => {
@@ -175,7 +191,13 @@ describe('Try README type safety', () => {
       .breadcrumbs([
         // @ts-expect-error name is not a valid key of the customer object
         { param: 1, keys: ['id', 'nam'] },
-        { param: 2, transform: (priority: boolean) => ({ priority }) },
+        {
+          param: 2,
+          transform: (priority) => {
+            expectTypeOf(priority).toEqualTypeOf<boolean>();
+            return { priority };
+          },
+        },
       ])
       .value();
   });

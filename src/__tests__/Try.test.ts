@@ -2011,19 +2011,23 @@ describe('Try', () => {
       )
         .breadcrumbs(['id'])
         .report('failed');
-    const expectReportedOnce = () => {
-      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
-      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const expectedBreadcrumb = {
+      message: 'Calling anonymous function',
+      data: { id: 7 },
     };
 
     it('adds the breadcrumb exactly once with report on .value()', async () => {
       await reportingAttempt().value();
-      expectReportedOnce();
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expectedBreadcrumb);
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
     it('adds the breadcrumb exactly once with report on .unwrap()', async () => {
       await expect(reportingAttempt().unwrap()).rejects.toThrow('failed');
-      expectReportedOnce();
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(expectedBreadcrumb);
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
   });
 });
