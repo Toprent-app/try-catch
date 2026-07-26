@@ -108,11 +108,11 @@ error(): MaybePromise<TReturn, Error | undefined>;
 result(): MaybePromise<TReturn, TryResult<TReturn>>;
 ```
 
-`value()` and `unwrap()` use the same helper with their existing value and
-default-value types.
+`value()` and `unwrap()` use the same helper with their value and default-value
+types.
 
 Use an internal implementation class plus conditional public facade so
-`finally` is absent, rather than merely uncallable, for synchronous functions:
+`finally` is absent from the public type surface for synchronous functions:
 
 ```typescript
 type PublicTry<TReturn, TArgs extends readonly unknown[]> =
@@ -132,14 +132,14 @@ narrowing through the facade.
 
 ## `finally()` boundary
 
-Type-only classification follows declared return type, not runtime function
-syntax. A function declared `(): Promise<T>` receives the async public surface,
-even when it throws synchronously before returning its Promise.
+Type-only classification follows the declared return type. A function declared
+`(): Promise<T>` receives the async public surface, even when it throws
+synchronously before returning its Promise.
 
 This means type-only changes cannot guarantee awaiting an async finalizer on
 that exceptional path. Full parity would require runtime normalization or an
-explicitly branded async API; both are outside this design. Tests must document
-this boundary rather than promise unsupported behavior.
+explicitly branded async API; both are outside this design. Tests document this
+boundary.
 
 ## Tests
 
@@ -179,9 +179,8 @@ const value = new Try(fetchUser, { id: 1 }).default(null).tag('k', 'v').value();
 ```
 
 Assigning that result to `User | null | Promise<User | null>` reports `TS2322`,
-and the static type omits `null` while the runtime returns it. The gap is present
-on `main` as well; closing it requires threading the default type parameter
-through every fluent method.
+and the static type omits `null` while the runtime returns it. Closing the gap
+requires threading the default type parameter through every fluent method.
 
 Guidance: call `default()` last in a chain.
 

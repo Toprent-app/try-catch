@@ -126,11 +126,11 @@ terminal method.
 ```typescript
 // Chain multiple configuration methods with flexible breadcrumbs
 const result = await new Try(processOrder, 'order-123', { customerId: 456, amount: 99.50 }, { isUrgent: true, retryCount: 3, sensitiveData: {} })
-  .breadcrumbs(
-    'orderId', // add to breadcrumbs as { orderId: 'order-123' }
-    (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
-    ['isUrgent', 'retryCount'] // add to breadcrumbs as { isUrgent: true, retryCount: 3 }
-  )
+  .breadcrumbs({
+    0: (id) => ({ orderId: id }), // add to breadcrumbs as { orderId: 'order-123' }
+    1: (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
+    2: ['isUrgent', 'retryCount'] // add to breadcrumbs as { isUrgent: true, retryCount: 3 }
+  })
   .report('Failed to process order')   // Custom error message
   .tag('operation', 'order-processing') // Add Sentry tag
   .tag('priority', 'high')            // Add another tag
@@ -197,8 +197,10 @@ The constructor accepts any number of arguments of any type. Breadcrumbs functio
 
 ### Configuration Methods
 
-Configuration methods store settings on the instance and return it, typed as
-`PublicTry<TReturn, TArgs>`, enabling method chaining:
+Configuration methods store settings on the instance and return it, enabling
+method chaining. `.report()`, `.breadcrumbs()`, `.tag()`, `.tags()`, `.debug()`,
+and `.finally()` return `PublicTry<TReturn, TArgs>` and chain in any order.
+`.default()` returns a narrowed surface and goes last in a chain.
 
 #### `.report(message: string): PublicTry<TReturn, TArgs>`
 
@@ -266,15 +268,6 @@ const user = await new Try(fetchUser, { id: 123 })
   .value();
 ```
 
-### Execution Methods
-
-#### `.unwrap(): MaybePromise<TReturn, Awaited<TReturn>>`
-
-Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain.
-
-For a sync `formatMessage(...): string`, `.unwrap()` is `string`. For an async
-`chargeCard(...): Promise<Receipt>`, it is `Receipt | Promise<Receipt>`.
-
 #### `.default<D>(defaultValue: D): Omit<PublicTry<TReturn, TArgs>, 'value'> & { value(): MaybePromise<TReturn, Awaited<TReturn> | D> }`
 
 Set a default value that will be returned by `.value()` when an exception occurs,
@@ -285,6 +278,36 @@ and narrow `.value()` to drop `undefined`. For a sync `formatMessage`,
 Call `.default()` last in a chain: the narrowing lives on the object it returns,
 and a following configuration method returns `PublicTry<TReturn, TArgs>`, whose
 `.value()` includes `undefined`.
+
+### Static Methods
+
+#### `Try.throwThroughErrorTypes(errorTypeNames: string[]): void`
+
+Register error type names (matched against `error.name`) that `.unwrap()` throws
+as-is. A registered error keeps its own message and identity even when
+`.report('custom message')` is in the chain; every other error is wrapped in a
+new `Error` carrying that message, with the original attached as `cause`.
+Reporting is unaffected — a registered error is still reported when `.report()`
+is configured. The registry is global to every `Try` instance.
+
+```typescript
+Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
+
+// A ValidationError reaches the caller unchanged; anything else surfaces as
+// an Error with the message 'User validation failed'.
+await new Try(validateUser, userData)
+  .report('User validation failed')
+  .unwrap();
+```
+
+### Execution Methods
+
+#### `.unwrap(): MaybePromise<TReturn, Awaited<TReturn>>`
+
+Execute the function and return the result. Throws the original error if one occurred. Will mask the error message if `.report('custom message')` is called in the chain, unless the error's type is registered with `Try.throwThroughErrorTypes()`.
+
+For a sync `formatMessage(...): string`, `.unwrap()` is `string`. For an async
+`chargeCard(...): Promise<Receipt>`, it is `Receipt | Promise<Receipt>`.
 
 #### `.value(): MaybePromise<TReturn, Awaited<TReturn> | undefined>`
 
@@ -424,10 +447,10 @@ const result = await new Try(processOrder, 'order-123', 99.50, true)
 const user = await new Try(fetchUser, userId)
   .report('Failed to fetch user')
   .breadcrumbs(['userId'])
-  .default(null)
   .finally(() => {
     console.log('Completed fetching user');
   })
+  .default(null)
   .value();
 
 // Pattern 2: Check errors explicitly
@@ -455,7 +478,7 @@ try {
 ### Method Chaining
 
 ```typescript
-// All configuration methods can be chained in any order
+// Configuration methods chain in any order, with `.default()` last
 const result = await new Try(complexOperation, data)
   .tag('module', 'payment')
   .tag('version', '2.0')

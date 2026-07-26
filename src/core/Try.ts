@@ -368,11 +368,11 @@ export class TryImpl<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *
    * // ✅ Array syntax - extract from multiple parameters
    * await new Try(processOrder, 'order-123', { customerId: 456 }, true)
-   *   .breadcrumbs(
+   *   .breadcrumbs([
    *     'value',  // { value: 'order-123' }
    *     ['customerId'],  // { customerId: 456 }
    *     'urgent',  // { urgent: true }
-   *   )
+   *   ])
    *   .unwrap();
    *
    * // ✅ Object syntax - parameter index as keys
