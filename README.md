@@ -199,7 +199,8 @@ The constructor accepts any number of arguments of any type. Breadcrumbs functio
 
 Configuration methods store settings on the instance and return it, enabling
 method chaining. `.report()`, `.breadcrumbs()`, `.tag()`, `.tags()`, `.debug()`,
-and `.finally()` return `PublicTry<TReturn, TArgs>` and chain in any order.
+and `.finally()` return `PublicTry<TReturn, TArgs>` and chain in any order;
+`.finally()` requires a fully Promise-like return type.
 `.default()` returns a narrowed surface and goes last in a chain.
 
 #### `.report(message: string): PublicTry<TReturn, TArgs>`
@@ -281,14 +282,15 @@ and a following configuration method returns `PublicTry<TReturn, TArgs>`, whose
 
 ### Static Methods
 
-#### `Try.throwThroughErrorTypes(errorTypeNames: string[]): void`
+#### `Try.throwThroughErrorTypes(ignoreErrorTypes: string[]): void`
 
 Register error type names (matched against `error.name`) that `.unwrap()` throws
 as-is. A registered error keeps its own message and identity even when
 `.report('custom message')` is in the chain; every other error is wrapped in a
 new `Error` carrying that message, with the original attached as `cause`.
 Reporting is unaffected — a registered error is still reported when `.report()`
-is configured. The registry is global to every `Try` instance.
+is configured, and the reported copy carries that message. The registry is
+global to every `Try` instance.
 
 ```typescript
 Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
@@ -299,6 +301,40 @@ await new Try(validateUser, userData)
   .report('User validation failed')
   .unwrap();
 ```
+
+#### `Try.setDefaultReporter(reporter: Reporter): void`
+
+Install the reporter every `Try` instance reports through. The runtime entry
+points (`/node`, `/browser`, `/nextjs`) call this on import with the matching
+Sentry reporter; the bare entry point installs a `NoopReporter`, so call this
+yourself to route errors to a custom service. The reporter is global to every
+`Try` instance.
+
+```typescript
+import { Try } from '@power-rent/try-catch';
+import type { Reporter, ErrorReportConfig } from '@power-rent/try-catch';
+
+class ConsoleReporter implements Reporter {
+  report(error: Error, config: ErrorReportConfig): void {
+    console.error(config.message ?? error.message, error);
+  }
+  addBreadcrumbs(data: Record<string, unknown>, functionName?: string): void {
+    console.log('breadcrumbs', functionName, data);
+  }
+  createWrappedError(error: Error, message: string): Error {
+    const wrapped = new Error(`${message}: ${error.message}`);
+    wrapped.cause = error;
+    return wrapped;
+  }
+}
+
+Try.setDefaultReporter(new ConsoleReporter());
+```
+
+#### `Try.getDefaultReporter(): Reporter`
+
+Return the currently installed reporter. Useful for saving and restoring it
+around a scope that swaps in its own.
 
 ### Execution Methods
 
@@ -444,7 +480,7 @@ const result = await new Try(processOrder, 'order-123', 99.50, true)
 
 ```typescript
 // Pattern 1: Use default values
-const user = await new Try(fetchUser, userId)
+const user = await new Try(fetchUser, { userId, includeProfile: true })
   .report('Failed to fetch user')
   .breadcrumbs(['userId'])
   .finally(() => {
