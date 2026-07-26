@@ -289,8 +289,8 @@ as-is. A registered error keeps its own message and identity even when
 `.report('custom message')` is in the chain; every other error is wrapped in a
 new `Error` carrying that message, with the original attached as `cause`.
 Reporting is unaffected — a registered error is still reported when `.report()`
-is configured, and the reported copy carries that message. The registry is
-global to every `Try` instance.
+is configured, and the reporter receives that message as `config.message`. The
+registry is global to every `Try` instance.
 
 ```typescript
 Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
@@ -306,9 +306,9 @@ await new Try(validateUser, userData)
 
 Install the reporter every `Try` instance reports through. The runtime entry
 points (`/node`, `/browser`, `/nextjs`) call this on import with the matching
-Sentry reporter; the bare entry point installs a `NoopReporter`, so call this
-yourself to route errors to a custom service. The reporter is global to every
-`Try` instance.
+Sentry reporter. The bare entry point installs no reporter — a `NoopReporter`
+stays in place until you call this, so call it to route errors to a custom
+service. The reporter is global to every `Try` instance.
 
 ```typescript
 import { Try } from '@power-rent/try-catch';
@@ -322,7 +322,7 @@ class ConsoleReporter implements Reporter {
     console.log('breadcrumbs', functionName, data);
   }
   createWrappedError(error: Error, message: string): Error {
-    const wrapped = new Error(`${message}: ${error.message}`);
+    const wrapped = new Error(message);
     wrapped.cause = error;
     return wrapped;
   }
