@@ -1,4 +1,4 @@
-import { describe, it, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 
 import Try from '../nextjs';
 
@@ -115,6 +115,33 @@ describe('Try README type safety', () => {
     expectTypeOf(mixed.value()).toEqualTypeOf<
       number | undefined | Promise<number | undefined>
     >();
+  });
+
+  it('known limitation: default() narrowing is discarded by a following fluent method', async () => {
+    const failingFetch = async (_params: { id: number }): Promise<User> => {
+      throw new Error('boom');
+    };
+
+    // `default()` narrows `.value()` on the object it returns.
+    expectTypeOf(
+      new Try(failingFetch, { id: 123 }).default(null).value(),
+    ).toEqualTypeOf<User | null | Promise<User | null>>();
+
+    // A fluent method after it returns `PublicTry<TReturn, TArgs>`, whose
+    // `value()` carries `undefined` and drops the default's type.
+    const rechained = new Try(failingFetch, { id: 123 })
+      .default(null)
+      .tag('module', 'payment');
+
+    expectTypeOf(rechained.value()).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
+
+    // @ts-expect-error known gap: the chained facade omits the default's type
+    const _narrowed: User | null | Promise<User | null> = rechained.value();
+
+    // Runtime returns the configured default the static type omits.
+    expect(await rechained.value()).toBeNull();
   });
 
   it('rejects assigning MaybePromise terminals to Promise without await', () => {

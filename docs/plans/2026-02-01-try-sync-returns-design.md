@@ -2,7 +2,7 @@
 
 Date: 2026-02-01
 
-Status: type-surface follow-up to PR #33 (MaybePromise terminals + conditional `finally()`).
+Status: type-surface follow-up to PR #33 ("try sync returns"), delivered in PR #56 (MaybePromise terminals + conditional `finally()`).
 
 ## Goal
 
@@ -73,14 +73,17 @@ Promise.resolve(new Try(syncThrow).error()).then(handleError);
 
 - Add one lazy execution path that runs the wrapped function once on the first
   terminal call.
-- Store `isAsync`, `syncResult` or `syncError`, and `asyncPromise`.
+- Store `isAsync`, `state`, `cachedResult`, and `cachedPromise`. `cachedResult`
+  holds the settled `TryResult<TReturn>` for both paths; `cachedPromise` holds
+  the in-flight chain for the async path; `state` flips to `'executed'` once the
+  wrapped function settles.
 - When execution returns a Promise-like value, set `isAsync = true` and record
-  its result through `then` and `catch`.
+  its result into `cachedResult` through `then` and `catch` on `cachedPromise`.
 - When execution returns a non-Promise value or throws synchronously, set
-  `isAsync = false` and record the result or error immediately.
+  `isAsync = false` and record `cachedResult` immediately.
 - Cache the observed runtime shape and result. Repeated terminal calls do not
   re-run the wrapped function.
-- Async `finally()` callbacks remain part of the cached Promise chain and finish
+- Async `finally()` callbacks are part of the cached Promise chain and finish
   before async terminal methods settle.
 
 ## TypeScript typing
@@ -144,7 +147,8 @@ this boundary rather than promise unsupported behavior.
   plain values.
 - Verify synchronous throws return defaults or errors immediately and make
   `unwrap()` throw immediately.
-- Verify Promise results preserve existing asynchronous behavior.
+- Verify Promise-returning executions settle asynchronously and resolve through
+  `await`.
 - Add regression coverage for a non-`async` function declared
   `(): Promise<T>` that throws before returning:
   - runtime terminal result is plain;
@@ -155,10 +159,34 @@ this boundary rather than promise unsupported behavior.
 - Add type tests proving `finally()` exists for `Promise<T>` functions.
 - Add type tests proving `T | Promise<T>` terminal methods return
   `TValue | Promise<TValue>`.
-- Verify fluent methods preserve the conditional facade and default-value
-  narrowing.
-- Ensure existing async-finalizer tests remain green for executions that return
-  a Promise.
+- Verify fluent methods preserve the conditional facade: a chained `report()`
+  keeps `finally()` for `Promise<T>` functions and keeps it absent for sync and
+  `T | Promise<T>` functions.
+- Verify async-finalizer behavior for executions that return a Promise: the
+  callback runs once and settles before the terminal resolves.
+
+## Known gap: `default()` narrowing is lost on further chaining
+
+`default<D>()` returns
+`Omit<PublicTry<TReturn, TArgs>, 'value'> & { value(): MaybePromise<TReturn, Awaited<TReturn> | D> }`.
+Every other fluent method returns plain `PublicTry<TReturn, TArgs>`, so a
+configuration call placed after `default()` discards the narrowing:
+
+```typescript
+const value = new Try(fetchUser, { id: 1 }).default(null).tag('k', 'v').value();
+// static type: User | undefined | Promise<User | undefined>
+// runtime value on failure: null
+```
+
+Assigning that result to `User | null | Promise<User | null>` reports `TS2322`,
+and the static type omits `null` while the runtime returns it. The gap is present
+on `main` as well; closing it requires threading the default type parameter
+through every fluent method.
+
+Guidance: call `default()` last in a chain.
+
+Pinned by `'known limitation: default() narrowing is discarded by a following
+fluent method'` in `src/__tests__/type-safety.test.ts`.
 
 ## Documentation
 
