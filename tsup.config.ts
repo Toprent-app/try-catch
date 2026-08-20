@@ -80,10 +80,9 @@ export default defineConfig([
     ...common,
     format: 'cjs',
     outDir: 'dist',
-    dts: {
-      entry: entries,
-      resolve: true,
-    },
+    // Declarations come from tsc, not from tsup. The rollup-plugin-dts copy
+    // bundled in tsup does not support TypeScript 7.
+    dts: false,
   },
   {
     ...common,

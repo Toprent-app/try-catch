@@ -42,7 +42,8 @@
     "./dist/esm/browser/index.js"
   ],
   "scripts": {
-    "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts",
+    "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts && npm run build:types",
+    "build:types": "tsc -p tsconfig.build.json",
     "build:watch": "tsup --config tsup.config.ts --watch",
     "changeset": "changeset",
     "changeset:version": "changeset version",
