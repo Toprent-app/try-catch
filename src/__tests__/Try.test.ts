@@ -1996,5 +1996,52 @@ describe('Try', () => {
       await expect(reportingAttempt().unwrap()).rejects.toThrow('failed');
       expectReportedOnce();
     });
+
+    it('reports once when .value() runs twice on one instance', async () => {
+      const attempt = reportingAttempt();
+
+      await attempt.value();
+      await attempt.value();
+
+      expectReportedOnce();
+    });
+
+    it('reports once when .value() precedes .error() on one instance', async () => {
+      // The reuse pattern the README documents: read the value, then read the
+      // error off the same attempt. One failure must stay one Sentry event.
+      const attempt = reportingAttempt();
+
+      const value = await attempt.value();
+      const error = await attempt.error();
+
+      expect(value).toBe(undefined);
+      expect(error?.message).toBe('boom');
+      expectReportedOnce();
+    });
+
+    it('reports once when .value() precedes .unwrap() on one instance', async () => {
+      const attempt = reportingAttempt();
+
+      await attempt.value();
+      await expect(attempt.unwrap()).rejects.toThrow('failed');
+
+      expectReportedOnce();
+    });
+
+    it('reports once when a sync failure runs .value() twice', () => {
+      const attempt = new Try(
+        (_params: { id: number }): never => {
+          throw new Error('boom');
+        },
+        { id: 7 },
+      )
+        .breadcrumbs(['id'])
+        .report('failed');
+
+      attempt.value();
+      attempt.value();
+
+      expectReportedOnce();
+    });
   });
 });

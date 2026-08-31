@@ -221,6 +221,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   private isAsync?: boolean;
   private cachedBreadcrumbData?: Record<string, unknown>;
   private breadcrumbsAdded: boolean = false;
+  private reported: boolean = false;
   private state: 'pending' | 'executed';
   private static ignoreErrorTypes: string[] = [];
   private static defaultReporter: Reporter = new NoopReporter();
@@ -953,8 +954,15 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Report error using the configured reporter with context.
+   * One instance reports one time; later calls are no-ops, so terminals that
+   * share a cached execution do not emit duplicate events.
    */
   private reportError(error: Error): void {
+    if (this.reported) {
+      return;
+    }
+    this.reported = true;
+
     this.addBreadcrumbsIfConfigured();
 
     Try.defaultReporter.report(error, {
