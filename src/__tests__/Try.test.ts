@@ -2044,4 +2044,139 @@ describe('Try', () => {
       expectReportedOnce();
     });
   });
+
+  describe('reporter failures', () => {
+    // A reporter is a side channel. When it throws, the terminal still keeps
+    // its never-throw contract and still returns the original failure.
+    const throwingReporter = {
+      report: () => {
+        throw new Error('reporter down');
+      },
+      addBreadcrumbs: () => {
+        throw new Error('breadcrumbs down');
+      },
+      createWrappedError: (error: Error, message: string) => {
+        const wrapped = new Error(message);
+        wrapped.cause = error;
+        return wrapped;
+      },
+    };
+    const originalReporter = Try.getDefaultReporter();
+    const failingAttempt = () =>
+      new Try(
+        async (_params: { id: number }): Promise<never> => {
+          throw new Error('boom');
+        },
+        { id: 7 },
+      )
+        .breadcrumbs(['id'])
+        .report('failed');
+
+    afterEach(() => {
+      Try.setDefaultReporter(originalReporter);
+    });
+
+    it('value() returns undefined when the reporter throws', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      await expect(failingAttempt().value()).resolves.toBe(undefined);
+    });
+
+    it('error() returns the original error when the reporter throws', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      const error = await failingAttempt().error();
+      expect(error?.message).toBe('boom');
+    });
+
+    it('result() returns the original error when the reporter throws', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      const result = await failingAttempt().result();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toBe('boom');
+      }
+    });
+
+    it('unwrap() throws the wrapped original error, not the reporter error', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      await expect(failingAttempt().unwrap()).rejects.toThrow('failed');
+    });
+
+    it('sync value() returns undefined when the reporter throws', () => {
+      Try.setDefaultReporter(throwingReporter);
+      const value = new Try(
+        (_params: { id: number }): never => {
+          throw new Error('boom');
+        },
+        { id: 7 },
+      )
+        .report('failed')
+        .value();
+      expect(value).toBe(undefined);
+    });
+
+    it('value() returns undefined when breadcrumbs are configured without report', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      const value = await new Try(
+        async (_params: { id: number }): Promise<never> => {
+          throw new Error('boom');
+        },
+        { id: 7 },
+      )
+        .breadcrumbs(['id'])
+        .value();
+      expect(value).toBe(undefined);
+    });
+
+    it('unwrap() falls back to a plain wrap when createWrappedError throws', async () => {
+      Try.setDefaultReporter({
+        ...throwingReporter,
+        createWrappedError: () => {
+          throw new Error('wrap down');
+        },
+      });
+      const original = new Error('boom');
+      await expect(
+        new Try(async (): Promise<never> => {
+          throw original;
+        })
+          .report('failed')
+          .unwrap(),
+      ).rejects.toMatchObject({ message: 'failed', cause: original });
+    });
+
+    it('value() returns undefined when only report() throws', async () => {
+      Try.setDefaultReporter({
+        ...throwingReporter,
+        addBreadcrumbs: () => {},
+      });
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      await expect(failingAttempt().debug().value()).resolves.toBe(undefined);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error in reporter',
+        new Error('reporter down'),
+      );
+    });
+
+    it('logs the reporter error only when debug is enabled', async () => {
+      Try.setDefaultReporter(throwingReporter);
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      await failingAttempt().value();
+      expect(consoleSpy).not.toHaveBeenCalledWith(
+        'Error in reporter',
+        expect.anything(),
+      );
+
+      await failingAttempt().debug().value();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error in reporter',
+        new Error('breadcrumbs down'),
+      );
+    });
+  });
 });

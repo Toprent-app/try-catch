@@ -608,7 +608,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
             this.config.message &&
             !Try.ignoreErrorTypes.includes(resolved.error.name)
           ) {
-            const wrappedError = Try.defaultReporter.createWrappedError(
+            const wrappedError = this.createWrappedError(
               resolved.error,
               this.config.message,
             );
@@ -632,7 +632,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
         this.config.message &&
         !Try.ignoreErrorTypes.includes(result.error.name)
       ) {
-        const wrappedError = Try.defaultReporter.createWrappedError(
+        const wrappedError = this.createWrappedError(
           result.error,
           this.config.message,
         );
@@ -956,6 +956,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * Report error using the configured reporter with context.
    * One instance reports one time; later calls are no-ops, so terminals that
    * share a cached execution do not emit duplicate events.
+   * A reporter that throws does not break the terminal: the failure is
+   * logged under debug and the original error still reaches the caller.
    */
   private reportError(error: Error): void {
     if (this.reported) {
@@ -965,21 +967,48 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
     this.addBreadcrumbsIfConfigured();
 
-    Try.defaultReporter.report(error, {
-      message: this.config.message,
-      tags: this.config.tags,
-      breadcrumbData: this.cachedBreadcrumbData,
-      functionName: this.fn.name,
-    });
+    try {
+      Try.defaultReporter.report(error, {
+        message: this.config.message,
+        tags: this.config.tags,
+        breadcrumbData: this.cachedBreadcrumbData,
+        functionName: this.fn.name,
+      });
+    } catch (err) {
+      this.logReporterError(err);
+    }
+  }
+
+  /**
+   * Wrap the error with the configured message for `unwrap()`. A reporter
+   * whose `createWrappedError` throws falls back to the plain wrap, so the
+   * caller still receives the configured message with the original as cause.
+   */
+  private createWrappedError(error: Error, message: string): Error {
+    try {
+      return Try.defaultReporter.createWrappedError(error, message);
+    } catch (err) {
+      this.logReporterError(err);
+      return new NoopReporter().createWrappedError(error, message);
+    }
+  }
+
+  private logReporterError(err: unknown): void {
+    if (this.config.debug) {
+      console.error('Error in reporter', err);
+    }
   }
 
   /**
    * Add breadcrumbs using the configured reporter if configured.
+   * One instance adds breadcrumbs one time. A reporter that throws does not
+   * break the terminal; the failure is logged under debug.
    */
   private addBreadcrumbsIfConfigured(): void {
     if (!this.config.breadcrumbConfig || this.breadcrumbsAdded) {
       return;
     }
+    this.breadcrumbsAdded = true;
 
     // Cache breadcrumb data to avoid re-computation
     if (!this.cachedBreadcrumbData) {
@@ -989,8 +1018,14 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     // Add function name to breadcrumbs for better context
     const functionName = this.fn.name || 'anonymous';
 
-    Try.defaultReporter.addBreadcrumbs(this.cachedBreadcrumbData, functionName);
-    this.breadcrumbsAdded = true;
+    try {
+      Try.defaultReporter.addBreadcrumbs(
+        this.cachedBreadcrumbData,
+        functionName,
+      );
+    } catch (err) {
+      this.logReporterError(err);
+    }
   }
 
   /**
