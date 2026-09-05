@@ -430,10 +430,7 @@ describe('coverage gaps', () => {
         .default('fallback')
         .value();
 
-      expect(spy).toHaveBeenCalledWith(
-        'Reporter.report threw:',
-        expect.any(Error),
-      );
+      expect(spy).toHaveBeenCalledWith('Error in reporter', expect.any(Error));
       spy.mockRestore();
     });
 
@@ -479,10 +476,7 @@ describe('coverage gaps', () => {
         .default('fallback')
         .value();
 
-      expect(spy).toHaveBeenCalledWith(
-        'Reporter.addBreadcrumbs threw:',
-        expect.any(Error),
-      );
+      expect(spy).toHaveBeenCalledWith('Error in reporter', expect.any(Error));
       spy.mockRestore();
     });
   });

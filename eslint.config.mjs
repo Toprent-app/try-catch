@@ -5,7 +5,9 @@ import tseslint from 'typescript-eslint';
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'examples/**', 'eslint.config.mjs'] },
+  {
+    ignores: ['dist/**', 'node_modules/**', 'examples/**', 'eslint.config.mjs'],
+  },
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: {
