@@ -89,6 +89,8 @@ src/
       doctest-extract.test.ts
       doctest.test.ts
       README.md
+    helpers/
+      withFinally.ts  # calls .finally() past the PublicTry type omission
     Try.test.ts
     all-usecases.test.ts
     flexible-breadcrumbs.test.ts
@@ -99,6 +101,7 @@ docs/
   DEVELOPMENT.md
   GETTING-STARTED.md
   TESTING.md
+  plans/              # design documents kept for the record, not published
 .planning/            # Phase planning context (not shipped)
   phases/
     01-core-try-semantics/

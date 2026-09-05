@@ -74,6 +74,12 @@ All test files live under `src/__tests__/` and follow the `*.test.ts` naming pat
 | `src/__tests__/docs/doctest.test.ts` | Doctest harness — executes every ` ```ts doctest``` `-tagged snippet in `README.md`, `docs/*.md`, and `src/__tests__/docs/__fixtures__/*.md` with `NoopReporter` + mocked Sentry |
 | `src/__tests__/docs/doctest-extract.test.ts` | Unit tests for the marker-based fenced-block extractor that feeds the doctest harness |
 
+Shared test code lives outside that table. `src/__tests__/helpers/withFinally.ts`
+exports `withFinally(attempt, callback)`, which calls `.finally()` through a cast.
+The runtime method always exists, but `PublicTry` omits it from the type when
+`TReturn` is not Promise-like, so a test that exercises the sync `finally` path
+goes through this helper rather than suppressing the error at each call site.
+
 ## Doc verification harness
 
 The doctest harness (introduced in Phase 3 Wave 1) auto-executes TypeScript
