@@ -881,8 +881,9 @@ export class Try<
 
   /**
    * Report error using the configured reporter with context.
-   * One shared execution reports one time; later calls are no-ops, so
-   * repeated terminals and `.default()` clones do not emit duplicate events.
+   * One shared execution reports each distinct `.report()` message one time;
+   * later calls with that message are no-ops, so repeated terminals and
+   * `.default()` clones do not emit duplicate events.
    * A reporter that throws does not break the terminal: the failure is
    * logged under debug and the original error still reaches the caller.
    */
@@ -936,8 +937,10 @@ export class Try<
 
   /**
    * Add breadcrumbs using the configured reporter if configured.
-   * One instance adds breadcrumbs one time. A reporter that throws does not
-   * break the terminal; the failure is logged under debug.
+   * One shared execution emits each distinct breadcrumb config one time, so
+   * repeated terminals and `.default()` clones do not duplicate breadcrumbs.
+   * A reporter that throws does not break the terminal; the failure is
+   * logged under debug.
    */
   private addBreadcrumbsIfConfigured(): void {
     if (!this.config.breadcrumbConfig || this.local.breadcrumbsAdded) {

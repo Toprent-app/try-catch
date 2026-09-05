@@ -20,6 +20,13 @@ import { BreadcrumbExtractorUtil } from '../utils';
 import { normalizeThrown } from '../utils/normalize';
 
 describe('coverage gaps', () => {
+  // Console spies are restored from teardown, not from the tail of a test
+  // body: a failing assertion skips the tail and leaks the spy into the
+  // next test.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('NoopReporter.createWrappedError', () => {
     it('wraps error preserving cause and stack', () => {
       const reporter = new NoopReporter();
@@ -190,7 +197,6 @@ describe('coverage gaps', () => {
       );
       expect(out).toEqual({});
       expect(spy).toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('object-style config with undefined paramConfig is skipped', () => {
@@ -218,7 +224,6 @@ describe('coverage gaps', () => {
       );
       expect(out).toEqual({});
       expect(spy).toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('predefined transformer throws without debug silently', () => {
@@ -235,7 +240,6 @@ describe('coverage gaps', () => {
       );
       expect(out).toEqual({});
       expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('custom transformer throws without debug silently', () => {
@@ -254,7 +258,6 @@ describe('coverage gaps', () => {
       );
       expect(out).toEqual({});
       expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('variadic transformer array with fewer args than transformers', () => {
@@ -430,7 +433,6 @@ describe('coverage gaps', () => {
         .value();
 
       expect(spy).toHaveBeenCalledWith('Error in reporter', expect.any(Error));
-      spy.mockRestore();
     });
 
     it('reporter errors are silent without debug', async () => {
@@ -451,7 +453,6 @@ describe('coverage gaps', () => {
         .value();
 
       expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it('addBreadcrumbs errors are logged in debug mode', async () => {
@@ -476,7 +477,6 @@ describe('coverage gaps', () => {
         .value();
 
       expect(spy).toHaveBeenCalledWith('Error in reporter', expect.any(Error));
-      spy.mockRestore();
     });
   });
   /**
