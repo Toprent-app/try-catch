@@ -15,6 +15,15 @@ vi.mock('@sentry/nextjs', () => {
 
 import * as Sentry from '@sentry/nextjs';
 
+/** Runtime `finally` always exists; PublicTry omits it when TReturn is not Promise-like. */
+function withFinally<T>(attempt: T, callback: () => void | Promise<void>): T {
+  return (
+    attempt as T & {
+      finally(cb: () => void | Promise<void>): T;
+    }
+  ).finally(callback);
+}
+
 class GraphQLError extends Error {
   name = 'GraphQLError';
 }
@@ -108,8 +117,8 @@ describe('Regression: multi-CLI review findings', () => {
       const childFinally = vi.fn();
       const fn = () => 'ok';
 
-      const parent = new Try(fn).finally(parentFinally);
-      const child = parent.default('fallback').finally(childFinally);
+      const parent = withFinally(new Try(fn), parentFinally);
+      const child = withFinally(parent.default('fallback'), childFinally);
 
       parent.value();
       child.value();
