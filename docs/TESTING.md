@@ -3,7 +3,7 @@
 
 ## Test framework and setup
 
-The project uses **Vitest** (`^4.0.3`) as its test runner. No additional setup is required beyond installing dependencies.
+The project uses **Vitest** (`^5.0.0`) as its test runner. No additional setup is required beyond installing dependencies.
 
 ```bash
 npm install

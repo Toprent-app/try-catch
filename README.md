@@ -229,23 +229,31 @@ const conditional = await new Try(apiCall, endpoint)
 ### Constructor
 
 ```typescript
-new Try<T, TArgs>(fn: (...args: TArgs) => T | Promise<T>, ...args: TArgs)
+new Try<TReturn, TArgs>(
+  fn: (...args: TArgs) => TReturn,
+  ...args: TArgs
+): PublicTry<TReturn, TArgs>
 ```
 
 - `fn`: The function to execute (can be sync or async)
 - `args`: Arguments to pass to the function (any types: strings, numbers, objects, etc.)
 
+`TReturn` binds to the raw return type of `fn`, so an `async` function binds
+`TReturn = Promise<T>` and a sync function binds `TReturn = T`. Every terminal
+method derives its return type from `TReturn` — see
+[Terminal return types](#terminal-return-types).
+
 ### Configuration Methods
 
-All configuration methods return a `Try` instance, enabling method chaining. All except `.default()` return the same instance they were called on:
+Configuration methods store settings and return `PublicTry<TReturn, TArgs, TDefault>`, so they chain in any order. All except `.default()` return the same instance they were called on:
 
-#### `.report(message: string): Try<T, TArgs>`
+#### `.report(message: string): PublicTry<TReturn, TArgs>`
 
 Report to the configured reporter (Sentry in environment-specific entry
 points) with a custom error message; the original error is attached as
 `.cause`.
 
-#### `.breadcrumbs(config): Try<T, TArgs>`
+#### `.breadcrumbs(config): PublicTry<TReturn, TArgs>`
 
 Record breadcrumbs with flexible extraction from any function parameters. The function name is automatically included in all breadcrumbs for better traceability.
 
@@ -314,66 +322,134 @@ try {
 })
 ```
 
-#### `.tag(name: string, value: string): Try<T, TArgs>`
+#### `.tag(name: string, value: string): PublicTry<TReturn, TArgs>`
 
 Add a tag for error reporting. Can be called multiple times to add multiple tags.
 
-#### `.tags({ name1: 'value1', name2: 'value2' }): Try<T, TArgs>`
+#### `.tags({ name1: 'value1', name2: 'value2' }): PublicTry<TReturn, TArgs>`
 
 Add multiple tags at once. Merges with tags previously added via `.tag()`.
 
-#### `.debug(enabled?: boolean): Try<T, TArgs>`
+#### `.debug(enabled?: boolean): PublicTry<TReturn, TArgs>`
 
 Enable debug logging to console. When enabled, errors will be logged to
 `console.error`.
 
-#### `.finally(callback: () => void | Promise<void>): Try<T, TArgs>`
+#### `.finally(callback: () => void | Promise<void>): PublicTry<TReturn, TArgs>`
 
 Register a callback that runs once after the wrapped function settles,
 whether it succeeded or failed — the analogue of
-`Promise.prototype.finally`. Async callbacks are awaited. Errors thrown
-inside the callback are swallowed, and logged to `console.error` when
-`.debug()` is enabled.
+`Promise.prototype.finally`. It runs before `.unwrap()` re-throws. Async
+callbacks are awaited. Errors thrown inside the callback are swallowed, and
+logged to `console.error` when `.debug()` is enabled.
+
+This method appears on the public type surface only when `TReturn` is fully
+Promise-like (`[TReturn] extends [PromiseLike<unknown>]`). Calling it on a `Try`
+over a sync function, or over one typed `T | Promise<T>`, is a type error.
 
 ### Terminal (Execution) Methods
 
-#### `.unwrap(): T | Promise<Awaited<T>>`
+#### `.unwrap(): MaybePromise<TReturn, Awaited<TReturn>>`
 
 Execute the function and return the result. Throws the original error if
 one occurred (or a wrapped error with your custom message if `.report()`
 was called). Breadcrumbs configured via `.breadcrumbs()` are recorded on
 the error path.
 
-#### `.default<D>(defaultValue: D): Try<T, TArgs, D>`
+#### `.default<D>(defaultValue: D): PublicTry<TReturn, TArgs, D>`
 
-Return a new `Try` instance that substitutes `defaultValue` for `.value()`
-when an error occurs. Returns a fresh instance — the original reference is
-unchanged; subsequent `.report()` / `.tag()` calls after `.default()` apply
-only to the returned chain.
+Substitute `defaultValue` for `.value()` when an error occurs, and narrow
+`.value()` to drop `undefined`. The default's type rides on the third type
+parameter, so configuration chained after `.default()` keeps the narrowed
+`.value()`. It returns a fresh instance that shares the parent's execution —
+the original reference keeps its own `.value()` type, and later `.report()` /
+`.tag()` calls apply only to the returned chain.
 
-#### `.value(): T | D | Promise<Awaited<T> | D>`
+#### `.value(): MaybePromise<TReturn, Awaited<TReturn> | D>`
 
 Execute the function and return the result, the configured default value,
 or `undefined` (when no default is set) if an error occurs. Breadcrumbs
 are recorded on the error path.
 
-#### `.error(): Error | undefined | Promise<Error | undefined>`
+#### `.error(): MaybePromise<TReturn, Error | undefined>`
 
 Execute the function and return the error if one occurred, or `undefined`
 if successful. If `.report()` was configured, the error is reported before
 being returned. Breadcrumbs are recorded when an error is present.
 
-#### `.result(): TryResult<T> | Promise<TryResult<T>>`
+#### `.result(): MaybePromise<TReturn, TryResult<TReturn>>`
 
 Execute and return a discriminated union:
 `{ success: true; value }` or `{ success: false; error }`. Never throws.
 If `.report()` was configured, the error is reported before the result is
 returned. Breadcrumbs are recorded on the error branch.
 
-The execution path follows what `fn(...args)` returns, not how `fn` was declared: a non-thenable result comes back synchronously, and a thenable one comes back as a Promise. A plain function that returns a `Promise` therefore takes the async path.
-`Try` instances are never thenable — `await new Try(fn)` yields the `Try`
-instance itself regardless of whether the wrapped function is sync or async.
-Use `.value()` / `.unwrap()` / `.error()` / `.result()` to execute.
+At runtime the execution path follows what `fn(...args)` returns, not how `fn`
+was declared: a non-thenable result comes back synchronously, and a thenable one
+comes back as a Promise. A plain function that returns a `Promise` therefore
+takes the async path. `Try` instances are never thenable — `await new Try(fn)`
+yields the `Try` instance itself regardless of whether the wrapped function is
+sync or async. Use `.value()` / `.unwrap()` / `.error()` / `.result()` to
+execute.
+
+### Static Methods
+
+#### `Try.setDefaultReporter(reporter: Reporter): void`
+
+Install the reporter every `Try` instance reports through. The runtime entry
+points (`/node`, `/browser`, `/nextjs`) call this on import with the matching
+Sentry reporter; the bare entry point leaves a `NoopReporter` in place. The
+reporter is global to every `Try` instance.
+
+#### `Try.getDefaultReporter(): Reporter`
+
+Return the currently installed reporter — useful for saving and restoring it
+around a scope that swaps in its own.
+
+#### `Try.throwThroughErrorTypes(ignoreErrorTypes: string[]): void`
+
+Register error type names, matched against `error.name`, that `.unwrap()`
+throws as-is. A registered error keeps its own message and identity even when
+`.report('custom message')` is in the chain, and is not reported; configured
+breadcrumbs are still emitted. The registry is global to every `Try` instance.
+
+### Terminal return types
+
+Each terminal returns `MaybePromise<TReturn, TValue>`, where `TReturn` is the
+raw return type of the wrapped function:
+
+```typescript
+type MayReturnPromise<TReturn> =
+  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
+
+type MaybePromise<TReturn, TValue> =
+  MayReturnPromise<TReturn> extends true ? TValue | Promise<TValue> : TValue;
+```
+
+A sync function yields a plain value from every terminal — no `Promise` member
+appears in the type:
+
+```typescript
+const message = new Try(formatMessage, 1, 'Test', true).value(); // string | undefined
+const text = new Try(formatMessage, 1, 'Test', true).unwrap(); // string
+const failure = new Try(formatMessage, 1, 'Test', true).error(); // Error | undefined
+```
+
+A function whose return type contains a Promise member yields
+`TValue | Promise<TValue>`, because such a function can throw synchronously
+before it ever creates a Promise. `await` accepts both shapes:
+
+```typescript
+const user = await new Try(fetchUser, { id: 123 }).value(); // User | undefined
+const error = await new Try(fetchUser, { id: 123 }).error(); // Error | undefined
+```
+
+Callers that need an actual `Promise` — to chain `.then()`, or to satisfy a
+`Promise<T>` annotation — normalize explicitly:
+
+```typescript
+Promise.resolve(new Try(fetchUser, { id: 123 }).value()).then(handleUser);
+```
 
 ## Examples
 
@@ -440,13 +516,14 @@ const result = await new Try(processOrder, 'order-123', 99.50, true)
 
 ```typescript
 // Pattern 1: Use default values
-const user = await new Try(fetchUser, userId)
+// fetchUser returns a Promise, which is what makes .finally() available here.
+const user = await new Try(fetchUser, { userId, includeProfile: true })
   .report('Failed to fetch user')
   .breadcrumbs(['userId'])
-  .default(null)
   .finally(() => {
     console.log('Completed fetching user');
   })
+  .default(null)
   .value();
 
 // Pattern 2: Check errors explicitly
@@ -486,7 +563,8 @@ const result = await new Try(complexOperation, data)
 
 ## Features
 
-- 🔍 **Automatic Sentry integration** - Errors are automatically reported
+- 🚀 **Sync and async in one API** - Terminals return a plain value for sync functions and `T | Promise<T>` when the return type may be a Promise; `await` covers both
+- 🔍 **Opt-in Sentry integration** - Errors are reported when `.report('message')` is in the chain
 - 🧱 **Non-Error normalization** — strings, numbers, objects thrown by callers become real `Error` instances with `.cause`
 - 🍞 **Consistent breadcrumbs** — recorded on every terminal method
 - 🏷️ **Tag support** - Add custom tags to Sentry reports

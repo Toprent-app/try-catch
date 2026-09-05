@@ -140,6 +140,12 @@ if ((result as { ok: boolean }).ok !== true || n !== 42) {
 
 If you are unsure whether a function is async, using `.value()` without `await` is always safe for sync functions, and using `await .value()` is always safe for async functions.
 
+The static types follow the same split. A terminal on a sync function returns a
+plain value; a terminal on a function whose return type may be a Promise returns
+`T | Promise<T>`, which `await` accepts either way. `.finally()` is only
+available when the wrapped function's return type is fully Promise-like. See
+[Terminal return types](../README.md#terminal-return-types) for the exact rules.
+
 ## Common Setup Issues
 
 **Wrong entry point imported** — If errors are never sent to Sentry, ensure you imported a runtime-specific entry point (`/node`, `/browser`, or `/nextjs`) rather than the root `@power-rent/try-catch`. The root entry registers a `NoopReporter` by default.

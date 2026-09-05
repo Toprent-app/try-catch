@@ -55,7 +55,7 @@ graph TD
 A typical call proceeds as follows:
 
 1. **Construction** — `new Try(fn, ...args)` stores the function and its arguments. No `.then` property is installed, so the instance is not thenable and any thenability probe (e.g. `Promise.resolve`, `util.inspect`, deep-equality matchers) cannot trigger execution.
-2. **Configuration** — The caller chains `.report(message)`, `.breadcrumbs(config)`, `.tag(name, value)`, `.tags({...})`, `.default(fallback)`, `.debug()`, and/or `.finally(callback)`. All of these except `.default(fallback)` mutate internal config and return `this`. `.default(fallback)` returns a fresh `Try` instance that shares execution state with the original, so configuration chained after it applies only to the returned instance.
+2. **Configuration** — The caller chains `.report(message)`, `.breadcrumbs(config)`, `.tag(name, value)`, `.tags({...})`, `.default(fallback)`, `.debug()`, and/or `.finally(callback)`. All of these except `.default(fallback)` mutate internal config and return `this`, typed as `PublicTry<TReturn, TArgs, TDefault>`. `.default(fallback)` returns a fresh `Try` instance that shares execution state with the original, so configuration chained after it applies only to the returned instance. `.finally(callback)` is on the public type surface only when `TReturn` is fully Promise-like; `PublicTry` omits it otherwise.
 3. **Execution** — A terminal method (`unwrap`, `value`, `result`, or `error`) calls the private `execute()` method. `execute()` invokes `fn(...args)` inside a `try/catch`. If the return value is thenable, execution continues asynchronously via `Promise.resolve(value).then(...).catch(...).finally(...)`. Otherwise it settles synchronously. Results are cached so repeated terminal calls do not re-invoke the function.
 4. **Thrown-value normalization** — Both the synchronous `catch (e)` arm of `execute()` and the async `.catch(...)` branch pass the thrown value through `normalizeThrown` (`src/utils/normalize.ts`). If `e instanceof Error`, it is returned unchanged. Error-like values — a string `name` or `message`, or an `[object Error]` tag — are rebuilt into a real `Error` that keeps their `name`, `message`, `stack`, and own enumerable custom fields. Every other value becomes an `Error` whose `message` is `String(e)`, falling back to `'Unknown non-Error thrown value'` when stringification throws. Both reconstructed forms preserve the original value on `.cause`. Downstream terminals and the `Reporter` contract therefore always see an `Error` instance — callers never need to re-check `typeof err`.
 5. **Error handling** — On failure:
@@ -99,6 +99,15 @@ The split is decided by what `fn(...args)` returns, not by how `fn` was declared
 `execute()` settles synchronously and the terminal returns the value directly, with no `await` required.
 
 Both paths cache the result in `this.exec` so that subsequent terminal method calls return the same settled value.
+
+The type system draws the line one step earlier than the runtime does, because a
+function typed `(): Promise<T>` can still throw synchronously before it builds
+its Promise. Each terminal is typed `MaybePromise<TReturn, TValue>`: a `TReturn`
+with no Promise member yields a plain `TValue`, and any `TReturn` that may be a
+Promise yields `TValue | Promise<TValue>`. `.finally()` uses a stricter test —
+`[TReturn] extends [PromiseLike<unknown>]`, the full return type rather than a
+member of it — so it is unavailable on a sync `Try` and on one typed
+`T | Promise<T>`.
 
 ## Reporter integration strategy
 
