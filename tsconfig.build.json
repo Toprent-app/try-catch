@@ -1,0 +1,16 @@
+{
+  // Declaration-only build for the published type surface.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "declarationMap": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
+  ]
+}
