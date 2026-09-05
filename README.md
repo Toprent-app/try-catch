@@ -290,9 +290,9 @@ Register error type names (matched against `error.name`) that `.unwrap()` throws
 as-is. A registered error keeps its own message and identity even when
 `.report('custom message')` is in the chain; every other error is wrapped in a
 new `Error` carrying that message, with the original attached as `cause`.
-Reporting is unaffected — a registered error is still reported when `.report()`
-is configured, and the reporter receives that message as `config.message`. The
-registry is global to every `Try` instance.
+A registered error is not reported, even when `.report()` is configured;
+configured breadcrumbs are still emitted. The registry is global to every
+`Try` instance.
 
 ```typescript
 Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
@@ -357,7 +357,7 @@ an async `fetchUser(...): Promise<User>`, it is
 
 #### `.error(): MaybePromise<TReturn, Error | undefined>`
 
-Execute the function and return the error if one occurred, or `undefined` if successful. If `.report()` was configured, the error is reported before being returned.
+Execute the function and return the error if one occurred, or `undefined` if successful. If `.report()` was configured, the error is reported before being returned, unless its type is registered with `Try.throwThroughErrorTypes()`.
 
 For a sync `formatMessage(...): string`, `.error()` is `Error | undefined`. For
 an async `fetchUser(...): Promise<User>`, it is
@@ -368,7 +368,8 @@ an async `fetchUser(...): Promise<User>`, it is
 Execute the function and return a discriminated result object:
 `{ success: true; value: Awaited<TReturn> }` or `{ success: false; error: Error }`.
 Never throws. If `.report()` was configured, a failure is reported before the
-object is returned.
+object is returned, unless the error type is registered with
+`Try.throwThroughErrorTypes()`.
 
 ```typescript
 const outcome = await new Try(fetchUser, { id: 123 }).result();
