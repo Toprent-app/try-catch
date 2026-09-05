@@ -1,70 +1,59 @@
-import { Try, Reporter, ErrorReportConfig, NoopReporter } from '../src/core';
-
 /**
- * Example custom reporter that logs to console instead of Sentry
+ * Custom Reporter Example
+ *
+ * Demonstrates the current three-method `Reporter` interface from
+ * `@power-rent/try-catch`:
+ *   - `report(error, config)`   — send the error to your tracking service
+ *   - `addBreadcrumbs(data, fn)` — attach breadcrumb context
+ *   - `createWrappedError(error, message)` — build the wrapped error thrown by `.unwrap()`
+ *
+ * Every adapter shipped with this library (`src/adapters/node`, `src/adapters/browser`,
+ * `src/nextjs/SentryReporter`) implements exactly this contract. A custom reporter
+ * for any other backend (Datadog, Honeycomb, console, in-memory test collector, …)
+ * follows the same shape.
  */
+import type { Reporter, ErrorReportConfig } from '@power-rent/try-catch';
+
+// === ConsoleReporter: a minimal Reporter that writes to stdout/stderr ===
+
 class ConsoleReporter implements Reporter {
   report(error: Error, config: ErrorReportConfig): void {
-    console.error('Error Report:', {
-      message: config.message || error.message,
-      error: error.name,
-      stack: error.stack,
+    console.error('[report]', {
+      message: config.message ?? error.message,
+      name: error.name,
       tags: config.tags,
-      functionName: config.functionName,
-      breadcrumbs: config.breadcrumbData,
+      stack: error.stack,
     });
   }
 
   addBreadcrumbs(data: Record<string, unknown>, functionName?: string): void {
-    console.log('Breadcrumbs:', {
-      function: functionName,
+    console.log('[breadcrumbs]', {
+      functionName: functionName ?? 'anonymous',
       data,
     });
   }
 
   createWrappedError(error: Error, message: string): Error {
-    const wrappedError = new Error(`${message}: ${error.message}`);
-    wrappedError.cause = error;
-    wrappedError.stack = error.stack;
-    return wrappedError;
+    const wrapped = new Error(message);
+    wrapped.cause = error;
+    wrapped.stack = error.stack;
+    return wrapped;
   }
 }
 
-/**
- * Example showing how to use different reporters
- */
-async function demonstrateReporters() {
-  // Example 1: Using NoopReporter (no reporting)
-  Try.setDefaultReporter(new NoopReporter());
+// === Registering a reporter ===
+// `NoopReporter` is the library default — it never sends anything, so tests and
+// examples run with no side effects. One call swaps in a different reporter for
+// every `Try` instance in the process.
+//
+// This module registers nothing on import: the reporter is global, so an
+// application importing `ConsoleReporter` for its own use must not have its
+// reporting silently redirected as a side effect. Make the call yourself, where
+// you want console reporting to take over:
+//
+//   import { Try } from '@power-rent/try-catch';
+//   import { ConsoleReporter } from './custom-reporter';
+//
+//   Try.setDefaultReporter(new ConsoleReporter());
 
-  const result1 = await new Try(() => {
-    throw new Error('Test error 1');
-  })
-    .report("This error won't be reported anywhere")
-    .value();
-
-  console.log('Result 1 (NoopReporter):', result1); // undefined
-
-  // Example 2: Using ConsoleReporter (logs to console)
-  Try.setDefaultReporter(new ConsoleReporter());
-
-  const result2 = await new Try(() => {
-    throw new Error('Test error 2');
-  })
-    .report('This error will be logged to console')
-    .tag('component', 'demo')
-    .value();
-
-  console.log('Result 2 (ConsoleReporter):', result2); // undefined
-
-  // Example 3: Success case
-  const result3 = await new Try(() => {
-    return 'Success!';
-  })
-    .report("This won't be called since there's no error")
-    .value();
-
-  console.log('Result 3 (Success):', result3); // "Success!"
-}
-
-demonstrateReporters();
+export { ConsoleReporter };
