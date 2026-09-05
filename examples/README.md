@@ -30,7 +30,7 @@ file, and without it the runtime looks for an installed package instead.
 import. Call `runAll()` (or uncomment the call at the end of the file) to see
 the tour execute.
 
-The default reporter registered in `comprehensive-examples.ts` is `NoopReporter`, so running it produces no side effects beyond its own `console.log` calls. Swap in `ConsoleReporter` from `custom-reporter.ts` (or your own `Reporter`) to see reports flow end-to-end.
+Neither file registers a reporter on import — the reporter is global, so importing either one leaves the importing program's reporting untouched. `runAll()` installs `NoopReporter` when you call it, so running the tour produces no side effects beyond its own `console.log` calls. Pass `ConsoleReporter` from `custom-reporter.ts` (or your own `Reporter`) to `Try.setDefaultReporter` to see reports flow end-to-end.
 
 ## Type-checking these examples
 

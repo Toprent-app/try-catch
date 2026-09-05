@@ -12,12 +12,7 @@
  * for any other backend (Datadog, Honeycomb, console, in-memory test collector, …)
  * follows the same shape.
  */
-import {
-  Try,
-  NoopReporter,
-  type Reporter,
-  type ErrorReportConfig,
-} from '@power-rent/try-catch';
+import type { Reporter, ErrorReportConfig } from '@power-rent/try-catch';
 
 // === ConsoleReporter: a minimal Reporter that writes to stdout/stderr ===
 
@@ -46,17 +41,19 @@ class ConsoleReporter implements Reporter {
   }
 }
 
-// === Baseline: NoopReporter ===
-// NoopReporter is the library default — it never sends anything, so tests and
-// examples can run with no side effects. Swap it out for a real reporter in
-// production code:
-Try.setDefaultReporter(new NoopReporter());
-
-// === Swap-in: register the custom reporter ===
-// A single call replaces the default reporter for all subsequent Try instances.
-// Left commented out so importing this module for its `ConsoleReporter` class
-// does not redirect reporting for the importing program. Call it yourself, at
-// the point where you want console reporting to take over:
-// Try.setDefaultReporter(new ConsoleReporter());
+// === Registering a reporter ===
+// `NoopReporter` is the library default — it never sends anything, so tests and
+// examples run with no side effects. One call swaps in a different reporter for
+// every `Try` instance in the process.
+//
+// This module registers nothing on import: the reporter is global, so an
+// application importing `ConsoleReporter` for its own use must not have its
+// reporting silently redirected as a side effect. Make the call yourself, where
+// you want console reporting to take over:
+//
+//   import { Try } from '@power-rent/try-catch';
+//   import { ConsoleReporter } from './custom-reporter';
+//
+//   Try.setDefaultReporter(new ConsoleReporter());
 
 export { ConsoleReporter };

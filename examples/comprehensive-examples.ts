@@ -34,9 +34,6 @@ import type { Try as NodeTry } from '@power-rent/try-catch/node';
 import type { Try as BrowserTry } from '@power-rent/try-catch/browser';
 import type { Try as NextjsTry } from '@power-rent/try-catch/nextjs';
 
-// Register the library default: produce no reports when this file runs.
-Try.setDefaultReporter(new NoopReporter());
-
 // === Section: Synthetic fixtures ===
 // Realistic-looking but fully local functions used across the examples.
 
@@ -349,6 +346,10 @@ export type EntryPointClasses = {
 // `runAll()` yourself, or uncomment the call at the bottom of the file.
 
 export async function runAll(): Promise<void> {
+  // Registered here rather than at module scope: the reporter is global, so
+  // importing this file must not redirect reporting for the importing program.
+  Try.setDefaultReporter(new NoopReporter());
+
   syncBasics();
   await asyncBasics();
   await fallbackWithDefault();
