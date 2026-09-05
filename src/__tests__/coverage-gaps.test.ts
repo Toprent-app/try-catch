@@ -83,8 +83,7 @@ describe('coverage gaps', () => {
         createWrappedError: (e) => e,
       });
 
-      function syncBoom(user: { id: string; name: string }) {
-        void user;
+      function syncBoom(_user: { id: string; name: string }) {
         throw new Error('sync boom');
       }
 
