@@ -9,6 +9,7 @@ import {
 } from 'vitest';
 import { Try, NoopReporter } from '../core';
 import type { Reporter } from '../core';
+import { withFinally } from './helpers/withFinally';
 
 // --- Test fixtures -----------------------------------------------------
 
@@ -94,10 +95,16 @@ describe('Result methods', () => {
   });
 
   it('async value/error/unwrap types', () => {
+    // A Promise-typed function may still throw before it returns a promise,
+    // so the terminals are typed `T | Promise<T>`. `await` handles both.
     const t = new Try(asyncNoArgs);
-    expectTypeOf(t.value()).toEqualTypeOf<Promise<number | undefined>>();
-    expectTypeOf(t.error()).toEqualTypeOf<Promise<Error | undefined>>();
-    expectTypeOf(t.unwrap()).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(t.value()).toEqualTypeOf<
+      number | undefined | Promise<number | undefined>
+    >();
+    expectTypeOf(t.error()).toEqualTypeOf<
+      Error | undefined | Promise<Error | undefined>
+    >();
+    expectTypeOf(t.unwrap()).toEqualTypeOf<number | Promise<number>>();
   });
 
   it('sync value returns T', () => {
@@ -163,7 +170,9 @@ describe('.default()', () => {
 
   it('default([]) narrows value to T | never[] (async)', () => {
     const v = new Try(asyncNoArgs).default([]).value();
-    expectTypeOf(v).toEqualTypeOf<Promise<number | never[]>>();
+    expectTypeOf(v).toEqualTypeOf<
+      number | never[] | Promise<number | never[]>
+    >();
   });
 
   it('default(d).unwrap() still T', () => {
@@ -198,7 +207,7 @@ describe('.default()', () => {
   it('shares execution with parent: fn and finally run once across chain', async () => {
     const fn = vi.fn(async () => 42);
     const fin = vi.fn();
-    const t = new Try(fn).finally(fin);
+    const t = withFinally(new Try(fn), fin);
     const d = t.default(0);
     const [a, b] = await Promise.all([t.value(), d.value()]);
     expect(fn).toHaveBeenCalledTimes(1);
@@ -210,7 +219,7 @@ describe('.default()', () => {
   it('shares sync execution with parent', () => {
     const fn = vi.fn(() => 7);
     const fin = vi.fn();
-    const t = new Try(fn).finally(fin);
+    const t = withFinally(new Try(fn), fin);
     const d = t.default(0);
     expect(t.value()).toBe(7);
     expect(d.value()).toBe(7);
@@ -323,18 +332,18 @@ describe('chain methods', () => {
 
     try {
       const forwardFinally = vi.fn();
-      const forwardValue = new Try(failing)
-        .report('m')
-        .tag('a', 'b')
-        .tags({ c: 'd' })
-        .finally(forwardFinally)
+      const forwardValue = withFinally(
+        new Try(failing).report('m').tag('a', 'b').tags({ c: 'd' }),
+        forwardFinally,
+      )
         .default('fallback')
         .value();
 
       const reverseFinally = vi.fn();
-      const reverseValue = new Try(failing)
-        .default('fallback')
-        .finally(reverseFinally)
+      const reverseValue = withFinally(
+        new Try(failing).default('fallback'),
+        reverseFinally,
+      )
         .tags({ c: 'd' })
         .tag('a', 'b')
         .report('m')
@@ -371,11 +380,9 @@ describe('chain methods', () => {
 
   it('finally callback runs', () => {
     let ran = false;
-    new Try(syncNoArgs)
-      .finally(() => {
-        ran = true;
-      })
-      .value();
+    withFinally(new Try(syncNoArgs), () => {
+      ran = true;
+    }).value();
     expect(ran).toBe(true);
   });
 });

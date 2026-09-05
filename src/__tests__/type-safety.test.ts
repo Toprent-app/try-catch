@@ -1,4 +1,4 @@
-import { describe, it, expectTypeOf } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 
 import Try from '../nextjs';
 
@@ -88,7 +88,9 @@ describe('Try README type safety', () => {
     const asyncValue = new Try(fetchUser, { id: 123 }).value();
     const syncValue = new Try(formatMessage, 1, 'Test', true).value();
 
-    expectTypeOf(asyncValue).toEqualTypeOf<Promise<User | undefined>>();
+    expectTypeOf(asyncValue).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
     expectTypeOf(syncValue).toEqualTypeOf<string | undefined>();
   });
 
@@ -98,35 +100,124 @@ describe('Try README type safety', () => {
       .default('fallback')
       .value();
 
-    expectTypeOf(withDefault).toEqualTypeOf<Promise<User | null>>();
+    expectTypeOf(withDefault).toEqualTypeOf<
+      User | null | Promise<User | null>
+    >();
     expectTypeOf(syncDefault).toEqualTypeOf<string>();
   });
 
-  it('keeps error() typed as Error | undefined', () => {
+  it('keeps error() typed as Error | undefined (or MaybePromise for async)', () => {
     const errorValue = new Try(fetchUser, { id: 123 })
       .report('Failed to fetch user')
       .error();
     const syncError = new Try(formatMessage, 1, 'Test', true).error();
 
-    expectTypeOf(errorValue).toEqualTypeOf<Promise<Error | undefined>>();
+    expectTypeOf(errorValue).toEqualTypeOf<
+      Error | undefined | Promise<Error | undefined>
+    >();
     expectTypeOf(syncError).toEqualTypeOf<Error | undefined>();
   });
 
-  it('keeps unwrap() typed as Awaited<T>', () => {
+  it('keeps unwrap() typed as Awaited<T> (or MaybePromise for async)', () => {
     const receipt = new Try(chargeCard, { amount: 1000, currency: 'USD' })
       .report('Payment failed')
       .unwrap();
     const syncUnwrap = new Try(formatMessage, 1, 'Test', true).unwrap();
 
-    expectTypeOf(receipt).toEqualTypeOf<Promise<Receipt>>();
+    expectTypeOf(receipt).toEqualTypeOf<Receipt | Promise<Receipt>>();
     expectTypeOf(syncUnwrap).toEqualTypeOf<string>();
   });
 
+  it('types Promise-typed sync-throw terminals as MaybePromise unions', () => {
+    function syncThrow(): Promise<number> {
+      throw new Error('x');
+    }
+
+    const attempt = new Try(syncThrow);
+    expectTypeOf(attempt.error()).toEqualTypeOf<
+      Error | undefined | Promise<Error | undefined>
+    >();
+    expectTypeOf(attempt.value()).toEqualTypeOf<
+      number | undefined | Promise<number | undefined>
+    >();
+    expectTypeOf(attempt.unwrap).returns.toEqualTypeOf<
+      number | Promise<number>
+    >();
+  });
+
+  it('exposes finally only for fully Promise-like return types', () => {
+    const asyncTry = new Try(fetchUser, { id: 123 });
+    asyncTry.finally(() => {});
+
+    const chainedAsync = new Try(fetchUser, { id: 123 }).report('x');
+    chainedAsync.finally(() => {});
+
+    const syncTry = new Try(formatMessage, 1, 'Test', true);
+    // @ts-expect-error finally is absent for pure-sync return types
+    syncTry.finally(() => {});
+
+    const chainedSync = new Try(formatMessage, 1, 'Test', true).report('x');
+    // @ts-expect-error finally stays absent after fluent chaining
+    chainedSync.finally(() => {});
+
+    function maybeAsync(): number | Promise<number> {
+      return 1;
+    }
+    const mixed = new Try(maybeAsync);
+    // @ts-expect-error finally is absent for T | Promise<T>
+    mixed.finally(() => {});
+
+    expectTypeOf(mixed.value()).toEqualTypeOf<
+      number | undefined | Promise<number | undefined>
+    >();
+  });
+
+  it('default() narrowing survives a following fluent method', async () => {
+    const failingFetch = async (_params: { id: number }): Promise<User> => {
+      throw new Error('boom');
+    };
+
+    // `default()` narrows `.value()` on the object it returns.
+    expectTypeOf(
+      new Try(failingFetch, { id: 123 }).default(null).value(),
+    ).toEqualTypeOf<User | null | Promise<User | null>>();
+
+    // The fluent methods carry `TDefault`, so a method called after
+    // `default()` keeps the narrowed `value()` type.
+    const rechained = new Try(failingFetch, { id: 123 })
+      .default(null)
+      .tag('module', 'payment');
+
+    expectTypeOf(rechained.value()).toEqualTypeOf<
+      User | null | Promise<User | null>
+    >();
+
+    const _narrowed: User | null | Promise<User | null> = rechained.value();
+
+    expect(await rechained.value()).toBeNull();
+  });
+
+  it('rejects assigning MaybePromise terminals to Promise without await', () => {
+    const terminal = new Try(fetchUser, { id: 123 }).value();
+
+    // @ts-expect-error Promise-typed terminals may settle sync
+    const _p: Promise<User | undefined> = terminal;
+
+    expectTypeOf(terminal).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
+    expectTypeOf<Awaited<typeof terminal>>().toEqualTypeOf<User | undefined>();
+  });
+
   it('validates breadcrumbs keys against object parameter types', () => {
-    new Try(fetchUser, { id: 123 }).breadcrumbs(['id']);
+    const withBreadcrumbs = new Try(fetchUser, { id: 123 }).breadcrumbs(['id']);
 
     // @ts-expect-error - breadcrumb keys must exist on parameter object
     new Try(fetchUser, { id: 123 }).breadcrumbs(['missingKey']);
+
+    expectTypeOf(withBreadcrumbs.value()).toEqualTypeOf<
+      User | undefined | Promise<User | undefined>
+    >();
   });
 
   it('accepts breadcrumb keys when the parameter is an interface, the most common way users declare object params', () => {
@@ -226,6 +317,13 @@ describe('Try README type safety', () => {
 
     // @ts-expect-error - invalid argument types for chargeCard
     new Try(chargeCard, { amount: '1000', currency: 'USD' });
+
+    expectTypeOf(new Try(formatMessage, 1, 'Test', true).value()).toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf(
+      new Try(chargeCard, { amount: 1000, currency: 'USD' }).value(),
+    ).toEqualTypeOf<Receipt | undefined | Promise<Receipt | undefined>>();
   });
 
   it('should extract from multiple parameters using keys', async () => {
@@ -243,7 +341,13 @@ describe('Try README type safety', () => {
       .breadcrumbs([
         // @ts-expect-error name is not a valid key of the customer object
         { param: 1, keys: ['id', 'nam'] },
-        { param: 2, transform: (priority: boolean) => ({ priority }) },
+        {
+          param: 2,
+          transform: (priority) => {
+            expectTypeOf(priority).toEqualTypeOf<boolean>();
+            return { priority };
+          },
+        },
       ])
       .value();
   });

@@ -14,6 +14,7 @@ vi.mock('@sentry/nextjs', () => {
 });
 
 import * as Sentry from '@sentry/nextjs';
+import { withFinally } from './helpers/withFinally';
 
 class GraphQLError extends Error {
   name = 'GraphQLError';
@@ -108,8 +109,8 @@ describe('Regression: multi-CLI review findings', () => {
       const childFinally = vi.fn();
       const fn = () => 'ok';
 
-      const parent = new Try(fn).finally(parentFinally);
-      const child = parent.default('fallback').finally(childFinally);
+      const parent = withFinally(new Try(fn), parentFinally);
+      const child = withFinally(parent.default('fallback'), childFinally);
 
       parent.value();
       child.value();

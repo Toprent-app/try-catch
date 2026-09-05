@@ -1,4 +1,5 @@
 export { Try, Try as default, TryResult } from '../core/Try';
+export type { PublicTry } from '../core/Try';
 import { Try as TryClass } from '../core/Try';
 import { browserReporter } from '../adapters/browser/reporter';
 
