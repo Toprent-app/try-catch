@@ -1,5 +1,5 @@
 ---
-"@power-rent/try-catch": major
+'@power-rent/try-catch': major
 ---
 
-`error()` and `result()` now honor `.report()`. Previously they returned the error/result without reporting even when `.report()` was configured; now they report the error (matching `value()`/`unwrap()`) before returning it. This is breaking for anyone relying on `error()`/`result()` staying silent when `.report()` is set.
+`error()` and `result()` honor `.report()`. All four terminals — `value()`, `unwrap()`, `error()`, `result()` — send the failure to the configured `Reporter` when `.report()` is set, so reading a failure through `error()`/`result()` on a chain carrying `.report()` produces a Sentry event.

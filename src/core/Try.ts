@@ -8,7 +8,8 @@ import type {
   BreadcrumbExtractor as BreadcrumbExtractorType,
 } from '../utils/types';
 import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs';
-import { Reporter, NoopReporter, ErrorReportConfig } from './reporter';
+import { normalizeThrown, safeErrorName } from '../utils/normalize';
+import { Reporter, NoopReporter } from './reporter';
 
 /**
  * Configuration for Try execution
@@ -49,147 +50,6 @@ function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
   return !!value && typeof (value as PromiseLikeValue).then === 'function';
 }
 
-/** Own-Error keys handled explicitly so the prop copy never clobbers them. */
-const PRESERVED_ERROR_KEYS = new Set(['name', 'message', 'stack', 'cause']);
-
-/**
- * Keys that must never be copied onto the reconstructed Error. Assigning
- * `__proto__` repoints the prototype (→ the result fails `instanceof Error`);
- * `constructor`/`prototype` shadow structural internals. A JSON-parsed payload
- * (`throw await res.json()`) carries a real own enumerable `__proto__` key.
- */
-const UNSAFE_COPY_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-/** Read a property without ever throwing (the value may be a throwing getter). */
-function safeGet(value: object, key: string): unknown {
-  try {
-    return (value as Record<string, unknown>)[key];
-  } catch {
-    return undefined;
-  }
-}
-
-/** Stringify for an Error message, never throwing. */
-function safeMessage(value: unknown): string {
-  try {
-    return String(value);
-  } catch {
-    return 'Unknown non-Error thrown value';
-  }
-}
-
-/**
- * `Object.prototype.toString` tag, never throwing. The `Symbol.toStringTag`
- * read can invoke a throwing getter on a hostile object.
- */
-function safeToStringTag(value: object): string {
-  try {
-    return Object.prototype.toString.call(value);
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Structural test for values that carry Error semantics but fail
- * `instanceof Error`: cross-realm / multi-bundle Error instances, transpiled
- * `extends Error` subclasses, and library "error-like" objects
- * (`{ name, message, stack, code, ... }`). Every reflective read is guarded so
- * a hostile getter (including a throwing `Symbol.toStringTag`) can't throw.
- */
-function isErrorLike(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  if (safeToStringTag(value) === '[object Error]') {
-    return true;
-  }
-  return (
-    typeof safeGet(value, 'message') === 'string' ||
-    typeof safeGet(value, 'name') === 'string'
-  );
-}
-
-/**
- * Build a real Error from an error-like value, preserving its identity so
- * downstream reporting keeps working: `name` (drives `throwThroughErrorTypes`
- * matching and reporter grouping), `message`, `stack`, every own enumerable
- * custom field (`code`, `statusCode`, ...), and the original via `cause`.
- */
-function errorFromErrorLike(value: object): Error {
-  const rawMessage = safeGet(value, 'message');
-  const error = new Error(
-    typeof rawMessage === 'string' ? rawMessage : safeMessage(value),
-  );
-
-  const name = safeGet(value, 'name');
-  if (typeof name === 'string') {
-    error.name = name;
-  }
-  const stack = safeGet(value, 'stack');
-  if (typeof stack === 'string') {
-    error.stack = stack;
-  }
-
-  // Carry custom fields so reporters (and ignore-by-type) see the originals.
-  // `Object.keys` can throw (e.g. a Proxy with a throwing ownKeys trap), so it
-  // is guarded too. Skip prototype-mutating keys and define each field as a
-  // plain own data property — assignment would invoke the `__proto__`/setter
-  // path and could repoint the prototype, breaking `instanceof Error`.
-  let ownKeys: string[];
-  try {
-    ownKeys = Object.keys(value);
-  } catch {
-    ownKeys = [];
-  }
-  for (const key of ownKeys) {
-    if (PRESERVED_ERROR_KEYS.has(key) || UNSAFE_COPY_KEYS.has(key)) {
-      continue;
-    }
-    const own = safeGet(value, key);
-    try {
-      Object.defineProperty(error, key, {
-        value: own,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-    } catch {
-      // skip props that can't be (re)defined
-    }
-  }
-
-  try {
-    error.cause = value;
-  } catch {
-    // cause non-writable on this Error — ignore
-  }
-  return error;
-}
-
-/**
- * Normalize an unknown thrown value into an Error without ever throwing.
- *
- * Same-realm Errors pass through untouched. Error-like values that fail
- * `instanceof Error` (cross-realm/bundled Errors, transpiled subclasses, plain
- * `{ name, message, ... }` objects) are reconstructed by {@link errorFromErrorLike}
- * so their identity survives for reporting. Everything else is stringified via
- * a guarded `String(value)` — which can itself throw (null-prototype objects, a
- * throwing `toString`/`Symbol.toPrimitive`) — falling back to a static message.
- *
- * This keeps the never-throw contract of `.value()`, `.error()`, and
- * `.result()` intact for non-Error throwables.
- */
-function toError(value: unknown): Error {
-  if (value instanceof Error) {
-    return value;
-  }
-  if (isErrorLike(value)) {
-    return errorFromErrorLike(value);
-  }
-  return new Error(safeMessage(value));
-}
-
 /**
  * Resolves to True when T is or may be a Promise (so callers must handle async).
  * For Promise<T> | T (mixed return type), resolves to True so value()/unwrap()
@@ -212,17 +72,40 @@ type IfPromise<T, True, False> = [T] extends [never]
  *     .report('failed to execute')
  *     .unwrap();
  */
-export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
+export class Try<
+  TReturn,
+  TArgs extends readonly unknown[] = unknown[],
+  TDefault = undefined,
+> {
   private readonly fn: (...args: TArgs) => TReturn;
   private readonly args: TArgs;
   private config: TryConfig<TArgs>;
-  private cachedResult?: TryResult<TReturn>;
-  private cachedPromise?: Promise<TryResult<TReturn>>;
-  private isAsync?: boolean;
-  private cachedBreadcrumbData?: Record<string, unknown>;
-  private breadcrumbsAdded: boolean = false;
-  private reported: boolean = false;
-  private state: 'pending' | 'executed';
+  private exec: {
+    state: 'pending' | 'executed';
+    result?: TryResult<TReturn>;
+    promise?: Promise<TryResult<TReturn>>;
+    isAsync?: boolean;
+    // Callbacks that have already fired for this shared execution. When
+    // .default() produces a clone, both parent and child share `exec`, so the
+    // guard is keyed by callback reference: one reference fires once across the
+    // whole chain, and divergent references each fire once.
+    finallyRan: Set<() => void | Promise<void>>;
+    // Set of breadcrumbConfig objects whose breadcrumbs have already been
+    // emitted for this shared execution. Shared across .default() clones so
+    // a parent + child referencing the same config emit breadcrumbs only
+    // once, while divergent configs each emit independently.
+    breadcrumbsEmitted: Set<BreadcrumbOptions<TArgs>>;
+    // Set of `.report()` messages already sent to the Reporter for this
+    // shared execution. Shared across .default() clones so a parent + child
+    // carrying the same message report only once, while divergent messages
+    // each report independently, mirroring the idempotence of
+    // `breadcrumbsEmitted`.
+    reportedMessages: Set<string>;
+  };
+  private readonly local: {
+    breadcrumbData?: Record<string, unknown>;
+    breadcrumbsAdded: boolean;
+  };
   private static ignoreErrorTypes: string[] = [];
   private static defaultReporter: Reporter = new NoopReporter();
 
@@ -245,7 +128,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * Creates a new Try instance for simplified async error handling.
    *
    * @param fn The function to execute (can be sync or async)
-   * @param args Arguments to pass to the function (any types: strings, numbers, objects, etc.)
+   * @param args Arguments to pass to the function (various types: strings, numbers, objects, etc.)
    *
    * @example
    * ```typescript
@@ -279,29 +162,37 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     this.fn = fn;
     this.args = args;
     this.config = { tags: {} };
-    this.state = 'pending';
+    this.exec = {
+      state: 'pending',
+      finallyRan: new Set(),
+      breadcrumbsEmitted: new Set(),
+      reportedMessages: new Set(),
+    };
+    this.local = { breadcrumbsAdded: false };
   }
 
   /**
-   * Configure error types that should be thrown through without being wrapped.
-   * When using `.report()`, errors matching these types will be re-thrown as-is
-   * instead of being wrapped with the custom message.
+   * Configure error types that should be thrown through without being wrapped
+   * AND without being reported to the configured Reporter (Sentry).
+   * When using `.report()`, errors matching these types are re-thrown as-is
+   * and `Reporter.report()` is NOT called for them. Breadcrumbs configured via
+   * `.breadcrumbs()` are still recorded.
    *
    * @param ignoreErrorTypes Array of error type names (error.name) to throw through
    *
    * @example
    * ```typescript
-   * // Configure to throw ValidationError and AuthError as-is
+   * // Configure to throw ValidationError and AuthError as-is (and skip Sentry)
    * Try.throwThroughErrorTypes(['ValidationError', 'AuthError']);
    *
-   * // Now these errors won't be wrapped:
+   * // Now these errors won't be wrapped or sent to Sentry:
    * await new Try(validateUser, userData)
-   *   .report('User validation failed') // ValidationError will be thrown as-is
+   *   .report('User validation failed') // ValidationError throws as-is, no captureException
    *   .unwrap();
    * ```
    */
   public static throwThroughErrorTypes(ignoreErrorTypes: string[]) {
-    this.ignoreErrorTypes = ignoreErrorTypes;
+    Try.ignoreErrorTypes = ignoreErrorTypes;
   }
 
   /**
@@ -344,11 +235,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
   }
 
   /**
-   * Configure breadcrumbs with flexible extraction from any function parameters.
+   * Configure breadcrumbs with flexible extraction from the function's parameters.
    * Breadcrumbs provide additional context when errors are reported.
    * The function name is automatically included in all breadcrumbs for better traceability.
    *
-   * **Flexible Usage**: Extract breadcrumbs from any parameter position, transform primitives,
+   * **Flexible Usage**: Extract breadcrumbs from a parameter position, transform primitives,
    * or combine data from multiple parameters.
    *
    * @param config Breadcrumb configuration - supports multiple syntax styles
@@ -399,20 +290,19 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   breadcrumbs(
     configOrFirstTransformer?:
-      BreadcrumbOptions<TArgs> | BreadcrumbTransformer<any>,
-    ...restTransformers: BreadcrumbTransformer<any>[]
+      BreadcrumbOptions<TArgs> | BreadcrumbTransformer<unknown>,
+    ...restTransformers: BreadcrumbTransformer<unknown>[]
   ): this {
     // Handle variadic transformer functions
     if (typeof configOrFirstTransformer === 'function') {
       const allTransformers = [configOrFirstTransformer, ...restTransformers];
       return this.setConfig({
-        breadcrumbConfig:
-          allTransformers as unknown as BreadcrumbOptions<TArgs>,
+        breadcrumbConfig: allTransformers as BreadcrumbOptions<TArgs>,
       });
     }
 
     return this.setConfig({
-      breadcrumbConfig: configOrFirstTransformer as BreadcrumbOptions<TArgs>,
+      breadcrumbConfig: configOrFirstTransformer,
     });
   }
 
@@ -479,12 +369,16 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Register a callback that will run after the wrapped function finishes
-   * executing (successfully or with an error). The callback runs exactly once
-   * per {@link Try} instance, mirroring the behaviour of
+   * executing (successfully or with an error), mirroring the behaviour of
    * `Promise.prototype.finally`.
    *
+   * The callback runs once per (execution, callback reference) pair. A
+   * {@link Try} and the clone produced by {@link default} share one execution,
+   * so passing them the same function reference yields a single call, while
+   * distinct references each run once.
+   *
    * The callback is executed **after** the underlying function settles but
-   * before any error is re-thrown from {@link unwrap}. It runs synchronously
+   * before the error is re-thrown from {@link unwrap}. It runs synchronously
    * for sync functions and is awaited for async functions.
    *
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
@@ -546,24 +440,11 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    *   .value(); // Returns null if findUser throws
    * ```
    */
-  default<D>(defaultValue: D): Omit<typeof this, 'value'> & {
-    value(): IfPromise<
-      TReturn,
-      Promise<Awaited<TReturn> | D>,
-      Awaited<TReturn> | D
-    >;
-  } {
-    type WithGuaranteedValue = Omit<typeof this, 'value'> & {
-      value(): IfPromise<
-        TReturn,
-        Promise<Awaited<TReturn> | D>,
-        Awaited<TReturn> | D
-      >;
-    };
-
-    // Cast is safe: runtime shape is unchanged; this only narrows the static
-    // return type information for the `value` method.
-    return this.setConfig({ defaultValue }) as unknown as WithGuaranteedValue;
+  default<D>(defaultValue: D): Try<TReturn, TArgs, D> {
+    const next = new Try<TReturn, TArgs, D>(this.fn, ...this.args);
+    next.config = { ...this.config, defaultValue };
+    next.exec = this.exec;
+    return next;
   }
 
   /**
@@ -598,16 +479,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (!resolved.success) {
-          const shouldCapture = this.config.message;
+          const isThrowThrough = Try.ignoreErrorTypes.includes(
+            safeErrorName(resolved.error),
+          );
+          const shouldCapture = this.config.message && !isThrowThrough;
 
           if (shouldCapture) {
             this.reportError(resolved.error);
+          } else if (this.config.breadcrumbConfig) {
+            this.addBreadcrumbsIfConfigured();
           }
 
-          if (
-            this.config.message &&
-            !Try.ignoreErrorTypes.includes(resolved.error.name)
-          ) {
+          if (this.config.message && !isThrowThrough) {
             const wrappedError = this.createWrappedError(
               resolved.error,
               this.config.message,
@@ -622,16 +505,18 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     if (!result.success) {
-      const shouldCapture = this.config.message;
+      const isThrowThrough = Try.ignoreErrorTypes.includes(
+        safeErrorName(result.error),
+      );
+      const shouldCapture = this.config.message && !isThrowThrough;
 
       if (shouldCapture) {
         this.reportError(result.error);
+      } else if (this.config.breadcrumbConfig) {
+        this.addBreadcrumbsIfConfigured();
       }
 
-      if (
-        this.config.message &&
-        !Try.ignoreErrorTypes.includes(result.error.name)
-      ) {
+      if (this.config.message && !isThrowThrough) {
         const wrappedError = this.createWrappedError(
           result.error,
           this.config.message,
@@ -694,7 +579,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     if (isPromiseLike<TryResult<TReturn>>(result)) {
       return result.then((resolved) => {
         if (!resolved.success) {
-          if (this.config.message) {
+          const isThrowThrough = Try.ignoreErrorTypes.includes(
+            safeErrorName(resolved.error),
+          );
+          if (this.config.message && !isThrowThrough) {
             this.reportError(resolved.error);
           } else if (this.config.breadcrumbConfig) {
             this.addBreadcrumbsIfConfigured();
@@ -706,7 +594,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
     }
 
     if (!result.success) {
-      if (this.config.message) {
+      const isThrowThrough = Try.ignoreErrorTypes.includes(
+        safeErrorName(result.error),
+      );
+      if (this.config.message && !isThrowThrough) {
         this.reportError(result.error);
       } else if (this.config.breadcrumbConfig) {
         this.addBreadcrumbsIfConfigured();
@@ -755,7 +646,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
           return undefined;
         }
 
-        if (this.config.message) {
+        const isThrowThrough = Try.ignoreErrorTypes.includes(
+          safeErrorName(resolved.error),
+        );
+        if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
         } else if (this.config.breadcrumbConfig) {
           this.addBreadcrumbsIfConfigured();
@@ -773,7 +667,10 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       >;
     }
 
-    if (this.config.message) {
+    const isThrowThrough = Try.ignoreErrorTypes.includes(
+      safeErrorName(result.error),
+    );
+    if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
@@ -816,8 +713,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    */
   value(): IfPromise<
     TReturn,
-    Promise<Awaited<TReturn> | undefined>,
-    Awaited<TReturn> | undefined
+    Promise<Awaited<TReturn> | TDefault>,
+    Awaited<TReturn> | TDefault
   > {
     const result = this.execute();
 
@@ -827,29 +724,35 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
           return resolved.value;
         }
 
-        if (this.config.message) {
+        const isThrowThrough = Try.ignoreErrorTypes.includes(
+          safeErrorName(resolved.error),
+        );
+        if (this.config.message && !isThrowThrough) {
           this.reportError(resolved.error);
         } else if (this.config.breadcrumbConfig) {
           this.addBreadcrumbsIfConfigured();
         }
 
-        return this.config.defaultValue;
+        return this.config.defaultValue as TDefault;
       }) as IfPromise<
         TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
+        Promise<Awaited<TReturn> | TDefault>,
+        Awaited<TReturn> | TDefault
       >;
     }
 
     if (result.success) {
       return result.value as IfPromise<
         TReturn,
-        Promise<Awaited<TReturn> | undefined>,
-        Awaited<TReturn> | undefined
+        Promise<Awaited<TReturn> | TDefault>,
+        Awaited<TReturn> | TDefault
       >;
     }
 
-    if (this.config.message) {
+    const isThrowThrough = Try.ignoreErrorTypes.includes(
+      safeErrorName(result.error),
+    );
+    if (this.config.message && !isThrowThrough) {
       this.reportError(result.error);
     } else if (this.config.breadcrumbConfig) {
       this.addBreadcrumbsIfConfigured();
@@ -857,8 +760,8 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
     return this.config.defaultValue as IfPromise<
       TReturn,
-      Promise<Awaited<TReturn> | undefined>,
-      Awaited<TReturn> | undefined
+      Promise<Awaited<TReturn> | TDefault>,
+      Awaited<TReturn> | TDefault
     >;
   }
 
@@ -870,47 +773,69 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
    * @returns Promise resolving to a result object indicating success/failure
    */
   private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
-    if (this.state === 'executed' && this.cachedResult) {
-      return this.isAsync
-        ? (this.cachedPromise as Promise<TryResult<TReturn>>)
-        : this.cachedResult;
+    if (this.exec.state === 'executed' && this.exec.result) {
+      if (this.exec.isAsync) {
+        // Chain this instance's finally onto the settled promise so clones
+        // (from .default()) each run their own finallyCallback exactly once.
+        return (this.exec.promise as Promise<TryResult<TReturn>>).then(
+          (result) => {
+            const ran = this.runFinallyCallback();
+            return isPromiseLike(ran)
+              ? Promise.resolve(ran).then(() => result)
+              : result;
+          },
+        );
+      }
+      // Sync cached path: run this instance's finally if not already run.
+      void this.runFinallyCallback();
+      return this.exec.result;
     }
 
-    if (this.cachedPromise) {
-      return this.cachedPromise;
+    if (this.exec.promise) {
+      // Another instance sharing this `exec` (via .default()) already
+      // started the async execution and it hasn't settled yet. Chain this
+      // instance's own finally onto it so it still fires exactly once when
+      // the shared promise resolves, instead of relying on whichever
+      // instance originally created the promise.
+      return this.exec.promise.then((result) => {
+        const ran = this.runFinallyCallback();
+        return isPromiseLike(ran)
+          ? Promise.resolve(ran).then(() => result)
+          : result;
+      });
     }
 
     try {
       const value = this.fn(...this.args);
 
       if (isPromiseLike<Awaited<TReturn>>(value)) {
-        this.isAsync = true;
-        this.cachedPromise = Promise.resolve(value)
+        this.exec.isAsync = true;
+        this.exec.promise = Promise.resolve(value)
           .then((resolved) => {
-            this.cachedResult = {
+            this.exec.result = {
               success: true,
-              value: resolved as Awaited<TReturn>,
+              value: resolved,
             };
-            return this.cachedResult;
+            return this.exec.result;
           })
-          .catch((e) => {
+          .catch((e: unknown) => {
             if (this.config.debug) {
               console.error(e);
             }
-            const error = toError(e);
-            this.cachedResult = { success: false, error };
-            return this.cachedResult;
+            const error = normalizeThrown(e);
+            this.exec.result = { success: false, error };
+            return this.exec.result;
           })
           .finally(() => {
-            this.state = 'executed';
+            this.exec.state = 'executed';
             return this.runFinallyCallback();
           });
 
-        return this.cachedPromise;
+        return this.exec.promise;
       }
 
-      this.isAsync = false;
-      this.cachedResult = {
+      this.exec.isAsync = false;
+      this.exec.result = {
         success: true,
         value: value as Awaited<TReturn>,
       };
@@ -918,28 +843,30 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       if (this.config.debug) {
         console.error(e);
       }
-      const error = toError(e);
-      this.isAsync = false;
-      this.cachedResult = { success: false, error };
+      const error = normalizeThrown(e);
+      this.exec.isAsync = false;
+      this.exec.result = { success: false, error };
     } finally {
-      this.state = 'executed';
-      if (!this.isAsync) {
-        this.runFinallyCallback();
+      this.exec.state = 'executed';
+      if (!this.exec.isAsync) {
+        void this.runFinallyCallback();
       }
     }
 
-    return this.cachedResult;
+    return this.exec.result;
   }
 
   private runFinallyCallback(): void | Promise<void> {
-    if (!this.config.finallyCallback) {
+    const cb = this.config.finallyCallback;
+    if (!cb || this.exec.finallyRan.has(cb)) {
       return;
     }
+    this.exec.finallyRan.add(cb);
 
     try {
-      const result = this.config.finallyCallback();
+      const result = cb();
       if (isPromiseLike(result)) {
-        return Promise.resolve(result).catch((err) => {
+        return Promise.resolve(result).catch((err: unknown) => {
           if (this.config.debug) {
             console.error('Error in finally callback', err);
           }
@@ -954,16 +881,25 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Report error using the configured reporter with context.
-   * One instance reports one time; later calls are no-ops, so terminals that
-   * share a cached execution do not emit duplicate events.
+   * One shared execution reports each distinct `.report()` message one time;
+   * later calls with that message are no-ops, so repeated terminals and
+   * `.default()` clones do not emit duplicate events.
    * A reporter that throws does not break the terminal: the failure is
    * logged under debug and the original error still reaches the caller.
    */
   private reportError(error: Error): void {
-    if (this.reported) {
+    // Guard against duplicate reporting across shared execution. Parent and
+    // child clones (via .default()) share `exec`, and a terminal may be
+    // called more than once on one instance; either way a single settled
+    // failure reports each distinct `.report()` message at most once,
+    // mirroring the idempotence of `addBreadcrumbsIfConfigured`. Clones
+    // configured with divergent messages each report their own.
+    const message = this.config.message ?? '';
+    if (this.exec.reportedMessages.has(message)) {
+      this.addBreadcrumbsIfConfigured();
       return;
     }
-    this.reported = true;
+    this.exec.reportedMessages.add(message);
 
     this.addBreadcrumbsIfConfigured();
 
@@ -971,7 +907,7 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
       Try.defaultReporter.report(error, {
         message: this.config.message,
         tags: this.config.tags,
-        breadcrumbData: this.cachedBreadcrumbData,
+        breadcrumbData: this.local.breadcrumbData,
         functionName: this.fn.name,
       });
     } catch (err) {
@@ -1001,84 +937,61 @@ export class Try<TReturn, TArgs extends readonly unknown[] = unknown[]> {
 
   /**
    * Add breadcrumbs using the configured reporter if configured.
-   * One instance adds breadcrumbs one time. A reporter that throws does not
-   * break the terminal; the failure is logged under debug.
+   * One shared execution emits each distinct breadcrumb config one time, so
+   * repeated terminals and `.default()` clones do not duplicate breadcrumbs.
+   * A reporter that throws does not break the terminal; the failure is
+   * logged under debug.
    */
   private addBreadcrumbsIfConfigured(): void {
-    if (!this.config.breadcrumbConfig || this.breadcrumbsAdded) {
+    if (!this.config.breadcrumbConfig || this.local.breadcrumbsAdded) {
       return;
     }
-    this.breadcrumbsAdded = true;
 
-    // Cache breadcrumb data to avoid re-computation
-    if (!this.cachedBreadcrumbData) {
-      this.cachedBreadcrumbData = this.extractAllBreadcrumbData();
+    // Guard against duplicate emission across shared execution. Parent and
+    // child clones (via .default()) share `exec`; if they reference the same
+    // breadcrumbConfig they must emit at most once per shared failure.
+    if (this.exec.breadcrumbsEmitted.has(this.config.breadcrumbConfig)) {
+      this.local.breadcrumbsAdded = true;
+      return;
     }
 
-    // Add function name to breadcrumbs for better context
+    this.local.breadcrumbData = this.extractAllBreadcrumbData(
+      this.config.breadcrumbConfig,
+    );
+
+    // Mark the guard before short-circuiting on empty data so subsequent
+    // terminals (and clones sharing `exec`) do not re-run extraction for
+    // the same (exec, config) pair.
+    if (Object.keys(this.local.breadcrumbData).length === 0) {
+      this.local.breadcrumbsAdded = true;
+      this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
+      return;
+    }
+
     const functionName = this.fn.name || 'anonymous';
 
     try {
       Try.defaultReporter.addBreadcrumbs(
-        this.cachedBreadcrumbData,
+        this.local.breadcrumbData,
         functionName,
       );
     } catch (err) {
       this.logReporterError(err);
     }
+    this.local.breadcrumbsAdded = true;
+    this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
   }
 
   /**
    * Extract breadcrumb data using the flexible configuration.
    */
-  private extractAllBreadcrumbData(): Record<string, unknown> {
-    const config = this.config.breadcrumbConfig!;
+  private extractAllBreadcrumbData(
+    config: BreadcrumbOptions<TArgs>,
+  ): Record<string, unknown> {
     return BreadcrumbExtractorUtil.extract(
       config,
       this.args,
       this.config.debug,
     );
-  }
-
-  /**
-   * Make the Try instance thenable so it can be `await`-ed directly.
-   * This executes the underlying function with the current configuration and resolves
-   * with the same result as calling `.value()` (never throws, returns undefined on error).
-   *
-   * @param onfulfilled Callback for successful resolution
-   * @param onrejected Callback for rejection (rarely used since this doesn't reject)
-   * @returns Promise that resolves with the result or undefined
-   *
-   * @example
-   * ```typescript
-   * // Direct await - equivalent to .value()
-   * const user = await new Try(fetchUser, userId)
-   *   .report('Failed to fetch user');
-   *
-   * // Can be used in Promise chains
-   * const result = await new Try(processData, input)
-   *   .default('fallback')
-   *   .then(data => data?.toUpperCase() || 'NO DATA');
-   *
-   * // Behaves like .value() - never throws
-   * const users = await new Try(fetchUsers); // undefined if error
-   * ```
-   */
-  then<TResult1 = Awaited<TReturn> | undefined, TResult2 = never>(
-    onfulfilled?:
-      | ((
-          value: Awaited<TReturn> | undefined,
-        ) => TResult1 | PromiseLike<TResult1>)
-      | undefined
-      | null,
-    onrejected?:
-      ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
-  ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(
-      this.value() as
-        | Awaited<TReturn>
-        | undefined
-        | PromiseLike<Awaited<TReturn> | undefined>,
-    ).then(onfulfilled ?? undefined, onrejected ?? undefined);
   }
 }

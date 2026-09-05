@@ -54,7 +54,9 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run test && npm run build",
+    "typecheck:ts7": "tsgo --noEmit",
+    "lint": "eslint 'src/**/*.ts'",
+    "prepublishOnly": "npm run clean && npm run lint && npm run test && npm run build",
     "prepare": "husky install"
   },
   "keywords": [
@@ -97,12 +99,16 @@
     "@sentry/nextjs": ">=8.0.0 <11.0.0",
     "@sentry/node": ">=8.0.0 <11.0.0",
     "@types/node": "^20.19.1",
+    "@vitest/coverage-v8": "^4.1.4",
+    "eslint": "^10.2.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.0",
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
     "type-fest": "^5.1.0",
-    "typescript": "^7.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-7": "npm:@typescript/native-preview@^7.0.0-0",
+    "typescript-eslint": "^8.58.2",
     "vitest": "^4.0.3"
   },
   "engines": {
