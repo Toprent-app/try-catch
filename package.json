@@ -137,11 +137,15 @@
     "node": ">=20"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,json}": [
+    "src/**/*.ts": [
+      "eslint --fix",
       "prettier --write"
     ],
-    "src/**/*.ts": [
-      "eslint --fix"
+    "!(src/**/*).{ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{js,jsx,json}": [
+      "prettier --write"
     ]
   },
   "typesVersions": {
