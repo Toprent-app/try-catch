@@ -257,13 +257,13 @@ export class TryImpl<
    *   .report('User update failed')
    *   .unwrap();
    *
-   * // ✅ Array syntax - extract from multiple parameters
+   * // ✅ Array syntax - one positional entry per parameter
    * await new Try(processOrder, 'order-123', { customerId: 456 }, true)
-   *   .breadcrumbs(
+   *   .breadcrumbs([
    *     'value',  // { value: 'order-123' }
    *     ['customerId'],  // { customerId: 456 }
    *     'urgent',  // { urgent: true }
-   *   )
+   *   ])
    *   .unwrap();
    *
    * // ✅ Object syntax - parameter index as keys
