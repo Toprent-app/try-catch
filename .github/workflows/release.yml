@@ -25,5 +25,11 @@ jobs:
         run: npm run build
       - name: Create Release Pull Request or Publish
         uses: changesets/action@v2.1.1
+        with:
+          # Without this input the action only opens the "Version Packages"
+          # pull request and never publishes. The script runs
+          # `changeset publish`, which runs `npm publish` for each version
+          # that is not on the registry yet.
+          publish-script: npm run changeset:publish
         env:
           NPM_CONFIG_PROVENANCE: true
