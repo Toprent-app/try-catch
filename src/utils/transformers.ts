@@ -10,40 +10,35 @@ export const PredefinedTransformers = {
    * Extract length of strings, arrays, or object keys
    */
   length: (value: unknown, paramIndex: number): Record<string, unknown> => {
-    const paramKey = `param${paramIndex}`;
-
     if (typeof value === 'string' || Array.isArray(value)) {
-      return { [`${paramKey}_length`]: value.length };
-    } else if (value && typeof value === 'object') {
-      return { [`${paramKey}_length`]: Object.keys(value).length };
+      return { [`param${paramIndex}_length`]: value.length };
     }
-
+    if (value && typeof value === 'object') {
+      return { [`param${paramIndex}_length`]: Object.keys(value).length };
+    }
     return {};
   },
 
   /**
    * Get the type of the value
    */
-  type: (value: unknown, paramIndex: number): Record<string, unknown> => {
-    const paramKey = `param${paramIndex}`;
-    return { [`${paramKey}_type`]: typeof value };
-  },
+  type: (value: unknown, paramIndex: number): Record<string, unknown> => ({
+    [`param${paramIndex}_type`]: typeof value,
+  }),
 
   /**
    * Include the raw value
    */
-  value: (value: unknown, paramIndex: number): Record<string, unknown> => {
-    const paramKey = `param${paramIndex}`;
-    return { [`${paramKey}_value`]: value };
-  },
+  value: (value: unknown, paramIndex: number): Record<string, unknown> => ({
+    [`param${paramIndex}_value`]: value,
+  }),
 
   /**
    * Convert value to string representation
    */
-  toString: (value: unknown, paramIndex: number): Record<string, unknown> => {
-    const paramKey = `param${paramIndex}`;
-    return { [`${paramKey}_string`]: String(value) };
-  },
+  toString: (value: unknown, paramIndex: number): Record<string, unknown> => ({
+    [`param${paramIndex}_string`]: String(value),
+  }),
 } as const;
 
 /**

@@ -1,5 +1,5 @@
+import { NoopReporter } from '../core/reporter.js';
 import type { Reporter, ErrorReportConfig } from '../core/reporter.js';
-import { safeErrorStack } from '../utils/normalize.js';
 
 /**
  * Minimal subset of the Sentry SDK surface the reporters depend on. Kept loose
@@ -20,12 +20,9 @@ export interface SentryLike {
  * deliberately does not add them — doing so would duplicate every breadcrumb.
  */
 export function createSentryReporter(Sentry: SentryLike): Reporter {
-  const createWrappedError = (error: Error, message: string): Error => {
-    const wrapped = new Error(message);
-    wrapped.cause = error;
-    wrapped.stack = safeErrorStack(error);
-    return wrapped;
-  };
+  const base = new NoopReporter();
+  const createWrappedError = (error: Error, message: string): Error =>
+    base.createWrappedError(error, message);
 
   return {
     report(error: Error, config: ErrorReportConfig): void {

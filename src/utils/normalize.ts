@@ -29,6 +29,15 @@ const UNSAFE_COPY_KEYS = new Set([
   'then',
 ]);
 
+/** Attach `cause` without letting a non-writable `cause` throw. */
+function setCause(error: Error, cause: unknown): void {
+  try {
+    error.cause = cause;
+  } catch {
+    // cause non-writable on this Error — ignore
+  }
+}
+
 /** Read a property without ever throwing (the value may be a throwing getter). */
 function safeGet(value: object, key: string): unknown {
   try {
@@ -128,11 +137,7 @@ function errorFromErrorLike(value: object): Error {
     }
   }
 
-  try {
-    error.cause = value;
-  } catch {
-    // cause non-writable on this Error — ignore
-  }
+  setCause(error, value);
   return error;
 }
 
@@ -158,11 +163,7 @@ export function normalizeThrown(value: unknown): Error {
     return errorFromErrorLike(value);
   }
   const error = new Error(safeMessage(value));
-  try {
-    error.cause = value;
-  } catch {
-    // cause non-writable on this Error — ignore
-  }
+  setCause(error, value);
   return error;
 }
 
