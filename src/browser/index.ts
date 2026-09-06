@@ -1,5 +1,5 @@
-export { Try, Try as default, TryResult } from '../core/Try.js';
-export type { PublicTry } from '../core/Try.js';
+export { Try, Try as default } from '../core/Try.js';
+export type { TryResult, PublicTry } from '../core/Try.js';
 import { Try as TryClass } from '../core/Try.js';
 import { browserReporter } from '../adapters/browser/reporter.js';
 

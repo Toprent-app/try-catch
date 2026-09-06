@@ -1,6 +1,7 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 
 import Try from '../nextjs';
+import type { TryResult } from '../core';
 
 type User = { id: number; name: string };
 type Receipt = { id: string; total: number };
@@ -350,6 +351,26 @@ describe('Try README type safety', () => {
         },
       ])
       .value();
+  });
+
+  it('treats an any-returning function as possibly async', () => {
+    const anyFn = (): any => 1;
+    const attempt = new Try(anyFn);
+    expectTypeOf(attempt.error()).toEqualTypeOf<
+      Error | undefined | Promise<Error | undefined>
+    >();
+    expectTypeOf(attempt.result()).toEqualTypeOf<
+      TryResult<any> | Promise<TryResult<any>>
+    >();
+  });
+
+  it('preserves result() types for sync/async functions', () => {
+    const syncFn = (): number => 1;
+    const asyncFn = async (): Promise<number> => 1;
+    expectTypeOf(new Try(syncFn).result()).toEqualTypeOf<TryResult<number>>();
+    expectTypeOf(new Try(asyncFn).result()).toEqualTypeOf<
+      TryResult<number> | Promise<TryResult<number>>
+    >();
   });
 });
 

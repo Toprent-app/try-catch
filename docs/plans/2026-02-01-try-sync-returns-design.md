@@ -92,8 +92,14 @@ Detect whether a return type may contain a Promise-like member, then expose both
 possible runtime shapes:
 
 ```typescript
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
 type MayReturnPromise<TReturn> =
-  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
+  IsAny<TReturn> extends true
+    ? true
+    : Extract<TReturn, PromiseLike<unknown>> extends never
+      ? false
+      : true;
 
 type MaybePromise<TReturn, TValue> =
   MayReturnPromise<TReturn> extends true
@@ -117,14 +123,23 @@ Use an internal implementation class plus conditional public facade so
 ```typescript
 type PublicTry<TReturn, TArgs extends readonly unknown[]> =
   Omit<TryImpl<TReturn, TArgs>, 'finally'> &
-  ([TReturn] extends [PromiseLike<unknown>]
+  (AlwaysReturnsPromise<TReturn> extends true
     ? Pick<TryImpl<TReturn, TArgs>, 'finally'>
     : {});
+
+type AlwaysReturnsPromise<TReturn> = IsAny<TReturn> extends true
+  ? false
+  : [TReturn] extends [never]
+    ? false
+    : [TReturn] extends [PromiseLike<unknown>]
+      ? true
+      : false;
 ```
 
 Terminal typing and `finally()` availability intentionally use different
 checks. Terminal methods account for any possible Promise member. `finally()`
-requires the complete return type to be Promise-like.
+requires the complete return type to be Promise-like, and `any` and `never`
+do not qualify.
 
 Export a typed constructor that returns `PublicTry`. Preserve static members,
 framework-specific exports, fluent method return types, and default-value
