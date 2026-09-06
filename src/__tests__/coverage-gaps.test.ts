@@ -633,6 +633,37 @@ describe('coverage gaps', () => {
         );
       });
 
+      it('a name trap that changes type between reads still yields a string', () => {
+        const report = vi.fn();
+        Try.setDefaultReporter({
+          report,
+          addBreadcrumbs: vi.fn(),
+          createWrappedError: (e) => e,
+        });
+        let reads = 0;
+        const shifting = new Proxy(
+          (_ctx: { id: string }): string => {
+            throw new Error('boom');
+          },
+          {
+            get(target, prop, receiver) {
+              if (prop === 'name') {
+                reads += 1;
+                return reads < 3 ? 'stable' : { not: 'a string' };
+              }
+              return Reflect.get(target, prop, receiver) as unknown;
+            },
+          },
+        );
+
+        new Try(shifting, { id: 'u1' }).report('failed').value();
+
+        expect(report).toHaveBeenCalledWith(
+          expect.any(Error),
+          expect.objectContaining({ functionName: 'stable' }),
+        );
+      });
+
       it('.unwrap() throws the wrapped error, not the name getter error', () => {
         Try.setDefaultReporter({
           report: vi.fn(),

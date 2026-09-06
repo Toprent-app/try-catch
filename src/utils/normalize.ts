@@ -212,9 +212,8 @@ export function safeErrorStack(error: Error): string | undefined {
  */
 export function safeFunctionName(fn: (...args: never[]) => unknown): string {
   try {
-    return typeof fn.name === 'string' && fn.name !== ''
-      ? fn.name
-      : 'anonymous';
+    const name: unknown = fn.name;
+    return typeof name === 'string' && name !== '' ? name : 'anonymous';
   } catch {
     return 'anonymous';
   }
