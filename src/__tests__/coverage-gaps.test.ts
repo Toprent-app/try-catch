@@ -633,7 +633,7 @@ describe('coverage gaps', () => {
         );
       });
 
-      it('a name trap that changes type between reads still yields a string', () => {
+      it('reads fn.name exactly once and reports that single value', () => {
         const report = vi.fn();
         Try.setDefaultReporter({
           report,
@@ -649,7 +649,7 @@ describe('coverage gaps', () => {
             get(target, prop, receiver) {
               if (prop === 'name') {
                 reads += 1;
-                return reads < 3 ? 'stable' : { not: 'a string' };
+                return reads === 1 ? 'stable' : { not: 'a string' };
               }
               return Reflect.get(target, prop, receiver) as unknown;
             },
@@ -662,6 +662,7 @@ describe('coverage gaps', () => {
           expect.any(Error),
           expect.objectContaining({ functionName: 'stable' }),
         );
+        expect(reads).toBe(1);
       });
 
       it('.unwrap() throws the wrapped error, not the name getter error', () => {
