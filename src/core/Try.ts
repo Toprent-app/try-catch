@@ -887,7 +887,7 @@ export class TryImpl<
         message: this.config.message,
         tags: this.config.tags,
         breadcrumbData: this.local.breadcrumbData,
-        functionName: this.fn.name,
+        functionName: this.fn.name || 'anonymous',
       });
     } catch (err) {
       this.logReporterError(err);
