@@ -123,14 +123,23 @@ Use an internal implementation class plus conditional public facade so
 ```typescript
 type PublicTry<TReturn, TArgs extends readonly unknown[]> =
   Omit<TryImpl<TReturn, TArgs>, 'finally'> &
-  ([TReturn] extends [PromiseLike<unknown>]
+  (AlwaysReturnsPromise<TReturn> extends true
     ? Pick<TryImpl<TReturn, TArgs>, 'finally'>
     : {});
+
+type AlwaysReturnsPromise<TReturn> = IsAny<TReturn> extends true
+  ? false
+  : [TReturn] extends [never]
+    ? false
+    : [TReturn] extends [PromiseLike<unknown>]
+      ? true
+      : false;
 ```
 
 Terminal typing and `finally()` availability intentionally use different
 checks. Terminal methods account for any possible Promise member. `finally()`
-requires the complete return type to be Promise-like.
+requires the complete return type to be Promise-like, and `any` and `never`
+do not qualify.
 
 Export a typed constructor that returns `PublicTry`. Preserve static members,
 framework-specific exports, fluent method return types, and default-value
