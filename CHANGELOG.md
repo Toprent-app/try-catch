@@ -1,5 +1,17 @@
 # @power-rent/try-catch
 
+## 2.0.1
+
+### Patch Changes
+
+- 92b5e79: A breadcrumb key whose read throws no longer escapes the terminal methods. `.breadcrumbs(['id'])` reads `arg.id`, and an argument with a throwing getter or a Proxy trap made `.value()`, `.error()`, and `.result()` throw and made `.unwrap()` throw the getter error instead of the wrapped error. The extractor now skips that key, records the other keys, and logs the read error with `console.error` when `.debug()` is enabled.
+- 5683ef8: The ESM build now carries a `dist/esm/package.json` with `"type": "module"`. Node 20 before 20.19 read the ESM files as CommonJS and threw `SyntaxError: Unexpected token 'export'` on `import`. Node 22.7 and later only printed a `MODULE_TYPELESS_PACKAGE_JSON` warning.
+  
+  The `import` condition of every entry now points at ESM declaration files. The default import `import Try from '@power-rent/try-catch'` typechecks for ESM consumers under `moduleResolution: node16` and `nodenext`. Before, the type checker read the CommonJS declarations and reported `TS2351: This expression is not constructable`.
+- 4238a36: Terminal methods of a function typed `any` now return `TValue | Promise<TValue>`. `.finally()` is a type error on `any` and `never` Try instances. `TryImpl` is no longer exported from the core barrel, and `TryResult` is a type-only export on every entry point. The `finally()` documentation states that a callback on the synchronous path is not awaited.
+- 70f5558: `ErrorReportConfig.functionName` is now `'anonymous'` when the wrapped function has no name. Before, `Reporter.report()` received an empty string while `Reporter.addBreadcrumbs()` received `'anonymous'` for the same call.
+- 38979a1: A wrapped function whose `name` read throws (a Proxy-wrapped function) no longer breaks the terminal methods. Before, `.value()`, `.error()`, and `.result()` threw the getter error when `.breadcrumbs()` was configured, and `.report()` was dropped without breadcrumbs. The name read is now guarded and falls back to `'anonymous'`.
+
 ## 2.0.0
 
 ### Major Changes
