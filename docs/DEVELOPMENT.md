@@ -163,5 +163,5 @@ No formal convention is documented. The main branch is `main`. Feature branches 
 
 - Open a pull request against `main`.
 - The `prepublishOnly` gate (`lint → test → build`) must pass locally before pushing.
-- The CI workflow (`.github/workflows/ci.yml`) runs `npm ci`, `npm run test`, `npm run build`, and `npm run check:package` on every push and pull request to `main`, across a Node.js `20.x` / `24.x` matrix on `ubuntu-latest`. Type checking happens inside `npm run build`. PRs must be green before merge.
+- The CI workflow (`.github/workflows/ci.yml`) runs `npm ci`, `npm run format:check`, `npm run test`, `npm run build`, and `npm run check:package` on every push and pull request to `main`, across a Node.js `20.x` / `24.x` matrix on `ubuntu-latest`. Type checking happens inside `npm run build`. PRs must be green before merge.
 - Include a changeset entry (`npm run changeset`) if the change affects the public API or fixes a bug consumers would notice.
