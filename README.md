@@ -187,20 +187,61 @@ try {
 
 ### Advanced Usage
 
-```typescript
-// Chain multiple configuration methods with flexible breadcrumbs
-const result = await new Try(processOrder, 'order-123', { customerId: 456, amount: 99.50 }, { isUrgent: true, retryCount: 3 })
-  .breadcrumbs(
-    'orderId',                                                     // { orderId: 'order-123' }
-    (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
-    ['isUrgent', 'retryCount']                                     // { isUrgent: true, retryCount: 3 }
-  )
-  .report('Failed to process order')
-  .tag('operation', 'order-processing')
-  .tag('priority', 'high')
-  .default(null)
-  .value();
+```ts doctest
+import { Try, type Reporter, type ErrorReportConfig } from '@power-rent/try-catch';
 
+async function processOrder(
+  id: string,
+  order: { customerId: number; amount: number },
+  flags: { isUrgent: boolean; retryCount: number },
+): Promise<string> {
+  throw new Error(`cannot process ${id}`);
+}
+
+// Chain multiple configuration methods with flexible breadcrumbs.
+// The object syntax maps a parameter index to a key list or a transformer.
+let recorded: Record<string, unknown> | undefined;
+const recordingReporter: Reporter = {
+  report(_error: Error, _config: ErrorReportConfig): void {},
+  addBreadcrumbs(data: Record<string, unknown>): void {
+    recorded = data;
+  },
+  createWrappedError(error: Error, message: string): Error {
+    return new Error(message, { cause: error });
+  },
+};
+
+const previous = Try.getDefaultReporter();
+Try.setDefaultReporter(recordingReporter);
+try {
+  const result = await new Try(
+    processOrder,
+    'order-123',
+    { customerId: 456, amount: 99.5 },
+    { isUrgent: true, retryCount: 3 },
+  )
+    .breadcrumbs({
+      0: (id) => ({ orderId: id }), // { orderId: 'order-123' }
+      1: (order) => ({ customerId: order.customerId, priceCategory: order.amount > 100 ? 'high' : 'low' }),
+      2: ['isUrgent', 'retryCount'], // { isUrgent: true, retryCount: 3 }
+    })
+    .report('Failed to process order')
+    .tag('operation', 'order-processing')
+    .tag('priority', 'high')
+    .default(null)
+    .value();
+
+  if (result !== null) throw new Error('expected the default');
+  const expected = { orderId: 'order-123', customerId: 456, priceCategory: 'low', isUrgent: true, retryCount: 3 };
+  if (JSON.stringify(recorded) !== JSON.stringify(expected)) {
+    throw new Error(`unexpected breadcrumbs: ${JSON.stringify(recorded)}`);
+  }
+} finally {
+  Try.setDefaultReporter(previous);
+}
+```
+
+```typescript
 // Check for errors without throwing
 const error = await new Try(riskyOperation, data)
   .report('Risky operation failed')
