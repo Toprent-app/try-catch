@@ -28,6 +28,7 @@ export class BreadcrumbExtractorUtil {
         breadcrumbData = BreadcrumbExtractorUtil.extractFromKeys(
           firstArg as Record<PropertyKey, unknown>,
           config,
+          debug,
         );
       }
     }
@@ -61,16 +62,28 @@ export class BreadcrumbExtractorUtil {
   }
 
   /**
-   * Extract breadcrumb data from object using specified keys
+   * Extract breadcrumb data from object using specified keys.
+   * A key whose read throws (a throwing getter, a Proxy trap) is skipped and
+   * logged under `debug`, so the terminal methods keep their never-throw
+   * contract and the other keys are still recorded.
    */
   static extractFromKeys(
     obj: Record<PropertyKey, unknown>,
     keys: readonly PropertyKey[],
+    debug = false,
   ): Record<string, unknown> {
     const breadcrumbData: Record<string, unknown> = {};
 
     keys.forEach((key) => {
-      const value = obj[key];
+      let value: unknown;
+      try {
+        value = obj[key];
+      } catch (error) {
+        if (debug) {
+          console.error('Error reading breadcrumb key:', key, error);
+        }
+        return;
+      }
       if (value !== undefined) {
         breadcrumbData[key as string] = value;
       }
@@ -101,6 +114,7 @@ export class BreadcrumbExtractorUtil {
         return this.extractFromKeys(
           paramValue as Record<PropertyKey, unknown>,
           extractor.keys,
+          debug,
         );
       }
     } else if ('transform' in extractor) {
@@ -181,6 +195,7 @@ export class BreadcrumbExtractorUtil {
           const data = this.extractFromKeys(
             arg as Record<PropertyKey, unknown>,
             entry,
+            debug,
           );
           breadcrumbData = { ...breadcrumbData, ...data };
         }
@@ -236,6 +251,7 @@ export class BreadcrumbExtractorUtil {
         return this.extractFromKeys(
           paramValue as Record<PropertyKey, unknown>,
           config,
+          debug,
         );
       }
     } else if (typeof config === 'function') {
