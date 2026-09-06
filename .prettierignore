@@ -2,3 +2,5 @@ dist
 node_modules
 .doctest-tmp
 *.md
+.worktrees
+.claude/worktrees

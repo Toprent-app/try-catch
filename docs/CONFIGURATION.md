@@ -154,7 +154,7 @@ npm run lint
 | `jsxSingleQuote` | `true` |
 | `endOfLine` | `lf` |
 
-Ignored by Prettier (`.prettierignore`): `dist`, `node_modules`, `.doctest-tmp`, and all `*.md` files.
+Ignored by Prettier (`.prettierignore`): `dist`, `node_modules`, `.doctest-tmp`, `.worktrees`, `.claude/worktrees`, and all `*.md` files.
 
 ```bash
 npm run format        # write changes

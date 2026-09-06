@@ -164,6 +164,7 @@ Tests run in the **CI** workflow (`.github/workflows/ci.yml`) on every push and 
 | Step | Command |
 |---|---|
 | Install dependencies | `npm ci` |
+| Check formatting | `npm run format:check` |
 | Run tests | `npm run test` |
 | Build | `npm run build` |
 | Check package entry points | `npm run check:package` |
