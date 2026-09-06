@@ -617,6 +617,142 @@ describe('Flexible Breadcrumbs System', () => {
     });
   });
 
+  describe('Throwing key getter never escapes a terminal', () => {
+    /**
+     * `.value()`, `.error()`, and `.result()` never throw, and `.unwrap()`
+     * throws only the wrapped original error. A breadcrumb key read is a
+     * property access on a caller argument, which can be a Proxy or a class
+     * with a throwing getter. That read must stay inside the breadcrumb
+     * extractor, and the other keys must still be recorded.
+     */
+    const hostileArg = () => ({
+      userId: 7,
+      get secret(): string {
+        throw new Error('trap-getter');
+      },
+      action: 'update',
+    });
+
+    function failWith(_arg: unknown): string {
+      throw new Error('boom');
+    }
+
+    async function failAsyncWith(_arg: unknown): Promise<string> {
+      throw new Error('boom');
+    }
+
+    it('sync .value() returns the default and records the readable keys', () => {
+      const result = new Try(failWith, hostileArg())
+        .breadcrumbs(['userId', 'secret', 'action'])
+        .default('fallback')
+        .value();
+
+      expect(result).toBe('fallback');
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { userId: 7, action: 'update' },
+        }),
+      );
+    });
+
+    it('async .result() returns a failure and records the readable keys', async () => {
+      const result = await new Try(failAsyncWith, hostileArg())
+        .breadcrumbs(['userId', 'secret'])
+        .result();
+
+      expect(result.success).toBe(false);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { userId: 7 } }),
+      );
+    });
+
+    it('.unwrap() throws the wrapped original error, not the getter error', () => {
+      expect(() =>
+        new Try(failWith, hostileArg())
+          .breadcrumbs(['secret'])
+          .report('wrapped')
+          .unwrap(),
+      ).toThrow('wrapped');
+    });
+
+    it('positional array syntax skips the throwing key', () => {
+      const result = new Try(failWith, hostileArg())
+        .breadcrumbs([['userId', 'secret']])
+        .error();
+
+      expect(result).toBeInstanceOf(Error);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { userId: 7 } }),
+      );
+    });
+
+    it('object syntax skips the throwing key', () => {
+      const result = new Try(failWith, hostileArg())
+        .breadcrumbs({ 0: ['secret', 'action'] })
+        .error();
+
+      expect(result).toBeInstanceOf(Error);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { action: 'update' } }),
+      );
+    });
+
+    it('extractor syntax skips the throwing key', () => {
+      const result = new Try(failWith, hostileArg())
+        .breadcrumbs([{ param: 0, keys: ['secret', 'userId'] }])
+        .error();
+
+      expect(result).toBeInstanceOf(Error);
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { userId: 7 } }),
+      );
+    });
+
+    it('a Proxy get trap that throws is skipped the same way', () => {
+      const proxied = new Proxy(
+        { userId: 7, secret: 'x' },
+        {
+          get(target, prop, receiver) {
+            if (prop === 'secret') {
+              throw new Error('trap-proxy');
+            }
+            return Reflect.get(target, prop, receiver) as unknown;
+          },
+        },
+      );
+
+      const result = new Try(failWith, proxied)
+        .breadcrumbs(['userId', 'secret'])
+        .default('fallback')
+        .value();
+
+      expect(result).toBe('fallback');
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { userId: 7 } }),
+      );
+    });
+
+    it('logs the getter error to console.error only under .debug()', () => {
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      new Try(failWith, hostileArg()).breadcrumbs(['secret']).value();
+      expect(consoleSpy).not.toHaveBeenCalledWith(
+        'Error reading breadcrumb key:',
+        'secret',
+        expect.any(Error),
+      );
+
+      new Try(failWith, hostileArg()).breadcrumbs(['secret']).debug().value();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Error reading breadcrumb key:',
+        'secret',
+        expect.any(Error),
+      );
+    });
+  });
+
   describe('Empty breadcrumb data idempotence', () => {
     it('empty breadcrumb data does not re-extract on subsequent terminals', async () => {
       const extractSpy = vi.spyOn(BreadcrumbExtractorUtil, 'extract');
