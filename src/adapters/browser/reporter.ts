@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/browser';
-import { createSentryReporter } from '../createSentryReporter';
+import { createSentryReporter } from '../createSentryReporter.js';
 
 /**
  * Browser Sentry reporter (uses @sentry/browser for client-side reporting).

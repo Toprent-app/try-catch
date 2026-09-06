@@ -1,0 +1,9 @@
+{
+  // Declaration-only build for the ESM entry points. `dist/esm/package.json`
+  // marks the directory as ESM, so these declarations carry a real default
+  // export for node16/nodenext consumers.
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "outDir": "dist/esm"
+  }
+}

@@ -3,8 +3,8 @@ import type {
   BreadcrumbExtractor,
   BreadcrumbConfig,
   BreadcrumbTransformer,
-} from './types';
-import { TransformerRegistry } from './transformers';
+} from './types.js';
+import { TransformerRegistry } from './transformers.js';
 
 /**
  * Utility class for extracting breadcrumb data from function arguments

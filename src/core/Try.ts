@@ -6,10 +6,10 @@ import type {
   VariadicBreadcrumbTransformers,
   ValidateKeys,
   BreadcrumbExtractor as BreadcrumbExtractorType,
-} from '../utils/types';
-import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs';
-import { normalizeThrown, safeErrorName } from '../utils/normalize';
-import { Reporter, NoopReporter } from './reporter';
+} from '../utils/types.js';
+import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs.js';
+import { normalizeThrown, safeErrorName } from '../utils/normalize.js';
+import { Reporter, NoopReporter } from './reporter.js';
 
 /**
  * Configuration for Try execution

@@ -1,4 +1,4 @@
-import { safeErrorStack } from '../utils/normalize';
+import { safeErrorStack } from '../utils/normalize.js';
 
 /**
  * Configuration for error reporting

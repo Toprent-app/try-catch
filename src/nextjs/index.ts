@@ -1,7 +1,7 @@
-export { Try, Try as default, TryResult } from '../core/Try';
-export type { PublicTry } from '../core/Try';
-import { Try as TryClass } from '../core/Try';
-import { sentryReporter } from './SentryReporter';
+export { Try, Try as default, TryResult } from '../core/Try.js';
+export type { PublicTry } from '../core/Try.js';
+import { Try as TryClass } from '../core/Try.js';
+import { sentryReporter } from './SentryReporter.js';
 
 // Set up the Sentry reporter as the default for NextJS
 TryClass.setDefaultReporter(sentryReporter);

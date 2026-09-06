@@ -1,5 +1,5 @@
-import type { Reporter, ErrorReportConfig } from '../core/reporter';
-import { safeErrorStack } from '../utils/normalize';
+import type { Reporter, ErrorReportConfig } from '../core/reporter.js';
+import { safeErrorStack } from '../utils/normalize.js';
 
 /**
  * Minimal subset of the Sentry SDK surface the reporters depend on. Kept loose

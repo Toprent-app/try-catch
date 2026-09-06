@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { createSentryReporter } from '../createSentryReporter';
+import { createSentryReporter } from '../createSentryReporter.js';
 
 /**
  * Node.js Sentry reporter (uses @sentry/node for server-side error reporting).

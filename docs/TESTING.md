@@ -166,5 +166,6 @@ Tests run in the **CI** workflow (`.github/workflows/ci.yml`) on every push and 
 | Install dependencies | `npm ci` |
 | Run tests | `npm run test` |
 | Build | `npm run build` |
+| Check package entry points | `npm run check:package` |
 
 The workflow runs on `ubuntu-latest` across a Node.js matrix of `20.x` and `24.x`. Type checking is not a separate CI step; `npm run build` runs `npm run typecheck` as its first stage. Tests must pass before a PR can be merged.
