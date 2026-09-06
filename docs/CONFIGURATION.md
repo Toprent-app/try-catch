@@ -61,7 +61,7 @@ To trigger a full build:
 npm run build
 ```
 
-This runs `clean` → `typecheck` → `tsup` → `build:types`.
+This runs `typecheck` → `tsup` → `build:types`. tsup cleans `dist/` before it writes.
 
 ## TypeScript Configuration
 
@@ -106,10 +106,6 @@ Extends `tsconfig.json` and is the config `npm run build:types` compiles. It emi
 ### `tsconfig.esm.build.json` (published ESM declarations)
 
 Extends `tsconfig.build.json` and sets `outDir: dist/esm`. `npm run build:types` runs it as the second pass, so the ESM entry points get their own declaration files next to the `dist/esm/package.json` marker.
-
-### `tsconfig.esm.json`
-
-Extends `tsconfig.json` with `module: ES2022`, `target: ES2020`, and `outDir: dist/esm`. No npm script references it — the ESM bundle is produced by tsup, so this file is currently unused.
 
 ## Lint Configuration (`eslint.config.mjs`)
 

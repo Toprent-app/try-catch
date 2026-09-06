@@ -41,10 +41,11 @@ npm test
 ### Available Scripts
 
 ```bash
-npm run build          # Clean, typecheck, build CommonJS and ESM, emit declarations
+npm run build          # Typecheck, build CommonJS and ESM, emit declarations
 npm run build:watch    # Rebuild on file save
 npm run test           # Run tests once
 npm run test:watch     # Run tests in watch mode
+npm run test:coverage  # Run tests with a V8 coverage report
 npm run lint           # Run ESLint over src
 npm run format         # Format code with Prettier
 npm run format:check   # Check code formatting
@@ -300,7 +301,7 @@ npm test
 npm run test:watch
 
 # Run tests with coverage
-npm run test -- --coverage
+npm run test:coverage
 ```
 
 ### Writing Tests

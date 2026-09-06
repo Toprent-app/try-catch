@@ -62,7 +62,7 @@
     "./dist/esm/browser/index.js"
   ],
   "scripts": {
-    "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts && npm run build:types",
+    "build": "npm run typecheck && tsup --config tsup.config.ts && npm run build:types",
     "build:types": "tsc -p tsconfig.build.json && tsc -p tsconfig.esm.build.json",
     "build:watch": "tsup --config tsup.config.ts --watch",
     "changeset": "changeset",
@@ -73,6 +73,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p examples",
@@ -138,6 +139,9 @@
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json}": [
       "prettier --write"
+    ],
+    "src/**/*.ts": [
+      "eslint --fix"
     ]
   },
   "typesVersions": {
