@@ -92,8 +92,14 @@ Detect whether a return type may contain a Promise-like member, then expose both
 possible runtime shapes:
 
 ```typescript
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
 type MayReturnPromise<TReturn> =
-  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
+  IsAny<TReturn> extends true
+    ? true
+    : Extract<TReturn, PromiseLike<unknown>> extends never
+      ? false
+      : true;
 
 type MaybePromise<TReturn, TValue> =
   MayReturnPromise<TReturn> extends true

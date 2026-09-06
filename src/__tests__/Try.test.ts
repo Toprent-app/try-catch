@@ -1057,6 +1057,31 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
+    it('runs an async finally callback when a promise-typed function throws synchronously', async () => {
+      const order: string[] = [];
+      const fn = (): Promise<number> => {
+        throw new Error('boom');
+      };
+      let finallyRuns = 0;
+
+      new Try(fn)
+        .finally(async () => {
+          finallyRuns += 1;
+          order.push('finally');
+        })
+        .error();
+      order.push('terminal');
+
+      await Promise.resolve();
+
+      expect(order).toEqual(['finally', 'terminal']);
+      expect(finallyRuns).toBe(1);
+
+      expect(() => new Try(fn).finally(async () => {}).unwrap()).toThrow(
+        'boom',
+      );
+    });
+
     it('should return the value', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 

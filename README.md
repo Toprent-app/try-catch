@@ -459,13 +459,16 @@ breadcrumbs are still emitted. The registry is global to every `Try` instance.
 Each terminal returns `MaybePromise<TReturn, TValue>`, where `TReturn` is the
 raw return type of the wrapped function:
 
-```typescript
-type MayReturnPromise<TReturn> =
-  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
+| Return type of the wrapped function | Type of `.value()` / `.error()` / `.result()` |
+| --- | --- |
+| Sync-only `T` | `TValue` |
+| `Promise<T>` | `TValue \| Promise<TValue>` |
+| `T \| Promise<T>` | `TValue \| Promise<TValue>` |
+| `any` | `TValue \| Promise<TValue>` |
 
-type MaybePromise<TReturn, TValue> =
-  MayReturnPromise<TReturn> extends true ? TValue | Promise<TValue> : TValue;
-```
+`MaybePromise` is an internal type. The package does not export it. Use
+`ReturnType<typeof attempt.value>` to read the resolved type for a given
+`Try` instance.
 
 A sync function yields a plain value from every terminal — no `Promise` member
 appears in the type:

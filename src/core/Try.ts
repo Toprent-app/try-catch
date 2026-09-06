@@ -55,12 +55,22 @@ function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
 }
 
 /**
+ * True when T is `any`. `any` gives no information about sync or async,
+ * so callers treat it as possibly async.
+ */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/**
  * True when TReturn may include a Promise-like member (callers must handle async).
- * Distinct from the `finally()` check, which requires the full return type to be
- * Promise-like.
+ * `any` counts as possibly async. Distinct from the `finally()` check, which
+ * requires the full return type to be Promise-like.
  */
 type MayReturnPromise<TReturn> =
-  Extract<TReturn, PromiseLike<unknown>> extends never ? false : true;
+  IsAny<TReturn> extends true
+    ? true
+    : Extract<TReturn, PromiseLike<unknown>> extends never
+      ? false
+      : true;
 
 /**
  * Terminal return type: plain TValue when TReturn is sync-only; otherwise
@@ -70,9 +80,23 @@ type MaybePromise<TReturn, TValue> =
   MayReturnPromise<TReturn> extends true ? TValue | Promise<TValue> : TValue;
 
 /**
- * Core Try class for simplified async error handling.
- * This implementation is framework-agnostic and uses a Reporter interface
- * to decouple error reporting from specific services.
+ * True only when TReturn is always a Promise. `any` and `never` are not
+ * always-Promise, so they do not gain `finally()`.
+ */
+type AlwaysReturnsPromise<TReturn> =
+  IsAny<TReturn> extends true
+    ? false
+    : [TReturn] extends [never]
+      ? false
+      : [TReturn] extends [PromiseLike<unknown>]
+        ? true
+        : false;
+
+/**
+ * Core Try implementation for simplified async error handling.
+ * Framework-agnostic; uses a Reporter interface for error reporting.
+ *
+ * Prefer constructing via the exported `Try` value, which returns {@link PublicTry}.
  *
  * Usage:
  *   const result = new Try(asyncFn, arg1, arg2)
@@ -390,8 +414,12 @@ export class TryImpl<
    * distinct references each run once.
    *
    * The callback is executed **after** the underlying function settles but
-   * before the error is re-thrown from {@link unwrap}. It runs synchronously
-   * for sync functions and is awaited for async functions.
+   * before any error is re-thrown from {@link unwrap}.
+   *
+   * When the wrapped function returns or throws synchronously, the callback
+   * runs synchronously too. If the callback returns a promise on this path,
+   * the terminal does not wait for it. When the wrapped function returns a
+   * promise, the terminal awaits the callback before it settles.
    *
    * @param callback A function to invoke once the wrapped operation settles. Can be sync or async.
    * @returns The `Try` instance for method chaining.
@@ -485,7 +513,7 @@ export class TryImpl<
    * try {
    *   await new Try(riskyOperation).report('Operation failed').unwrap();
    * } catch (error) {
-   *   console.log(error.message); // "Operation failed"
+   *   console.log(error instanceof Error ? error.message : String(error));
    * }
    * ```
    */
@@ -563,22 +591,19 @@ export class TryImpl<
    *   console.log('Error:', result.error.message);
    * }
    *
-   * // Destructuring with type safety
-   * const { success, value, error } = await new Try(fetchUser, userId).result();
-   * if (success) {
-   *   displayUser(value); // TypeScript knows value exists
+   * // Narrowing before use
+   * const outcome = await new Try(fetchUser, userId).result();
+   * if (outcome.success) {
+   *   displayUser(outcome.value); // TypeScript knows value exists
    * } else {
-   *   handleError(error); // TypeScript knows error exists
+   *   handleError(outcome.error); // TypeScript knows error exists
    * }
    *
    * // Functional style with exhaustive matching
-   * const message = await new Try(processData, input)
-   *   .result()
-   *   .then(result =>
-   *     result.success
-   *       ? `Processed: ${result.value}`
-   *       : `Failed: ${result.error.message}`
-   *   );
+   * const outcome2 = await new Try(processData, input).result();
+   * const message = outcome2.success
+   *   ? `Processed: ${outcome2.value}`
+   *   : `Failed: ${outcome2.error.message}`;
    * ```
    */
   result(): MaybePromise<TReturn, TryResult<TReturn>> {
@@ -830,8 +855,8 @@ export class TryImpl<
       this.exec.isAsync = false;
       this.exec.result = { success: false, error };
     } finally {
-      this.exec.state = 'executed';
       if (!this.exec.isAsync) {
+        this.exec.state = 'executed';
         void this.runFinallyCallback();
       }
     }
@@ -988,7 +1013,7 @@ export type PublicTry<
   TArgs extends readonly unknown[] = unknown[],
   TDefault = undefined,
 > = Omit<TryImpl<TReturn, TArgs, TDefault>, 'finally'> &
-  ([TReturn] extends [PromiseLike<unknown>]
+  (AlwaysReturnsPromise<TReturn> extends true
     ? Pick<TryImpl<TReturn, TArgs, TDefault>, 'finally'>
     : {});
 
