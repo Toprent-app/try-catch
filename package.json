@@ -75,7 +75,6 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "typecheck:ts7": "tsgo --noEmit",
     "lint": "eslint 'src/**/*.ts'",
     "prepublishOnly": "npm run clean && npm run lint && npm run test && npm run build",
     "prepare": "husky install"
@@ -127,8 +126,7 @@
     "prettier": "^3.6.2",
     "tsup": "^8.5.0",
     "type-fest": "^5.1.0",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-7": "npm:@typescript/native-preview@^7.0.0-0",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.58.2",
     "vitest": "^5.0.0"
   },
