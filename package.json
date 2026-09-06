@@ -75,9 +75,11 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc -p examples",
     "lint": "eslint 'src/**/*.ts'",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build && npm run check:package",
     "prepublishOnly": "npm run clean && npm run lint && npm run test && npm run build",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "keywords": [
     "typescript",
