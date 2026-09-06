@@ -17,7 +17,7 @@ Thank you for your interest in contributing to the try-catch library! This guide
 
 ### Prerequisites
 
-- Node.js >= 20
+- Node.js >= 20 (`.nvmrc` pins 24; run `nvm use`)
 - npm (comes with Node.js)
 - Git
 
@@ -49,6 +49,8 @@ npm run lint           # Run ESLint over src
 npm run format         # Format code with Prettier
 npm run format:check   # Check code formatting
 npm run typecheck      # Run TypeScript type checking
+npm run typecheck:examples # Type-check the examples directory
+npm run check          # Run every CI gate in one command
 npm run clean          # Clean build artifacts
 ```
 
@@ -364,36 +366,12 @@ npm run format:check
 
 ### Before Submitting
 
-1. **Ensure tests pass**: `npm test`
-2. **Check formatting**: `npm run format:check`
-3. **Type check**: `npm run typecheck`
-4. **Build successfully**: `npm run build`
-5. **Include changeset**: Make sure you've created a changeset file
+1. **Run every gate**: `npm run check`
+2. **Include changeset**: Make sure you've created a changeset file
 
 ### PR Description Template
 
-```markdown
-## Description
-Brief description of changes
-
-## Type of Change
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
-
-## Changeset
-- [ ] I have created a changeset for this PR
-
-## Testing
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] All tests pass locally
-
-## Checklist
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-```
+GitHub fills the description from `.github/PULL_REQUEST_TEMPLATE.md`. Complete each checklist item before you request a review.
 
 ### Review Process
 
