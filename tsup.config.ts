@@ -82,8 +82,8 @@ export default defineConfig([
     ...common,
     format: 'cjs',
     outDir: 'dist',
-    // Declarations come from tsc, not from tsup. The rollup-plugin-dts copy
-    // bundled in tsup does not support TypeScript 7.
+    // Declarations come from tsc (build:types), not from tsup, so one compiler
+    // owns the published type surface.
     dts: false,
   },
   {

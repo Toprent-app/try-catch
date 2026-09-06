@@ -52,7 +52,7 @@ The build is driven by [tsup](https://tsup.egoist.dev/) and produces two output 
 | Minification | Disabled |
 | Code splitting | Disabled (one file per entry) |
 | Output extension | `.js` for both formats (esbuild `outExtension` override) |
-| Declaration types | Not emitted by tsup (`dts: false` for both formats) — `npm run build:types` runs `tsc -p tsconfig.build.json` and `tsc -p tsconfig.esm.build.json` instead, because the `rollup-plugin-dts` copy bundled in tsup does not support TypeScript 7 |
+| Declaration types | Not emitted by tsup (`dts: false` for both formats) — `npm run build:types` runs `tsc -p tsconfig.build.json` and `tsc -p tsconfig.esm.build.json` instead, so one compiler owns the published type surface |
 | External packages | All Sentry packages (`@sentry/core`, `@sentry/node`, `@sentry/browser`, `@sentry/nextjs`, `@sentry/tracing`, `@sentry/types`, `@sentry/utils`, `@sentry/react`, `@sentry/integrations`) plus any declared `peerDependencies` |
 
 To trigger a full build:

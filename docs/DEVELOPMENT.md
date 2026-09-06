@@ -5,7 +5,7 @@
 
 Requirements: Node.js >= 20 (see `package.json` `engines`).
 
-Contributors must build with the TypeScript version this repo pins (`@typescript/typescript6`, 6.x). `tsconfig.json` sets `"ignoreDeprecations": "6.0"`, which TypeScript 5.x rejects with TS5103. `npm ci` installs the pinned compiler, so use the npm scripts rather than a globally installed `tsc`. The `>= 5.0` figure quoted in the README is the requirement for *consuming* the published package, not for building it.
+Contributors must build with the TypeScript version this repo pins (`typescript`, 6.x). `tsconfig.json` sets `"ignoreDeprecations": "6.0"`, which TypeScript 5.x rejects with TS5103. `npm ci` installs the pinned compiler, so use the npm scripts rather than a globally installed `tsc`. The `>= 5.0` figure quoted in the README is the requirement for *consuming* the published package, not for building it.
 
 ```bash
 git clone https://github.com/Toprent-app/try-catch.git
