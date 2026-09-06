@@ -19,46 +19,40 @@ export class BreadcrumbExtractorUtil {
     args: TArgs,
     debug = false,
   ): Record<string, unknown> {
-    let breadcrumbData: Record<string, unknown> = {};
-
     // Array of keys from first parameter
     if (BreadcrumbExtractorUtil.isStringArray(config)) {
-      const firstArg = args[0];
-      if (firstArg && typeof firstArg === 'object') {
-        breadcrumbData = BreadcrumbExtractorUtil.extractFromKeys(
-          firstArg as Record<PropertyKey, unknown>,
-          config,
-          debug,
-        );
-      }
+      return BreadcrumbExtractorUtil.extractFromKeysIfObject(
+        args[0],
+        config,
+        debug,
+      );
     }
     // Handle transformer function array (variadic syntax)
-    else if (BreadcrumbExtractorUtil.isTransformerArray(config)) {
+    if (BreadcrumbExtractorUtil.isTransformerArray(config)) {
+      let breadcrumbData: Record<string, unknown> = {};
       config.forEach((transformer, index) => {
         if (index < args.length) {
-          const transformed = TransformerRegistry.apply(
-            transformer,
-            args[index],
-            debug,
-          );
-          breadcrumbData = { ...breadcrumbData, ...transformed };
+          breadcrumbData = {
+            ...breadcrumbData,
+            ...TransformerRegistry.apply(transformer, args[index], debug),
+          };
         }
       });
+      return breadcrumbData;
     }
     // Handle array syntax: positional entries or extractor objects
-    else if (Array.isArray(config)) {
-      breadcrumbData = this.extractFromArray(config, args, debug);
+    if (Array.isArray(config)) {
+      return BreadcrumbExtractorUtil.extractFromArray(config, args, debug);
     }
     // Handle object syntax
-    else if (typeof config === 'object') {
-      breadcrumbData = this.extractFromObject(
+    if (typeof config === 'object') {
+      return BreadcrumbExtractorUtil.extractFromObject(
         config as BreadcrumbConfig<TArgs>,
         args,
         debug,
       );
     }
-
-    return breadcrumbData;
+    return {};
   }
 
   /**
@@ -110,13 +104,7 @@ export class BreadcrumbExtractorUtil {
 
     if ('keys' in extractor) {
       // Extract specific keys from object
-      if (paramValue && typeof paramValue === 'object') {
-        return this.extractFromKeys(
-          paramValue as Record<PropertyKey, unknown>,
-          extractor.keys,
-          debug,
-        );
-      }
+      return this.extractFromKeysIfObject(paramValue, extractor.keys, debug);
     } else if ('transform' in extractor) {
       // Apply custom transformer
       return TransformerRegistry.apply(extractor.transform, paramValue, debug);
@@ -133,27 +121,43 @@ export class BreadcrumbExtractorUtil {
     return {};
   }
 
-  /**
-   * Check if config is an array (string keys only)
-   */
   private static isStringArray(config: unknown): config is readonly string[] {
+    return this.isUniformArray(config, 'string');
+  }
+
+  private static isTransformerArray(
+    config: unknown,
+  ): config is readonly BreadcrumbTransformer<unknown>[] {
+    return this.isUniformArray(config, 'function');
+  }
+
+  /**
+   * True for a non-empty array whose every element has the given `typeof`.
+   */
+  private static isUniformArray(config: unknown, kind: string): boolean {
     return (
       Array.isArray(config) &&
       config.length > 0 &&
-      config.every((el) => typeof el === 'string')
+      config.every((el) => typeof el === kind)
     );
   }
 
   /**
-   * Check if config is a transformer function array
+   * Extract keys from `value` when it is an object; `{}` for primitives and
+   * `null`, which carry no keys.
    */
-  private static isTransformerArray(
-    config: unknown,
-  ): config is readonly BreadcrumbTransformer<unknown>[] {
-    return (
-      Array.isArray(config) &&
-      config.length > 0 &&
-      config.every((el) => typeof el === 'function')
+  private static extractFromKeysIfObject(
+    value: unknown,
+    keys: readonly PropertyKey[],
+    debug: boolean,
+  ): Record<string, unknown> {
+    if (!value || typeof value !== 'object') {
+      return {};
+    }
+    return this.extractFromKeys(
+      value as Record<PropertyKey, unknown>,
+      keys,
+      debug,
     );
   }
 
@@ -172,12 +176,14 @@ export class BreadcrumbExtractorUtil {
     config.forEach((entry, index) => {
       // If entry is a plain extractor object with its own param index, use existing logic
       if (typeof entry === 'object' && !Array.isArray(entry)) {
-        const paramData = this.extractFromParameter(
-          entry as BreadcrumbExtractor<TArgs>,
-          args,
-          debug,
-        );
-        breadcrumbData = { ...breadcrumbData, ...paramData };
+        breadcrumbData = {
+          ...breadcrumbData,
+          ...this.extractFromParameter(
+            entry as BreadcrumbExtractor<TArgs>,
+            args,
+            debug,
+          ),
+        };
         return;
       }
 
@@ -191,14 +197,10 @@ export class BreadcrumbExtractorUtil {
         }
       } else if (Array.isArray(entry)) {
         // Extract listed keys from an object argument
-        if (arg && typeof arg === 'object') {
-          const data = this.extractFromKeys(
-            arg as Record<PropertyKey, unknown>,
-            entry,
-            debug,
-          );
-          breadcrumbData = { ...breadcrumbData, ...data };
-        }
+        breadcrumbData = {
+          ...breadcrumbData,
+          ...this.extractFromKeysIfObject(arg, entry, debug),
+        };
       }
     });
 
@@ -221,13 +223,10 @@ export class BreadcrumbExtractorUtil {
         paramConfig !== undefined &&
         TransformerRegistry.validateParameterIndex(index, args.length)
       ) {
-        const paramData = this.extractFromParameterConfig(
-          index,
-          paramConfig,
-          args,
-          debug,
-        );
-        breadcrumbData = { ...breadcrumbData, ...paramData };
+        breadcrumbData = {
+          ...breadcrumbData,
+          ...this.extractFromParameterConfig(index, paramConfig, args, debug),
+        };
       }
     }
 
@@ -247,13 +246,7 @@ export class BreadcrumbExtractorUtil {
 
     if (Array.isArray(config)) {
       // Extract keys from object
-      if (paramValue && typeof paramValue === 'object') {
-        return this.extractFromKeys(
-          paramValue as Record<PropertyKey, unknown>,
-          config,
-          debug,
-        );
-      }
+      return this.extractFromKeysIfObject(paramValue, config, debug);
     } else if (typeof config === 'function') {
       // Apply transformer function
       return TransformerRegistry.apply(config, paramValue, debug);

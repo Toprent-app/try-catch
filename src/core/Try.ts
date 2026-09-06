@@ -48,10 +48,8 @@ export type TryResult<T> =
       readonly error: Error;
     };
 
-type PromiseLikeValue<TValue = unknown> = { then: (value: TValue) => unknown };
-
 function isPromiseLike<TValue>(value: unknown): value is PromiseLike<TValue> {
-  return !!value && typeof (value as PromiseLikeValue).then === 'function';
+  return !!value && typeof (value as { then?: unknown }).then === 'function';
 }
 
 /**
@@ -138,7 +136,7 @@ export class TryImpl<
     breadcrumbData?: Record<string, unknown>;
     breadcrumbsAdded: boolean;
   };
-  private static ignoreErrorTypes: string[] = [];
+  private static ignoreErrorTypes: ReadonlySet<string> = new Set();
   private static defaultReporter: Reporter = new NoopReporter();
 
   /**
@@ -224,7 +222,7 @@ export class TryImpl<
    * ```
    */
   public static throwThroughErrorTypes(ignoreErrorTypes: string[]) {
-    TryImpl.ignoreErrorTypes = ignoreErrorTypes;
+    TryImpl.ignoreErrorTypes = new Set(ignoreErrorTypes);
   }
 
   /**
@@ -518,59 +516,16 @@ export class TryImpl<
    * ```
    */
   unwrap(): MaybePromise<TReturn, Awaited<TReturn>> {
-    const result = this.execute();
-
-    if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (!resolved.success) {
-          const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-            safeErrorName(resolved.error),
-          );
-          const shouldCapture = this.config.message && !isThrowThrough;
-
-          if (shouldCapture) {
-            this.reportError(resolved.error);
-          } else if (this.config.breadcrumbConfig) {
-            this.addBreadcrumbsIfConfigured();
-          }
-
-          if (this.config.message && !isThrowThrough) {
-            const wrappedError = this.createWrappedError(
-              resolved.error,
-              this.config.message,
-            );
-            throw wrappedError;
-          }
-          throw resolved.error;
-        }
-
-        return resolved.value;
-      }) as MaybePromise<TReturn, Awaited<TReturn>>;
-    }
-
-    if (!result.success) {
-      const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-        safeErrorName(result.error),
-      );
-      const shouldCapture = this.config.message && !isThrowThrough;
-
-      if (shouldCapture) {
-        this.reportError(result.error);
-      } else if (this.config.breadcrumbConfig) {
-        this.addBreadcrumbsIfConfigured();
+    return this.settle((result) => {
+      if (result.success) {
+        return result.value;
       }
-
-      if (this.config.message && !isThrowThrough) {
-        const wrappedError = this.createWrappedError(
-          result.error,
-          this.config.message,
-        );
-        throw wrappedError;
+      const message = this.handleFailure(result.error);
+      if (message !== undefined) {
+        throw this.createWrappedError(result.error, message);
       }
       throw result.error;
-    }
-
-    return result.value;
+    });
   }
 
   /**
@@ -607,37 +562,12 @@ export class TryImpl<
    * ```
    */
   result(): MaybePromise<TReturn, TryResult<TReturn>> {
-    const result = this.execute();
-
-    if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (!resolved.success) {
-          const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-            safeErrorName(resolved.error),
-          );
-          if (this.config.message && !isThrowThrough) {
-            this.reportError(resolved.error);
-          } else if (this.config.breadcrumbConfig) {
-            this.addBreadcrumbsIfConfigured();
-          }
-        }
-
-        return resolved;
-      }) as MaybePromise<TReturn, TryResult<TReturn>>;
-    }
-
-    if (!result.success) {
-      const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-        safeErrorName(result.error),
-      );
-      if (this.config.message && !isThrowThrough) {
-        this.reportError(result.error);
-      } else if (this.config.breadcrumbConfig) {
-        this.addBreadcrumbsIfConfigured();
+    return this.settle((result) => {
+      if (!result.success) {
+        this.handleFailure(result.error);
       }
-    }
-
-    return result;
+      return result;
+    });
   }
 
   /**
@@ -667,41 +597,13 @@ export class TryImpl<
    * ```
    */
   error(): MaybePromise<TReturn, Error | undefined> {
-    const result = this.execute();
-
-    if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (resolved.success) {
-          return undefined;
-        }
-
-        const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-          safeErrorName(resolved.error),
-        );
-        if (this.config.message && !isThrowThrough) {
-          this.reportError(resolved.error);
-        } else if (this.config.breadcrumbConfig) {
-          this.addBreadcrumbsIfConfigured();
-        }
-
-        return resolved.error;
-      }) as MaybePromise<TReturn, Error | undefined>;
-    }
-
-    if (result.success) {
-      return undefined;
-    }
-
-    const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-      safeErrorName(result.error),
-    );
-    if (this.config.message && !isThrowThrough) {
-      this.reportError(result.error);
-    } else if (this.config.breadcrumbConfig) {
-      this.addBreadcrumbsIfConfigured();
-    }
-
-    return result.error;
+    return this.settle((result) => {
+      if (result.success) {
+        return undefined;
+      }
+      this.handleFailure(result.error);
+      return result.error;
+    });
   }
 
   /**
@@ -733,44 +635,49 @@ export class TryImpl<
    * ```
    */
   value(): MaybePromise<TReturn, Awaited<TReturn> | TDefault> {
+    return this.settle((result) => {
+      if (result.success) {
+        return result.value;
+      }
+      this.handleFailure(result.error);
+      return this.config.defaultValue as TDefault;
+    });
+  }
+
+  /**
+   * Run `onSettled` against the execution result, synchronously for sync
+   * functions and via `.then` for async ones. Every public terminal is one
+   * `settle` call, so the sync/async split lives here only.
+   */
+  private settle<TOut>(
+    onSettled: (result: TryResult<TReturn>) => TOut,
+  ): MaybePromise<TReturn, TOut> {
     const result = this.execute();
+    const settled = isPromiseLike<TryResult<TReturn>>(result)
+      ? result.then(onSettled)
+      : onSettled(result);
+    return settled as MaybePromise<TReturn, TOut>;
+  }
 
-    if (isPromiseLike<TryResult<TReturn>>(result)) {
-      return result.then((resolved) => {
-        if (resolved.success) {
-          return resolved.value;
-        }
+  /**
+   * Apply the failure side effects shared by every terminal: report when a
+   * `.report()` message is configured and the error type is not
+   * throw-through, otherwise emit breadcrumbs only.
+   *
+   * @returns The `.report()` message when the error was captured (so the
+   * caller may wrap with it), otherwise `undefined`.
+   */
+  private handleFailure(error: Error): string | undefined {
+    const { message } = this.config;
+    const captured =
+      !!message && !TryImpl.ignoreErrorTypes.has(safeErrorName(error));
 
-        const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-          safeErrorName(resolved.error),
-        );
-        if (this.config.message && !isThrowThrough) {
-          this.reportError(resolved.error);
-        } else if (this.config.breadcrumbConfig) {
-          this.addBreadcrumbsIfConfigured();
-        }
-
-        return this.config.defaultValue as TDefault;
-      }) as MaybePromise<TReturn, Awaited<TReturn> | TDefault>;
+    if (captured) {
+      this.reportError(error);
+      return message;
     }
-
-    if (result.success) {
-      return result.value;
-    }
-
-    const isThrowThrough = TryImpl.ignoreErrorTypes.includes(
-      safeErrorName(result.error),
-    );
-    if (this.config.message && !isThrowThrough) {
-      this.reportError(result.error);
-    } else if (this.config.breadcrumbConfig) {
-      this.addBreadcrumbsIfConfigured();
-    }
-
-    return this.config.defaultValue as MaybePromise<
-      TReturn,
-      Awaited<TReturn> | TDefault
-    >;
+    this.addBreadcrumbsIfConfigured();
+    return undefined;
   }
 
   /**
@@ -781,36 +688,28 @@ export class TryImpl<
    * @returns Promise resolving to a result object indicating success/failure
    */
   private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
-    if (this.exec.state === 'executed' && this.exec.result) {
-      if (this.exec.isAsync) {
-        // Chain this instance's finally onto the settled promise so clones
-        // (from .default()) each run their own finallyCallback exactly once.
-        return (this.exec.promise as Promise<TryResult<TReturn>>).then(
-          (result) => {
-            const ran = this.runFinallyCallback();
-            return isPromiseLike(ran)
-              ? Promise.resolve(ran).then(() => result)
-              : result;
-          },
-        );
-      }
-      // Sync cached path: run this instance's finally if not already run.
-      void this.runFinallyCallback();
-      return this.exec.result;
-    }
-
     if (this.exec.promise) {
-      // Another instance sharing this `exec` (via .default()) already
-      // started the async execution and it hasn't settled yet. Chain this
-      // instance's own finally onto it so it still fires exactly once when
-      // the shared promise resolves, instead of relying on whichever
-      // instance originally created the promise.
+      // Async execution already started (settled or in flight), possibly by
+      // another instance sharing this `exec` via .default(). When this
+      // instance has a finally that has not run yet, chain it onto the shared
+      // promise so it fires exactly once; otherwise hand back the shared
+      // promise as is.
+      const cb = this.config.finallyCallback;
+      if (!cb || this.exec.finallyRan.has(cb)) {
+        return this.exec.promise;
+      }
       return this.exec.promise.then((result) => {
         const ran = this.runFinallyCallback();
         return isPromiseLike(ran)
           ? Promise.resolve(ran).then(() => result)
           : result;
       });
+    }
+
+    if (this.exec.state === 'executed' && this.exec.result) {
+      // Sync cached path: run this instance's finally if not already run.
+      void this.runFinallyCallback();
+      return this.exec.result;
     }
 
     try {
@@ -902,14 +801,13 @@ export class TryImpl<
     // failure reports each distinct `.report()` message at most once,
     // mirroring the idempotence of `addBreadcrumbsIfConfigured`. Clones
     // configured with divergent messages each report their own.
+    this.addBreadcrumbsIfConfigured();
+
     const message = this.config.message ?? '';
     if (this.exec.reportedMessages.has(message)) {
-      this.addBreadcrumbsIfConfigured();
       return;
     }
     this.exec.reportedMessages.add(message);
-
-    this.addBreadcrumbsIfConfigured();
 
     try {
       TryImpl.defaultReporter.report(error, {
@@ -963,8 +861,10 @@ export class TryImpl<
       return;
     }
 
-    this.local.breadcrumbData = this.extractAllBreadcrumbData(
+    this.local.breadcrumbData = BreadcrumbExtractorUtil.extract(
       this.config.breadcrumbConfig,
+      this.args,
+      this.config.debug,
     );
 
     // Mark the guard before short-circuiting on empty data so subsequent
@@ -988,19 +888,6 @@ export class TryImpl<
     }
     this.local.breadcrumbsAdded = true;
     this.exec.breadcrumbsEmitted.add(this.config.breadcrumbConfig);
-  }
-
-  /**
-   * Extract breadcrumb data using the flexible configuration.
-   */
-  private extractAllBreadcrumbData(
-    config: BreadcrumbOptions<TArgs>,
-  ): Record<string, unknown> {
-    return BreadcrumbExtractorUtil.extract(
-      config,
-      this.args,
-      this.config.debug,
-    );
   }
 }
 
