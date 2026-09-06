@@ -1,6 +1,6 @@
-import type { BreadcrumbTransformer } from './types';
-import { BreadcrumbTransformationError } from './types';
-import { normalizeThrown } from './normalize';
+import type { BreadcrumbTransformer } from './types.js';
+import { BreadcrumbTransformationError } from './types.js';
+import { normalizeThrown } from './normalize.js';
 
 /**
  * Predefined transformer functions for common use cases

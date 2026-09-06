@@ -1,11 +1,11 @@
 import { defineConfig, Options } from 'tsup';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+type ExportTarget = string | { types?: string; default?: string };
 type ExportsField = Record<
   string,
-  | string
-  | { import?: string; require?: string; default?: string; types?: string }
+  string | { import?: ExportTarget; require?: ExportTarget; default?: string }
 >;
 
 const pkg = JSON.parse(
@@ -29,8 +29,10 @@ function deriveEntriesFromExports(
     // Skip metadata export
     if (subpath.endsWith('package.json')) continue;
 
+    const importTarget =
+      typeof target === 'string' ? target : (target.import ?? target.default);
     const esmTarget =
-      typeof target === 'string' ? target : (target?.import ?? target?.default);
+      typeof importTarget === 'string' ? importTarget : importTarget?.default;
 
     if (!esmTarget || !esmTarget.includes('/dist/esm/')) continue;
     const rel = fromEsm(esmTarget); // e.g. "index", "nextjs/index"
@@ -89,5 +91,13 @@ export default defineConfig([
     format: 'esm',
     outDir: 'dist/esm',
     dts: false,
+    // The root package.json has no `type` field, so Node reads a bare `.js`
+    // file as CommonJS. This marker makes Node parse `dist/esm/**` as ESM and
+    // makes TypeScript read the declarations emitted there as ESM, so the
+    // default export reaches node16/nodenext consumers.
+    onSuccess: async () => {
+      mkdirSync('dist/esm', { recursive: true });
+      writeFileSync('dist/esm/package.json', '{ "type": "module" }\n');
+    },
   },
 ]);

@@ -12,24 +12,44 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js",
-      "import": "./dist/esm/index.js"
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     },
     "./nextjs": {
-      "types": "./dist/nextjs/index.d.ts",
-      "require": "./dist/nextjs/index.js",
-      "import": "./dist/esm/nextjs/index.js"
+      "import": {
+        "types": "./dist/esm/nextjs/index.d.ts",
+        "default": "./dist/esm/nextjs/index.js"
+      },
+      "require": {
+        "types": "./dist/nextjs/index.d.ts",
+        "default": "./dist/nextjs/index.js"
+      }
     },
     "./node": {
-      "types": "./dist/node/index.d.ts",
-      "require": "./dist/node/index.js",
-      "import": "./dist/esm/node/index.js"
+      "import": {
+        "types": "./dist/esm/node/index.d.ts",
+        "default": "./dist/esm/node/index.js"
+      },
+      "require": {
+        "types": "./dist/node/index.d.ts",
+        "default": "./dist/node/index.js"
+      }
     },
     "./browser": {
-      "types": "./dist/browser/index.d.ts",
-      "require": "./dist/browser/index.js",
-      "import": "./dist/esm/browser/index.js"
+      "import": {
+        "types": "./dist/esm/browser/index.d.ts",
+        "default": "./dist/esm/browser/index.js"
+      },
+      "require": {
+        "types": "./dist/browser/index.d.ts",
+        "default": "./dist/browser/index.js"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -43,11 +63,12 @@
   ],
   "scripts": {
     "build": "npm run clean && npm run typecheck && tsup --config tsup.config.ts && npm run build:types",
-    "build:types": "tsc -p tsconfig.build.json",
+    "build:types": "tsc -p tsconfig.build.json && tsc -p tsconfig.esm.build.json",
     "build:watch": "tsup --config tsup.config.ts --watch",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:publish": "changeset publish",
+    "check:package": "node scripts/check-package.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",

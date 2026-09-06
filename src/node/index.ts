@@ -1,7 +1,7 @@
-export { Try, Try as default, TryResult } from '../core/Try';
-export type { PublicTry } from '../core/Try';
-import { Try as TryClass } from '../core/Try';
-import { nodeReporter } from '../adapters/node/reporter';
+export { Try, Try as default, TryResult } from '../core/Try.js';
+export type { PublicTry } from '../core/Try.js';
+import { Try as TryClass } from '../core/Try.js';
+import { nodeReporter } from '../adapters/node/reporter.js';
 
 // Set up the Node reporter as the default for Node.js environments
 TryClass.setDefaultReporter(nodeReporter);

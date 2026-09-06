@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import { createSentryReporter } from '../adapters/createSentryReporter';
+import { createSentryReporter } from '../adapters/createSentryReporter.js';
 
 /**
  * Next.js Sentry reporter (uses @sentry/nextjs).

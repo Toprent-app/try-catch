@@ -129,7 +129,7 @@ The build is driven by `tsup` (v8) with config at `tsup.config.ts`. Entry points
 | Format | Output directory | Declaration files |
 |---|---|---|
 | CJS (`require`) | `dist/` | Yes (`.d.ts` alongside each `.js`) |
-| ESM (`import`) | `dist/esm/` | No (CJS declarations serve both) |
+| ESM (`import`) | `dist/esm/` | Yes (`.d.ts` alongside each `.js`, plus a `package.json` with `"type": "module"`) |
 
 Both formats target `es2020`, emit sourcemaps, and use `.js` extensions (tsup's default `.mjs` for ESM is overridden via `esbuildOptions`). Splitting is disabled; each entry point produces a single file. The resulting `dist/` layout mirrors the `exports` map:
 
@@ -141,7 +141,9 @@ dist/
   browser/index.js
   nextjs/index.js
   esm/
+    package.json    # { "type": "module" }
     index.js        # root ESM entry
+    index.d.ts
     node/index.js
     browser/index.js
     nextjs/index.js

@@ -33,6 +33,7 @@ Each worktree shares the parent repo's `.git` directory but has its own working 
 |---|---|
 | `npm run build` | Clean, typecheck, compile CJS + ESM via tsup, then emit declarations via `build:types` |
 | `npm run build:watch` | tsup in watch mode — recompiles on file save |
+| `npm run check:package` | Load every entry of the built package as ESM and CJS, then typecheck a consumer under `node16`, `nodenext`, and `bundler` (used in CI after `build`) |
 | `npm run typecheck` | `tsc --noEmit` against `tsconfig.json` (CJS settings) |
 | `npm run lint` | ESLint over `src/**/*.ts` using `typescript-eslint` |
 | `npm run format` | Prettier — write changes in place |
@@ -162,5 +163,5 @@ No formal convention is documented. The main branch is `main`. Feature branches 
 
 - Open a pull request against `main`.
 - The `prepublishOnly` gate (`lint → test → build`) must pass locally before pushing.
-- The CI workflow (`.github/workflows/ci.yml`) runs `npm ci`, `npm run test`, and `npm run build` on every push and pull request to `main`, across a Node.js `20.x` / `24.x` matrix on `ubuntu-latest`. Type checking happens inside `npm run build`. PRs must be green before merge.
+- The CI workflow (`.github/workflows/ci.yml`) runs `npm ci`, `npm run test`, `npm run build`, and `npm run check:package` on every push and pull request to `main`, across a Node.js `20.x` / `24.x` matrix on `ubuntu-latest`. Type checking happens inside `npm run build`. PRs must be green before merge.
 - Include a changeset entry (`npm run changeset`) if the change affects the public API or fixes a bug consumers would notice.

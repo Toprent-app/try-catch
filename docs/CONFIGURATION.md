@@ -15,12 +15,14 @@ The library itself ships no runtime environment-variable requirements. The singl
 
 `package.json` exposes four entry points via the `exports` field.
 
-| Subpath | CJS (`require`) | ESM (`import`) | Types |
-|---------|----------------|----------------|-------|
-| `.` (default) | `dist/index.js` | `dist/esm/index.js` | `dist/index.d.ts` |
-| `./nextjs` | `dist/nextjs/index.js` | `dist/esm/nextjs/index.js` | `dist/nextjs/index.d.ts` |
-| `./node` | `dist/node/index.js` | `dist/esm/node/index.js` | `dist/node/index.d.ts` |
-| `./browser` | `dist/browser/index.js` | `dist/esm/browser/index.js` | `dist/browser/index.d.ts` |
+| Subpath | CJS (`require`) | CJS types | ESM (`import`) | ESM types |
+|---------|----------------|-----------|----------------|-----------|
+| `.` (default) | `dist/index.js` | `dist/index.d.ts` | `dist/esm/index.js` | `dist/esm/index.d.ts` |
+| `./nextjs` | `dist/nextjs/index.js` | `dist/nextjs/index.d.ts` | `dist/esm/nextjs/index.js` | `dist/esm/nextjs/index.d.ts` |
+| `./node` | `dist/node/index.js` | `dist/node/index.d.ts` | `dist/esm/node/index.js` | `dist/esm/node/index.d.ts` |
+| `./browser` | `dist/browser/index.js` | `dist/browser/index.d.ts` | `dist/esm/browser/index.js` | `dist/esm/browser/index.d.ts` |
+
+Each subpath nests a `types` entry inside its `import` and `require` conditions. The root `package.json` has no `type` field, so the build writes `dist/esm/package.json` with `"type": "module"`. Node reads `dist/esm/**` as ESM because of that marker, and TypeScript reads the declarations in `dist/esm/**` as ESM, so the default import resolves under `moduleResolution: node16` and `nodenext`.
 
 Legacy fields for bundlers that do not read `exports`:
 
@@ -50,7 +52,7 @@ The build is driven by [tsup](https://tsup.egoist.dev/) and produces two output 
 | Minification | Disabled |
 | Code splitting | Disabled (one file per entry) |
 | Output extension | `.js` for both formats (esbuild `outExtension` override) |
-| Declaration types | Not emitted by tsup (`dts: false` for both formats) — `npm run build:types` runs `tsc -p tsconfig.build.json` instead, because the `rollup-plugin-dts` copy bundled in tsup does not support TypeScript 7 |
+| Declaration types | Not emitted by tsup (`dts: false` for both formats) — `npm run build:types` runs `tsc -p tsconfig.build.json` and `tsc -p tsconfig.esm.build.json` instead, because the `rollup-plugin-dts` copy bundled in tsup does not support TypeScript 7 |
 | External packages | All Sentry packages (`@sentry/core`, `@sentry/node`, `@sentry/browser`, `@sentry/nextjs`, `@sentry/tracing`, `@sentry/types`, `@sentry/utils`, `@sentry/react`, `@sentry/integrations`) plus any declared `peerDependencies` |
 
 To trigger a full build:
@@ -100,6 +102,10 @@ Extends `tsconfig.json` and is the config `npm run build:types` compiles. It emi
 | `rootDir` | `src` |
 | `declarationMap` | `false` |
 | `exclude` | `node_modules`, `dist`, `src/__tests__/**`, `src/**/*.test.ts`, `src/**/*.spec.ts` |
+
+### `tsconfig.esm.build.json` (published ESM declarations)
+
+Extends `tsconfig.build.json` and sets `outDir: dist/esm`. `npm run build:types` runs it as the second pass, so the ESM entry points get their own declaration files next to the `dist/esm/package.json` marker.
 
 ### `tsconfig.esm.json`
 
