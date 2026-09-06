@@ -201,3 +201,20 @@ export function safeErrorStack(error: Error): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Read `fn.name` without ever throwing, for the same reason as
+ * {@link safeErrorName}: the wrapped function is caller-supplied and a
+ * Proxy-wrapped function can throw from the `name` read. Both reporter
+ * methods receive this value.
+ *
+ * @returns The function's `name` when it is a non-empty string, `'anonymous'` otherwise.
+ */
+export function safeFunctionName(fn: (...args: never[]) => unknown): string {
+  try {
+    const name: unknown = fn.name;
+    return typeof name === 'string' && name !== '' ? name : 'anonymous';
+  } catch {
+    return 'anonymous';
+  }
+}

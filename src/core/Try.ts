@@ -8,7 +8,11 @@ import type {
   BreadcrumbExtractor as BreadcrumbExtractorType,
 } from '../utils/types.js';
 import { BreadcrumbExtractorUtil } from '../utils/breadcrumbs.js';
-import { normalizeThrown, safeErrorName } from '../utils/normalize.js';
+import {
+  normalizeThrown,
+  safeErrorName,
+  safeFunctionName,
+} from '../utils/normalize.js';
 import { Reporter, NoopReporter } from './reporter.js';
 
 /**
@@ -887,7 +891,7 @@ export class TryImpl<
         message: this.config.message,
         tags: this.config.tags,
         breadcrumbData: this.local.breadcrumbData,
-        functionName: this.fn.name || 'anonymous',
+        functionName: safeFunctionName(this.fn),
       });
     } catch (err) {
       this.logReporterError(err);
@@ -947,7 +951,7 @@ export class TryImpl<
       return;
     }
 
-    const functionName = this.fn.name || 'anonymous';
+    const functionName = safeFunctionName(this.fn);
 
     try {
       TryImpl.defaultReporter.addBreadcrumbs(

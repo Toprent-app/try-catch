@@ -570,6 +570,116 @@ describe('coverage gaps', () => {
         expect.objectContaining({ functionName: 'anonymous' }),
       );
     });
+
+    /**
+     * `fn.name` is a property read on the caller's function. A Proxy-wrapped
+     * function (an instrumentation or mocking layer) can throw from that
+     * read. The read must not escape the terminal, and the report must
+     * still reach the reporter.
+     */
+    describe('hostile fn.name never escapes a terminal', () => {
+      const trapped = (): ((ctx: { id: string }) => string) =>
+        new Proxy(
+          (_ctx: { id: string }): string => {
+            throw new Error('boom');
+          },
+          {
+            get(target, prop, receiver) {
+              if (prop === 'name') {
+                throw new Error('name-trap');
+              }
+              return Reflect.get(target, prop, receiver) as unknown;
+            },
+          },
+        );
+
+      it('.value() with breadcrumbs returns the default and records "anonymous"', () => {
+        const report = vi.fn();
+        const addBreadcrumbs = vi.fn();
+        Try.setDefaultReporter({
+          report,
+          addBreadcrumbs,
+          createWrappedError: (e) => e,
+        });
+
+        const result = new Try(trapped(), { id: 'u1' })
+          .breadcrumbs(['id'])
+          .report('failed')
+          .default('fallback')
+          .value();
+
+        expect(result).toBe('fallback');
+        expect(addBreadcrumbs).toHaveBeenCalledWith({ id: 'u1' }, 'anonymous');
+        expect(report).toHaveBeenCalledWith(
+          expect.any(Error),
+          expect.objectContaining({ functionName: 'anonymous' }),
+        );
+      });
+
+      it('.report() without breadcrumbs still reaches the reporter', () => {
+        const report = vi.fn();
+        Try.setDefaultReporter({
+          report,
+          addBreadcrumbs: vi.fn(),
+          createWrappedError: (e) => e,
+        });
+
+        new Try(trapped(), { id: 'u1' }).report('failed').value();
+
+        expect(report).toHaveBeenCalledTimes(1);
+        expect(report).toHaveBeenCalledWith(
+          expect.any(Error),
+          expect.objectContaining({ functionName: 'anonymous' }),
+        );
+      });
+
+      it('reads fn.name exactly once and reports that single value', () => {
+        const report = vi.fn();
+        Try.setDefaultReporter({
+          report,
+          addBreadcrumbs: vi.fn(),
+          createWrappedError: (e) => e,
+        });
+        let reads = 0;
+        const shifting = new Proxy(
+          (_ctx: { id: string }): string => {
+            throw new Error('boom');
+          },
+          {
+            get(target, prop, receiver) {
+              if (prop === 'name') {
+                reads += 1;
+                return reads === 1 ? 'stable' : { not: 'a string' };
+              }
+              return Reflect.get(target, prop, receiver) as unknown;
+            },
+          },
+        );
+
+        new Try(shifting, { id: 'u1' }).report('failed').value();
+
+        expect(report).toHaveBeenCalledWith(
+          expect.any(Error),
+          expect.objectContaining({ functionName: 'stable' }),
+        );
+        expect(reads).toBe(1);
+      });
+
+      it('.unwrap() throws the wrapped error, not the name getter error', () => {
+        Try.setDefaultReporter({
+          report: vi.fn(),
+          addBreadcrumbs: vi.fn(),
+          createWrappedError: (e, message) => new Error(message, { cause: e }),
+        });
+
+        expect(() =>
+          new Try(trapped(), { id: 'u1' })
+            .breadcrumbs(['id'])
+            .report('wrapped')
+            .unwrap(),
+        ).toThrow('wrapped');
+      });
+    });
   });
 
   /**
