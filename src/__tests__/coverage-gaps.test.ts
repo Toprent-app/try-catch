@@ -544,6 +544,32 @@ describe('coverage gaps', () => {
         functionName: 'chargeCard',
       });
     });
+
+    it('hands the reporter the same "anonymous" name that addBreadcrumbs receives', () => {
+      const report = vi.fn();
+      const addBreadcrumbs = vi.fn();
+      Try.setDefaultReporter({
+        report,
+        addBreadcrumbs,
+        createWrappedError: (e) => e,
+      });
+
+      new Try(
+        (_ctx: { id: string }): string => {
+          throw new Error('boom');
+        },
+        { id: 'u1' },
+      )
+        .report('failed')
+        .breadcrumbs(['id'])
+        .value();
+
+      expect(addBreadcrumbs).toHaveBeenCalledWith({ id: 'u1' }, 'anonymous');
+      expect(report).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ functionName: 'anonymous' }),
+      );
+    });
   });
 
   /**

@@ -11,7 +11,10 @@ export interface ErrorReportConfig {
    * configured and this instance performed the extraction.
    */
   readonly breadcrumbData?: Record<string, unknown>;
-  /** Name of the wrapped function. */
+  /**
+   * Name of the wrapped function, or `'anonymous'` when the function has no
+   * name. The same value reaches {@link Reporter.addBreadcrumbs}.
+   */
   readonly functionName?: string;
 }
 
