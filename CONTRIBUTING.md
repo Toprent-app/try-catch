@@ -41,11 +41,11 @@ npm test
 ### Available Scripts
 
 ```bash
-npm run build          # Build both CommonJS and ESM versions
-npm run build:cjs      # Build CommonJS version only
-npm run build:esm      # Build ESM version only
+npm run build          # Clean, typecheck, build CommonJS and ESM, emit declarations
+npm run build:watch    # Rebuild on file save
 npm run test           # Run tests once
 npm run test:watch     # Run tests in watch mode
+npm run lint           # Run ESLint over src
 npm run format         # Format code with Prettier
 npm run format:check   # Check code formatting
 npm run typecheck      # Run TypeScript type checking
@@ -228,7 +228,7 @@ The project uses GitHub Actions for automated releases:
 
 1. **Trigger**: Push to `main` branch
 2. **Workflow**: `.github/workflows/release.yml`
-3. **Action**: `changesets/action@v1`
+3. **Action**: `changesets/action@v2`
 
 #### What Happens:
 
@@ -313,7 +313,7 @@ npm run test -- --coverage
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { Try } from '../Try';
+import { Try } from '../core/Try';
 
 describe('Try class', () => {
   it('should handle successful operations', async () => {
@@ -417,8 +417,8 @@ Brief description of changes
 # Watch mode for development
 npm run test:watch
 
-# Build in watch mode (if using a build tool that supports it)
-npm run build -- --watch
+# Build in watch mode
+npm run build:watch
 ```
 
 ### Debugging
