@@ -24,7 +24,7 @@ jobs:
       - name: Build
         run: npm run build
       - name: Create Release Pull Request or Publish
-        uses: changesets/action@v2.1.1
+        uses: changesets/action@v2.1.2
         with:
           # Without this input the action only opens the "Version Packages"
           # pull request and never publishes. The script runs
