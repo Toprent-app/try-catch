@@ -673,7 +673,7 @@ export class TryImpl<
       !!message && !TryImpl.ignoreErrorTypes.has(safeErrorName(error));
 
     if (captured) {
-      this.reportError(error);
+      this.reportError(error, message);
       return message;
     }
     this.addBreadcrumbsIfConfigured();
@@ -794,7 +794,7 @@ export class TryImpl<
    * A reporter that throws does not break the terminal: the failure is
    * logged under debug and the original error still reaches the caller.
    */
-  private reportError(error: Error): void {
+  private reportError(error: Error, message: string): void {
     // Guard against duplicate reporting across shared execution. Parent and
     // child clones (via .default()) share `exec`, and a terminal may be
     // called more than once on one instance; either way a single settled
@@ -803,7 +803,6 @@ export class TryImpl<
     // configured with divergent messages each report their own.
     this.addBreadcrumbsIfConfigured();
 
-    const message = this.config.message ?? '';
     if (this.exec.reportedMessages.has(message)) {
       return;
     }
@@ -811,7 +810,7 @@ export class TryImpl<
 
     try {
       TryImpl.defaultReporter.report(error, {
-        message: this.config.message,
+        message,
         tags: this.config.tags,
         breadcrumbData: this.local.breadcrumbData,
         functionName: safeFunctionName(this.fn),
