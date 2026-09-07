@@ -17,7 +17,7 @@ import { Try } from '../core/Try';
 import { NoopReporter } from '../core/reporter';
 import type { Reporter } from '../core/reporter';
 import { BreadcrumbExtractorUtil } from '../utils';
-import { normalizeThrown } from '../utils/normalize';
+import { normalizeThrown, safeErrorName } from '../utils/normalize';
 
 describe('coverage gaps', () => {
   // Console spies are restored from teardown, not from the tail of a test
@@ -797,6 +797,15 @@ describe('coverage gaps', () => {
       ]) {
         expect(Object.hasOwn(error, key), key).toBe(false);
       }
+    });
+  });
+
+  describe('safeErrorName', () => {
+    it('returns empty string when name is not a string', () => {
+      const error = new Error('boom');
+      Object.defineProperty(error, 'name', { value: 42 });
+
+      expect(safeErrorName(error)).toBe('');
     });
   });
 });
