@@ -1,5 +1,11 @@
 # @power-rent/try-catch
 
+## 2.0.2
+
+### Patch Changes
+
+- 3f18352: Pass the `.report()` message to the reporter directly and remove an unreachable fallback. No behavior change.
+
 ## 2.0.1
 
 ### Patch Changes
