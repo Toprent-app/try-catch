@@ -327,7 +327,7 @@ describe('Try README type safety', () => {
     ).toEqualTypeOf<Receipt | undefined | Promise<Receipt | undefined>>();
   });
 
-  it('should extract from multiple parameters using keys', async () => {
+  it('rejects misspelled keys while typing transformers from their argument positions', async () => {
     function testFunction(
       _order: string,
       _customer: { id: number; name: string },

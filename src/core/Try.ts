@@ -690,21 +690,7 @@ export class TryImpl<
    */
   private execute(): TryResult<TReturn> | Promise<TryResult<TReturn>> {
     if (this.exec.promise) {
-      // Async execution already started (settled or in flight), possibly by
-      // another instance sharing this `exec` via .default(). When this
-      // instance has a finally that has not run yet, chain it onto the shared
-      // promise so it fires exactly once; otherwise hand back the shared
-      // promise as is.
-      const cb = this.config.finallyCallback;
-      if (!cb || this.exec.finallyRan.has(cb)) {
-        return this.exec.promise;
-      }
-      return this.exec.promise.then((result) => {
-        const ran = this.runFinallyCallback();
-        return isPromiseLike(ran)
-          ? Promise.resolve(ran).then(() => result)
-          : result;
-      });
+      return this.joinAsyncExecution(this.exec.promise);
     }
 
     if (this.exec.state === 'executed' && this.exec.result) {
@@ -718,27 +704,7 @@ export class TryImpl<
 
       if (isPromiseLike<Awaited<TReturn>>(value)) {
         this.exec.isAsync = true;
-        this.exec.promise = Promise.resolve(value)
-          .then((resolved) => {
-            this.exec.result = {
-              success: true,
-              value: resolved,
-            };
-            return this.exec.result;
-          })
-          .catch((e: unknown) => {
-            if (this.config.debug) {
-              console.error(e);
-            }
-            const error = normalizeThrown(e);
-            this.exec.result = { success: false, error };
-            return this.exec.result;
-          })
-          .finally(() => {
-            this.exec.state = 'executed';
-            return this.runFinallyCallback();
-          });
-
+        this.exec.promise = this.settleAsync(value);
         return this.exec.promise;
       }
 
@@ -748,12 +714,9 @@ export class TryImpl<
         value: value as Awaited<TReturn>,
       };
     } catch (e) {
-      if (this.config.debug) {
-        console.error(e);
-      }
-      const error = normalizeThrown(e);
+      const failure = this.failureResult(e);
       this.exec.isAsync = false;
-      this.exec.result = { success: false, error };
+      this.exec.result = failure;
     } finally {
       if (!this.exec.isAsync) {
         this.exec.state = 'executed';
@@ -762,6 +725,57 @@ export class TryImpl<
     }
 
     return this.exec.result;
+  }
+
+  /**
+   * Async execution already started (settled or in flight), possibly by
+   * another instance sharing this `exec` via .default(). When this instance
+   * has a finally that has not run yet, chain it onto the shared promise so
+   * it fires exactly once; otherwise hand back the shared promise as is.
+   */
+  private joinAsyncExecution(
+    promise: Promise<TryResult<TReturn>>,
+  ): Promise<TryResult<TReturn>> {
+    const cb = this.config.finallyCallback;
+    if (!cb || this.exec.finallyRan.has(cb)) {
+      return promise;
+    }
+    return promise.then((result) => {
+      const ran = this.runFinallyCallback();
+      return isPromiseLike(ran)
+        ? Promise.resolve(ran).then(() => result)
+        : result;
+    });
+  }
+
+  /** Settle an async return value into the shared result, then run finally. */
+  private settleAsync(
+    value: PromiseLike<Awaited<TReturn>>,
+  ): Promise<TryResult<TReturn>> {
+    return Promise.resolve(value)
+      .then((resolved) => {
+        this.exec.result = {
+          success: true,
+          value: resolved,
+        };
+        return this.exec.result;
+      })
+      .catch((e: unknown) => {
+        this.exec.result = this.failureResult(e);
+        return this.exec.result;
+      })
+      .finally(() => {
+        this.exec.state = 'executed';
+        return this.runFinallyCallback();
+      });
+  }
+
+  /** Log the thrown value under debug and normalize it into a failure result. */
+  private failureResult(e: unknown): TryResult<TReturn> {
+    if (this.config.debug) {
+      console.error(e);
+    }
+    return { success: false, error: normalizeThrown(e) };
   }
 
   private runFinallyCallback(): void | Promise<void> {
@@ -775,15 +789,17 @@ export class TryImpl<
       const result = cb();
       if (isPromiseLike(result)) {
         return Promise.resolve(result).catch((err: unknown) => {
-          if (this.config.debug) {
-            console.error('Error in finally callback', err);
-          }
+          this.logFinallyError(err);
         });
       }
     } catch (err) {
-      if (this.config.debug) {
-        console.error('Error in finally callback', err);
-      }
+      this.logFinallyError(err);
+    }
+  }
+
+  private logFinallyError(err: unknown): void {
+    if (this.config.debug) {
+      console.error('Error in finally callback', err);
     }
   }
 

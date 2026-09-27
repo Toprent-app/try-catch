@@ -72,7 +72,7 @@ describe('Try', () => {
       throw new Error('boom');
     }
 
-    it('should return default value', async () => {
+    it('returns the configured default after a failure without reporting', async () => {
       const defaultVal = { value: 'fallback' };
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
@@ -86,7 +86,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should return default value and report error', async () => {
+    it('returns the configured default and reports the failure', async () => {
       const defaultVal = { value: 'fallback' };
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
@@ -101,7 +101,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should rethrow error', async () => {
+    it('rethrows a failed execution from unwrap without reporting', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const exec = new Try(throwingFunction, params).debug(false).unwrap();
@@ -111,7 +111,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should return undefined', async () => {
+    it('returns undefined after an unhandled failure', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const result = await new Try(throwingFunction, params)
@@ -123,7 +123,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should return the value', async () => {
+    it('returns the successful function value', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const result = await new Try(successfulFunction, params).value();
@@ -218,7 +218,7 @@ describe('Try', () => {
       expect(() => new Try(throwsBeforePromise).unwrap()).toThrow('boom');
     });
 
-    it('should throw an error', async () => {
+    it('throws the reported error message and captures the failure', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const exec = new Try(throwingFunction, params)
@@ -230,7 +230,7 @@ describe('Try', () => {
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw the original error', async () => {
+    it('preserves the original error when unwrap has no report', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const exec = new Try(throwingFunction, params).debug(false).unwrap();
@@ -239,7 +239,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should send breadcrumbs', async () => {
+    it('emits breadcrumbs with the selected parameter data', async () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       await new Try(throwingFunction, params)
@@ -257,7 +257,7 @@ describe('Try', () => {
       );
     });
 
-    it('should return the function result', async () => {
+    it('returns the successful function result from unwrap', async () => {
       const params = { parameterKey: 'alpha' };
 
       const result = await new Try(successfulFunction, params).unwrap();
@@ -266,7 +266,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should return a class method result', async () => {
+    it('returns the result of a bound class method', async () => {
       const greeting = 'Hi!';
       const newTest = new TestClass('newTest');
 
@@ -278,7 +278,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should add tags', async () => {
+    it('adds individual tags to the captured failure', async () => {
       const params = { parameterKey: 'alpha' };
 
       const exec = new Try(throwingFunction, params)
@@ -302,7 +302,7 @@ describe('Try', () => {
       });
     });
 
-    it('should add multiple tags at once', async () => {
+    it('adds a tag collection to the captured failure', async () => {
       const params = { parameterKey: 'alpha' };
 
       const exec = new Try(throwingFunction, params)
@@ -332,7 +332,7 @@ describe('Try', () => {
       });
     });
 
-    it('should combine tags() with individual tag() calls', async () => {
+    it('combines tag collections with individual tags', async () => {
       const params = { parameterKey: 'alpha' };
 
       const exec = new Try(throwingFunction, params)
@@ -359,7 +359,7 @@ describe('Try', () => {
       });
     });
 
-    it('should override tags when using tags() multiple times', async () => {
+    it('overwrites matching tag keys across repeated tags calls', async () => {
       const params = { parameterKey: 'alpha' };
 
       const exec = new Try(throwingFunction, params)
@@ -384,7 +384,7 @@ describe('Try', () => {
       });
     });
 
-    it('should handle empty tags object', async () => {
+    it('accepts an empty tag collection before individual tags', async () => {
       const params = { parameterKey: 'alpha' };
 
       const exec = new Try(throwingFunction, params)
@@ -407,7 +407,7 @@ describe('Try', () => {
       });
     });
 
-    it('should return the actual error', async () => {
+    it('returns the original failure from error()', async () => {
       const params = { parameterKey: 'alpha' };
 
       const result = await new Try(throwingFunction, params)
@@ -417,7 +417,7 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
-    it('should not report when error() is used without .report()', async () => {
+    it('skips reporting when error() has no report configuration', async () => {
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params).debug(false).error();
@@ -426,7 +426,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should report when error() is used with .report()', async () => {
+    it('reports a failure consumed through error()', async () => {
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params)
@@ -437,7 +437,7 @@ describe('Try', () => {
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
-    it('should not report when error() succeeds', async () => {
+    it('returns undefined without reporting when error() observes success', async () => {
       const params = { parameterKey: 'alpha' };
 
       const result = await new Try(successfulFunction, params)
@@ -448,7 +448,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', async () => {
+    it('emits breadcrumbs without reporting when error() has no report configuration', async () => {
       const params = { parameterKey: 'alpha' };
 
       await new Try(throwingFunction, params)
@@ -460,7 +460,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should return the actual error', async () => {
+    it('throws a configured throw-through error without reporting', async () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
 
@@ -485,7 +485,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should execute finally callback on success', async () => {
+    it('runs the finally callback after success', async () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
@@ -494,7 +494,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should execute finally callback on error', async () => {
+    it('runs the finally callback after failure', async () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
@@ -506,7 +506,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should work with string parameters', async () => {
+    it('passes string arguments to the wrapped function', async () => {
       async function greet(name: string, greeting: string = 'Hello') {
         return `${greeting}, ${name}!`;
       }
@@ -515,7 +515,7 @@ describe('Try', () => {
       expect(result).toBe('Hi, Alice!');
     });
 
-    it('should work with number parameters', async () => {
+    it('passes number arguments to the wrapped function', async () => {
       async function add(a: number, b: number) {
         return a + b;
       }
@@ -524,7 +524,7 @@ describe('Try', () => {
       expect(result).toBe(8);
     });
 
-    it('should work with mixed parameter types', async () => {
+    it('passes mixed argument types to the wrapped function', async () => {
       async function formatMessage(
         id: number,
         message: string,
@@ -543,7 +543,7 @@ describe('Try', () => {
       expect(result).toBe('[URGENT] #123: Test message');
     });
 
-    it('should work with no parameters', async () => {
+    it('invokes a wrapped function with no arguments', async () => {
       async function getCurrentTime() {
         return Date.now();
       }
@@ -553,7 +553,7 @@ describe('Try', () => {
       expect(result).toBeGreaterThan(0);
     });
 
-    it('should not allow breadcrumbs with non-object first parameter', async () => {
+    it('accepts primitive arguments when breadcrumb extraction is omitted', async () => {
       async function processString(str: string) {
         return str.toUpperCase();
       }
@@ -570,18 +570,18 @@ describe('Try', () => {
       expect(result).toBe('HELLO');
     });
 
-    it('should not log errors by default', async () => {
+    it('keeps failed executions silent by default, so console output is opt-in', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
-      await new Try(throwingFunction, params).debug(false).value();
+      await new Try(throwingFunction, params).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should log errors when debug is enabled', async () => {
+    it('logs failed executions when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -592,7 +592,7 @@ describe('Try', () => {
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
     });
 
-    it('should not log errors when debug is explicitly disabled', async () => {
+    it('keeps failed executions silent when debug is explicitly disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -603,7 +603,7 @@ describe('Try', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should log finally callback errors when debug is enabled', async () => {
+    it('logs finally callback failures when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -623,7 +623,7 @@ describe('Try', () => {
       );
     });
 
-    it('should not log finally callback errors when debug is disabled', async () => {
+    it('keeps finally callback failures silent by default', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -639,7 +639,7 @@ describe('Try', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should support conditional debug logging', async () => {
+    it('logs failures when a runtime condition enables debug', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -651,7 +651,7 @@ describe('Try', () => {
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
     });
 
-    it('should include function name in breadcrumbs for anonymous functions', async () => {
+    it('labels breadcrumbs from unnamed callbacks as anonymous', async () => {
       const params = { parameterKey: 'beta' };
 
       await new Try(async (_data: Record<string, unknown>) => {
@@ -671,7 +671,7 @@ describe('Try', () => {
       );
     });
 
-    it('should await async finally callbacks', async () => {
+    it('awaits an async finally callback after success', async () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
       let asyncCallbackResolved = false;
@@ -688,7 +688,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should await async finally callbacks on error', async () => {
+    it('awaits an async finally callback after failure', async () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
       let asyncCallbackResolved = false;
@@ -709,7 +709,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle async finally callback errors', async () => {
+    it('logs rejected async finally callbacks when debug is enabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -731,7 +731,7 @@ describe('Try', () => {
       );
     });
 
-    it('should handle async finally callback errors without debug', async () => {
+    it('keeps rejected async finally callbacks silent when debug is disabled', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -751,7 +751,7 @@ describe('Try', () => {
     });
 
     describe('.result() method', () => {
-      it('should return success result object', async () => {
+      it('returns a success result with the function value', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(successfulFunction, params).result();
@@ -762,7 +762,7 @@ describe('Try', () => {
         });
       });
 
-      it('should return error result object', async () => {
+      it('returns a failure result with the original error', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(throwingFunction, params)
@@ -775,7 +775,7 @@ describe('Try', () => {
         });
       });
 
-      it('should not report when result() is used without .report()', async () => {
+      it('skips reporting when result() has no report configuration', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params).debug(false).result();
@@ -784,7 +784,7 @@ describe('Try', () => {
         expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
-      it('should report when result() is used with .report()', async () => {
+      it('reports a failure consumed through result()', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
@@ -795,7 +795,7 @@ describe('Try', () => {
         expect(Sentry.captureException).toHaveBeenCalledTimes(1);
       });
 
-      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', async () => {
+      it('emits breadcrumbs without reporting when result() has no report configuration', async () => {
         const params = { parameterKey: 'alpha' };
 
         await new Try(throwingFunction, params)
@@ -807,7 +807,7 @@ describe('Try', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
       });
 
-      it('should work with type guards for discriminated union', async () => {
+      it('narrows a successful result through its discriminant', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(successfulFunction, params).result();
@@ -822,7 +822,7 @@ describe('Try', () => {
         }
       });
 
-      it('should work with destructuring', async () => {
+      it('exposes the error branch for guarded result access', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(throwingFunction, params)
@@ -837,7 +837,7 @@ describe('Try', () => {
         }
       });
 
-      it('should execute finally callbacks when using result()', async () => {
+      it('runs finally callbacks when result() consumes the execution', async () => {
         const params = { parameterKey: 'alpha' };
         const finallySpy = vi.fn();
 
@@ -849,7 +849,7 @@ describe('Try', () => {
         expect(finallySpy).toHaveBeenCalledTimes(1);
       });
 
-      it('should cache results on subsequent calls', async () => {
+      it('reuses the cached result across repeated calls', async () => {
         const params = { parameterKey: 'alpha' };
         const fnSpy = vi.fn().mockResolvedValue({ cached: true });
 
@@ -866,7 +866,7 @@ describe('Try', () => {
         }
       });
 
-      it('should work with async finally callbacks', async () => {
+      it('awaits async finally callbacks before returning a result', async () => {
         const params = { parameterKey: 'alpha' };
         const finallySpy = vi.fn();
         let asyncCallbackResolved = false;
@@ -886,7 +886,7 @@ describe('Try', () => {
         expect(finallySpy).toHaveBeenCalledTimes(1);
       });
 
-      it('should export TryResult type for TypeScript users', async () => {
+      it('exports TryResult for explicitly typed results', async () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
@@ -903,7 +903,7 @@ describe('Try', () => {
     });
 
     describe('tags() method with different execution modes', () => {
-      it('should work with .value() method', async () => {
+      it('includes configured tags when value() reports a failure', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(throwingFunction, params)
@@ -926,7 +926,7 @@ describe('Try', () => {
         });
       });
 
-      it('should work with .result() method', async () => {
+      it('preserves a successful result when tags are configured', async () => {
         const params = { parameterKey: 'alpha' };
 
         const result = await new Try(successfulFunction, params)
@@ -942,7 +942,7 @@ describe('Try', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
       });
 
-      it('should support method chaining in any order', async () => {
+      it('combines tags across mixed chain order before reporting', async () => {
         const params = { parameterKey: 'alpha' };
 
         const exec = new Try(throwingFunction, params)
@@ -989,7 +989,7 @@ describe('Try', () => {
       return { ok: true, ...params };
     }
 
-    it('should return default value', () => {
+    it('returns the configured default after a failure without reporting', () => {
       const defaultVal = { value: 'fallback' };
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
@@ -1003,7 +1003,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should work without parameters', () => {
+    it('returns a falsy success value, so .default() applies only after a failure', () => {
       const defaultVal = { value: 'fallback' };
 
       const result = new Try(() => false).default(defaultVal).value();
@@ -1013,7 +1013,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should return default value and report error', () => {
+    it('returns the configured default and reports the failure', () => {
       const defaultVal = { value: 'fallback' };
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
@@ -1028,7 +1028,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should rethrow error', () => {
+    it('rethrows a failed execution from unwrap without reporting', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       expect(() => {
@@ -1038,7 +1038,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should return undefined', () => {
+    it('returns undefined after an unhandled failure', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const result = new Try(throwingFunction, params).debug(false).value();
@@ -1073,7 +1073,7 @@ describe('Try', () => {
       );
     });
 
-    it('should return the value', () => {
+    it('returns the successful function value', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       const result = new Try(successfulFunction, params).value();
@@ -1139,7 +1139,7 @@ describe('Try', () => {
       });
     });
 
-    it('should throw an error', () => {
+    it('throws the reported error message and captures the failure', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       expect(() => {
@@ -1148,7 +1148,7 @@ describe('Try', () => {
       expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw the original error', () => {
+    it('preserves the original error when unwrap has no report', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       expect(() => {
@@ -1157,7 +1157,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should send breadcrumbs', () => {
+    it('emits breadcrumbs with the selected parameter data', () => {
       const params = { parameterKey: 'alpha', parameterKey1: 'beta' };
 
       new Try(throwingFunction, params)
@@ -1175,7 +1175,7 @@ describe('Try', () => {
       );
     });
 
-    it('should return the function result', () => {
+    it('returns the successful function result from unwrap', () => {
       const params = { parameterKey: 'alpha' };
 
       const result = new Try(successfulFunction, params).unwrap();
@@ -1184,7 +1184,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should return a class method result', () => {
+    it('returns the result of a bound class method', () => {
       const greeting = 'Hi!';
       const newTest = new TestClass('newTest');
 
@@ -1196,7 +1196,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should add tags', () => {
+    it('adds individual tags to the captured failure', () => {
       const params = { parameterKey: 'alpha' };
 
       expect(() => {
@@ -1220,7 +1220,7 @@ describe('Try', () => {
       });
     });
 
-    it('should add multiple tags at once', () => {
+    it('adds a tag collection to the captured failure', () => {
       const params = { parameterKey: 'alpha' };
 
       expect(() => {
@@ -1250,7 +1250,7 @@ describe('Try', () => {
       });
     });
 
-    it('should combine tags() with individual tag() calls', () => {
+    it('combines tag collections with individual tags', () => {
       const params = { parameterKey: 'alpha' };
 
       expect(() => {
@@ -1277,7 +1277,7 @@ describe('Try', () => {
       });
     });
 
-    it('should override tags when using tags() multiple times', () => {
+    it('overwrites matching tag keys across repeated tags calls', () => {
       const params = { parameterKey: 'alpha' };
 
       expect(() => {
@@ -1302,7 +1302,7 @@ describe('Try', () => {
       });
     });
 
-    it('should handle empty tags object', () => {
+    it('accepts an empty tag collection before individual tags', () => {
       const params = { parameterKey: 'alpha' };
 
       expect(() => {
@@ -1325,7 +1325,7 @@ describe('Try', () => {
       });
     });
 
-    it('should return the actual error', () => {
+    it('returns the original failure from error()', () => {
       const params = { parameterKey: 'alpha' };
 
       const result = new Try(throwingFunction, params).debug(false).error();
@@ -1333,7 +1333,7 @@ describe('Try', () => {
       expect(result).toEqual(new Error('boom'));
     });
 
-    it('should not report when error() is used without .report()', () => {
+    it('skips reporting when error() has no report configuration', () => {
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params).debug(false).error();
@@ -1342,7 +1342,7 @@ describe('Try', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should not report when error() succeeds', () => {
+    it('returns undefined without reporting when error() observes success', () => {
       const params = { parameterKey: 'alpha' };
 
       const result = new Try(successfulFunction, params)
@@ -1353,7 +1353,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should add breadcrumbs without reporting when error() has breadcrumbs but no .report()', () => {
+    it('emits breadcrumbs without reporting when error() has no report configuration', () => {
       const params = { parameterKey: 'alpha' };
 
       new Try(throwingFunction, params)
@@ -1365,7 +1365,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should return the actual error', () => {
+    it('throws a configured throw-through error without reporting', () => {
       Try.throwThroughErrorTypes(['GraphQLError']);
       const params = { parameterKey: 'alpha' };
 
@@ -1390,7 +1390,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should execute finally callback on success', () => {
+    it('runs the finally callback after success', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
@@ -1399,7 +1399,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should execute finally callback on error', () => {
+    it('runs the finally callback after failure', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
 
@@ -1412,7 +1412,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should work with string parameters', () => {
+    it('passes string arguments to the wrapped function', () => {
       function greet(name: string, greeting: string = 'Hello') {
         return `${greeting}, ${name}!`;
       }
@@ -1421,7 +1421,7 @@ describe('Try', () => {
       expect(result).toBe('Hi, Alice!');
     });
 
-    it('should work with number parameters', () => {
+    it('passes number arguments to the wrapped function', () => {
       function add(a: number, b: number): number {
         return a + b;
       }
@@ -1430,7 +1430,7 @@ describe('Try', () => {
       expect(result).toBe(8);
     });
 
-    it('should work with mixed parameter types', () => {
+    it('passes mixed argument types to the wrapped function', () => {
       function formatMessage(
         id: number,
         message: string,
@@ -1444,7 +1444,7 @@ describe('Try', () => {
       expect(result).toBe('[URGENT] #123: Test message');
     });
 
-    it('should work with no parameters', () => {
+    it('invokes a wrapped function with no arguments', () => {
       function getCurrentTime(): number {
         return Date.now();
       }
@@ -1454,7 +1454,7 @@ describe('Try', () => {
       expect(result).toBeGreaterThan(0);
     });
 
-    it('should not allow breadcrumbs with non-object first parameter', () => {
+    it('accepts primitive arguments when breadcrumb extraction is omitted', () => {
       function processString(str: string): string {
         return str.toUpperCase();
       }
@@ -1471,18 +1471,18 @@ describe('Try', () => {
       expect(result).toBe('HELLO');
     });
 
-    it('should not log errors by default', () => {
+    it('keeps failed executions silent by default, so console output is opt-in', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
-      new Try(throwingFunction, params).debug(false).value();
+      new Try(throwingFunction, params).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should log errors when debug is enabled', () => {
+    it('logs failed executions when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1493,7 +1493,7 @@ describe('Try', () => {
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
     });
 
-    it('should not log errors when debug is explicitly disabled', () => {
+    it('keeps failed executions silent when debug is explicitly disabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1504,7 +1504,7 @@ describe('Try', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should log finally callback errors when debug is enabled', () => {
+    it('logs finally callback failures when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1524,7 +1524,7 @@ describe('Try', () => {
       );
     });
 
-    it('should not log finally callback errors when debug is disabled', () => {
+    it('keeps finally callback failures silent by default', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1538,7 +1538,7 @@ describe('Try', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
-    it('should support conditional debug logging', () => {
+    it('logs failures when a runtime condition enables debug', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1550,7 +1550,7 @@ describe('Try', () => {
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
     });
 
-    it('should include function name in breadcrumbs for anonymous functions', () => {
+    it('labels breadcrumbs from unnamed callbacks as anonymous', () => {
       const params = { parameterKey: 'beta' };
 
       new Try((_data: Record<string, unknown>) => {
@@ -1570,7 +1570,7 @@ describe('Try', () => {
       );
     });
 
-    it('should async finally callbacks', () => {
+    it('runs a promise-starting finally callback after success', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
       let asyncCallbackResolved = false;
@@ -1587,7 +1587,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should async finally callbacks on error', () => {
+    it('runs a promise-starting finally callback after failure', () => {
       const params = { parameterKey: 'alpha' };
       const finallySpy = vi.fn();
       let asyncCallbackResolved = false;
@@ -1608,7 +1608,7 @@ describe('Try', () => {
       expect(finallySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle async finally callback errors', () => {
+    it('logs thrown promise-starting finally callbacks when debug is enabled', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1630,7 +1630,7 @@ describe('Try', () => {
       );
     });
 
-    it('should handle async finally callback errors without debug', () => {
+    it('keeps thrown promise-starting finally callbacks silent without debug', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1650,7 +1650,7 @@ describe('Try', () => {
     });
 
     describe('.result() method', () => {
-      it('should return success result object', () => {
+      it('returns a success result with the function value', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(successfulFunction, params).result();
@@ -1661,7 +1661,7 @@ describe('Try', () => {
         });
       });
 
-      it('should return error result object', () => {
+      it('returns a failure result with the original error', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(throwingFunction, params).debug(false).result();
@@ -1672,7 +1672,7 @@ describe('Try', () => {
         });
       });
 
-      it('should not report when result() is used without .report()', () => {
+      it('skips reporting when result() has no report configuration', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params).debug(false).result();
@@ -1681,7 +1681,7 @@ describe('Try', () => {
         expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
       });
 
-      it('should add breadcrumbs without reporting when result() has breadcrumbs but no .report()', () => {
+      it('emits breadcrumbs without reporting when result() has no report configuration', () => {
         const params = { parameterKey: 'alpha' };
 
         new Try(throwingFunction, params)
@@ -1693,7 +1693,7 @@ describe('Try', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
       });
 
-      it('should work with type guards for discriminated union', () => {
+      it('narrows a successful result through its discriminant', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(successfulFunction, params).result();
@@ -1708,7 +1708,7 @@ describe('Try', () => {
         }
       });
 
-      it('should work with destructuring', () => {
+      it('exposes the error branch for guarded result access', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(throwingFunction, params).debug(false).result();
@@ -1721,7 +1721,7 @@ describe('Try', () => {
         }
       });
 
-      it('should execute finally callbacks when using result()', () => {
+      it('runs finally callbacks when result() consumes the execution', () => {
         const params = { parameterKey: 'alpha' };
         const finallySpy = vi.fn();
 
@@ -1734,7 +1734,7 @@ describe('Try', () => {
         expect(finallySpy).toHaveBeenCalledTimes(1);
       });
 
-      it('should cache results on subsequent calls', () => {
+      it('reuses the cached result across repeated calls', () => {
         const params = { parameterKey: 'alpha' } as const;
         const fnSpy = vi.fn((_params) => ({ cached: true }));
 
@@ -1751,7 +1751,7 @@ describe('Try', () => {
         }
       });
 
-      it('should export TryResult type for TypeScript users', () => {
+      it('exports TryResult for explicitly typed results', () => {
         const params = { parameterKey: 'alpha' };
 
         // This test verifies that TryResult type is properly exported
@@ -1768,7 +1768,7 @@ describe('Try', () => {
     });
 
     describe('tags() method with different execution modes', () => {
-      it('should work with .value() method', () => {
+      it('includes configured tags when value() reports a failure', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(throwingFunction, params)
@@ -1791,7 +1791,7 @@ describe('Try', () => {
         });
       });
 
-      it('should work with .result() method', () => {
+      it('preserves a successful result when tags are configured', () => {
         const params = { parameterKey: 'alpha' };
 
         const result = new Try(successfulFunction, params)
@@ -1807,7 +1807,7 @@ describe('Try', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
       });
 
-      it('should support method chaining in any order', () => {
+      it('combines tags across mixed chain order before reporting', () => {
         const params = { parameterKey: 'alpha' };
 
         expect(() => {

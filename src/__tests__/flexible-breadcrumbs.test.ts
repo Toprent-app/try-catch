@@ -23,7 +23,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Array of keys', () => {
-    it('should work with existing breadcrumbs API (object first parameter)', async () => {
+    it('extracts selected keys from the first object argument', async () => {
       const params = { userId: 123, action: 'update' };
 
       await new Try(throwingFunction, params)
@@ -41,7 +41,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle empty breadcrumbs array', async () => {
+    it('skips breadcrumb reporting when the key list is empty', async () => {
       const params = { userId: 123 };
 
       await new Try(throwingFunction, params).breadcrumbs([]).value();
@@ -52,7 +52,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Array Syntax with Extractors', () => {
-    it('should extract from multiple parameters using keys', async () => {
+    it('extracts keyed and transformed data from multiple arguments', async () => {
       function testFunction(
         order: string,
         customer: { id: number; name: string },
@@ -82,7 +82,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should use custom transformers', async () => {
+    it('merges breadcrumb data from positional custom transformers', async () => {
       function processOrder(orderId: string, amount: number, metadata: any) {
         throw new Error('test');
       }
@@ -113,7 +113,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should use predefined transformers', async () => {
+    it('extracts values and lengths with predefined transformers', async () => {
       function analyzeData(text: string, numbers: number[], config: object) {
         throw new Error('test');
       }
@@ -143,7 +143,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle type transformer', async () => {
+    it('records runtime types with the type transformer', async () => {
       function mixedTypes(
         _str: string,
         _num: number,
@@ -178,7 +178,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle toString transformer', async () => {
+    it('converts primitive and object arguments with the toString transformer', async () => {
       function processValues(num: number, bool: boolean, obj: object) {
         throw new Error('test');
       }
@@ -203,7 +203,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle invalid parameter indices gracefully', async () => {
+    it('skips invalid parameter indices while keeping valid extracted data', async () => {
       function twoParams(a: string, b: number) {
         throw new Error('test');
       }
@@ -229,7 +229,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Object Syntax Configuration', () => {
-    it('should extract using object syntax with parameter indices', async () => {
+    it('extracts argument data from an index-keyed configuration', async () => {
       function processRequest(
         endpoint: string,
         payload: { userId: number; data: string },
@@ -265,7 +265,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle mixed object and array configurations', async () => {
+    it('combines key arrays and transformers in an index-keyed configuration', async () => {
       function complexFunction(
         id: string,
         user: { name: string; age: number },
@@ -304,7 +304,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle transformer errors gracefully with debug enabled', async () => {
+    it('logs custom transformer failures in debug mode and skips empty breadcrumbs', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -358,7 +358,7 @@ describe('Flexible Breadcrumbs System', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should handle predefined transformer errors gracefully', async () => {
+    it('logs predefined transformer failures in debug mode', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -384,7 +384,7 @@ describe('Flexible Breadcrumbs System', () => {
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it('should handle non-object parameters for key extraction gracefully', async () => {
+    it('skips key extraction from primitive arguments without emitting breadcrumbs', async () => {
       function testFunction(primitiveParam: string) {
         throw new Error('test');
       }
@@ -399,7 +399,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle undefined and null values', async () => {
+    it('preserves undefined, null, and empty-string metadata through predefined transformers', async () => {
       function testFunction(a: any, b: any, c: any) {
         throw new Error('test');
       }
@@ -424,7 +424,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should handle empty configuration', async () => {
+    it('skips breadcrumb reporting when the extractor configuration is empty', async () => {
       function testFunction(data: string) {
         throw new Error('test');
       }
@@ -435,7 +435,7 @@ describe('Flexible Breadcrumbs System', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should handle mixed valid and invalid extractors', async () => {
+    it('keeps valid extractor output when neighboring extractors are invalid', async () => {
       function testFunction(a: string, b: { key: string }) {
         throw new Error('test');
       }
@@ -461,7 +461,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should filter out undefined values from key extraction', async () => {
+    it('drops missing and undefined properties from keyed extraction', async () => {
       function testFunction(obj: { a: string; b?: string; c: undefined }) {
         throw new Error('test');
       }
@@ -509,7 +509,7 @@ describe('Flexible Breadcrumbs System', () => {
       );
     });
 
-    it('should work with functions that have no parameters', async () => {
+    it('skips breadcrumb reporting for a parameterless function with no extractors', async () => {
       function noParams() {
         throw new Error('test');
       }
@@ -520,7 +520,7 @@ describe('Flexible Breadcrumbs System', () => {
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
     });
 
-    it('should handle anonymous functions properly', async () => {
+    it('labels extracted breadcrumbs from an unnamed callback as anonymous', async () => {
       /* prettier-ignore */
       await new Try(
         (_data: string) => { throw new Error('test'); },
@@ -559,7 +559,7 @@ describe('Flexible Breadcrumbs System', () => {
   });
 
   describe('Performance and Caching', () => {
-    it('should only execute breadcrumb extraction once per Try instance', async () => {
+    it('extracts and emits breadcrumbs once across repeated terminal calls', async () => {
       const transformSpy = vi.fn((value) => ({ transformed: value }));
 
       function testFunction(data: string) {
