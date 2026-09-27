@@ -473,7 +473,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should not give typescript error', async () => {
+    it('returns a default shaped like the return type, so callers read its fields without an undefined check', async () => {
       const params = { parameterKey: 'alpha' };
 
       const result = await new Try(throwingFunction, params)
@@ -481,8 +481,7 @@ describe('Try', () => {
         .default({ ok: true })
         .value();
 
-      expect(result).not.toBe(undefined);
-      expect(() => result.ok).not.toThrow(TypeError);
+      expect(result.ok).toBe(true);
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
@@ -580,7 +579,6 @@ describe('Try', () => {
       await new Try(throwingFunction, params).debug(false).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should log errors when debug is enabled', async () => {
@@ -592,7 +590,6 @@ describe('Try', () => {
       await new Try(throwingFunction, params).debug().value();
 
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
-      consoleSpy.mockRestore();
     });
 
     it('should not log errors when debug is explicitly disabled', async () => {
@@ -604,7 +601,6 @@ describe('Try', () => {
       await new Try(throwingFunction, params).debug(false).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should log finally callback errors when debug is enabled', async () => {
@@ -625,7 +621,6 @@ describe('Try', () => {
         'Error in finally callback',
         new Error('finally error'),
       );
-      consoleSpy.mockRestore();
     });
 
     it('should not log finally callback errors when debug is disabled', async () => {
@@ -642,7 +637,6 @@ describe('Try', () => {
         .value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should support conditional debug logging', async () => {
@@ -655,7 +649,6 @@ describe('Try', () => {
       await new Try(throwingFunction, params).debug(isDevelopment).value();
 
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
-      consoleSpy.mockRestore();
     });
 
     it('should include function name in breadcrumbs for anonymous functions', async () => {
@@ -736,7 +729,6 @@ describe('Try', () => {
         'Error in finally callback',
         new Error('async finally error'),
       );
-      consoleSpy.mockRestore();
     });
 
     it('should handle async finally callback errors without debug', async () => {
@@ -756,7 +748,6 @@ describe('Try', () => {
         .value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     describe('.result() method', () => {
@@ -1387,7 +1378,7 @@ describe('Try', () => {
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
-    it('should not give typescript error', () => {
+    it('returns a default shaped like the return type, so callers read its fields without an undefined check', () => {
       const params = { parameterKey: 'alpha' };
 
       const result = new Try(throwingFunction, params)
@@ -1395,8 +1386,7 @@ describe('Try', () => {
         .default({ ok: true })
         .value();
 
-      expect(result).not.toBe(undefined);
-      expect(() => result.ok).not.toThrow(TypeError);
+      expect(result.ok).toBe(true);
       expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
@@ -1490,7 +1480,6 @@ describe('Try', () => {
       new Try(throwingFunction, params).debug(false).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should log errors when debug is enabled', () => {
@@ -1502,7 +1491,6 @@ describe('Try', () => {
       new Try(throwingFunction, params).debug().value();
 
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
-      consoleSpy.mockRestore();
     });
 
     it('should not log errors when debug is explicitly disabled', () => {
@@ -1514,7 +1502,6 @@ describe('Try', () => {
       new Try(throwingFunction, params).debug(false).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should log finally callback errors when debug is enabled', () => {
@@ -1535,7 +1522,6 @@ describe('Try', () => {
         'Error in finally callback',
         new Error('finally error'),
       );
-      consoleSpy.mockRestore();
     });
 
     it('should not log finally callback errors when debug is disabled', () => {
@@ -1550,7 +1536,6 @@ describe('Try', () => {
       withFinally(new Try(successfulFunction, params), throwingFinally).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     it('should support conditional debug logging', () => {
@@ -1563,7 +1548,6 @@ describe('Try', () => {
       new Try(throwingFunction, params).debug(isDevelopment).value();
 
       expect(consoleSpy).toHaveBeenCalledWith(new Error('boom'));
-      consoleSpy.mockRestore();
     });
 
     it('should include function name in breadcrumbs for anonymous functions', () => {
@@ -1644,7 +1628,6 @@ describe('Try', () => {
         'Error in finally callback',
         new Error('async finally error'),
       );
-      consoleSpy.mockRestore();
     });
 
     it('should handle async finally callback errors without debug', () => {
@@ -1664,7 +1647,6 @@ describe('Try', () => {
       ).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
     });
 
     describe('.result() method', () => {

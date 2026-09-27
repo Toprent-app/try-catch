@@ -26,9 +26,10 @@ export function createSentryReporter(Sentry: SentryLike): Reporter {
 
   return {
     report(error: Error, config: ErrorReportConfig): void {
-      const errorToReport = config.message
-        ? createWrappedError(error, config.message)
-        : error;
+      const errorToReport =
+        config.message === undefined
+          ? error
+          : createWrappedError(error, config.message);
 
       Sentry.captureException(errorToReport, {
         tags: { ...config.tags, library: '@power-rent/try-catch' },

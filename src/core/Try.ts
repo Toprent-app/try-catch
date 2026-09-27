@@ -670,7 +670,8 @@ export class TryImpl<
   private handleFailure(error: Error): string | undefined {
     const { message } = this.config;
     const captured =
-      !!message && !TryImpl.ignoreErrorTypes.has(safeErrorName(error));
+      message !== undefined &&
+      !TryImpl.ignoreErrorTypes.has(safeErrorName(error));
 
     if (captured) {
       this.reportError(error, message);
