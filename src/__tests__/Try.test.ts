@@ -570,13 +570,13 @@ describe('Try', () => {
       expect(result).toBe('HELLO');
     });
 
-    it('keeps failed executions silent when debug is disabled', async () => {
+    it('keeps failed executions silent by default, so console output is opt-in', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
-      await new Try(throwingFunction, params).debug(false).value();
+      await new Try(throwingFunction, params).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });
@@ -1471,13 +1471,13 @@ describe('Try', () => {
       expect(result).toBe('HELLO');
     });
 
-    it('keeps failed executions silent when debug is disabled', () => {
+    it('keeps failed executions silent by default, so console output is opt-in', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const params = { parameterKey: 'alpha' };
 
-      new Try(throwingFunction, params).debug(false).value();
+      new Try(throwingFunction, params).value();
 
       expect(consoleSpy).not.toHaveBeenCalled();
     });
