@@ -1,5 +1,17 @@
 # @power-rent/try-catch
 
+## 2.0.2
+
+### Patch Changes
+
+- 4d051b3: Fix three edge cases in error reporting and breadcrumbs.
+  
+  - `.report('')` reports the error. `.unwrap()` throws the error wrapped with the empty message, and the Sentry reporters send that same wrapped error.
+  - `createWrappedError` keeps the stack of the new error when the original error has no string `stack`.
+  - A breadcrumb key named `__proto__` is recorded as a data property. Its value stays in the breadcrumb data, and the prototype of the breadcrumb data object does not change.
+- 3f18352: Pass the `.report()` message to the reporter directly and remove an unreachable fallback. No behavior change.
+- 699f4d8: Split the internal `execute()` method into smaller private methods. The behavior does not change.
+
 ## 2.0.1
 
 ### Patch Changes
