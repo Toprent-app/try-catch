@@ -801,7 +801,7 @@ describe('coverage gaps', () => {
   });
 
   describe('safeErrorName', () => {
-    it('returns empty string when name is not a string', () => {
+    it("reads a non-string error name as '' so the ignoreErrorTypes lookup gets a string", () => {
       const error = new Error('boom');
       Object.defineProperty(error, 'name', { value: 42 });
 
