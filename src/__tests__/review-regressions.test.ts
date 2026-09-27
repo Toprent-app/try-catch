@@ -444,6 +444,41 @@ describe('Regression: multi-CLI review findings', () => {
    * Every throw-through membership test reads that `name`, so an unguarded
    * read escapes the terminal and breaks the never-throw contract.
    */
+  describe('an empty .report() message still reports', () => {
+    it('reports once when the message is empty, so a computed empty message does not turn reporting off', () => {
+      new Try((): string => {
+        throw new Error('boom');
+      })
+        .report('')
+        .default('fallback')
+        .value();
+
+      expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('unwrap() throws the error wrapped with the empty message, the same error the reporter receives', () => {
+      const original = new Error('boom');
+      const thrown = (() => {
+        try {
+          new Try((): string => {
+            throw original;
+          })
+            .report('')
+            .unwrap();
+        } catch (e) {
+          return e;
+        }
+      })() as Error;
+
+      expect(thrown).not.toBe(original);
+      expect(thrown.message).toBe('');
+      expect(thrown.cause).toBe(original);
+      const [reported] = vi.mocked(Sentry.captureException).mock.calls[0];
+      expect((reported as Error).message).toBe('');
+      expect((reported as Error).cause).toBe(original);
+    });
+  });
+
   describe('hostile error.name never escapes a terminal', () => {
     class ThrowingName extends Error {
       get name(): string {

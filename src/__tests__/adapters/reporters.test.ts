@@ -90,6 +90,15 @@ describe.each(adapters)(
       });
     });
 
+    it('report() with an empty message still wraps, so Sentry receives the error unwrap() throws', () => {
+      const original = new Error('boom');
+      reporter.report(original, { message: '', tags: {} });
+      const [passedError] = captureException.mock.calls[0];
+      expect(passedError).not.toBe(original);
+      expect((passedError as Error).message).toBe('');
+      expect((passedError as Error).cause).toBe(original);
+    });
+
     it('addBreadcrumbs() with functionName emits addBreadcrumb', () => {
       reporter.addBreadcrumbs({ userId: 123 }, 'fetchUser');
       expect(addBreadcrumb).toHaveBeenCalledTimes(1);

@@ -62,7 +62,10 @@ export class NoopReporter implements Reporter {
   createWrappedError(error: Error, message: string): Error {
     const wrappedError = new Error(message);
     wrappedError.cause = error;
-    wrappedError.stack = safeErrorStack(error);
+    const stack = safeErrorStack(error);
+    if (stack !== undefined) {
+      wrappedError.stack = stack;
+    }
     return wrappedError;
   }
 }

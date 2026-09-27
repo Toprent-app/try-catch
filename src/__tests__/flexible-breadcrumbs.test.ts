@@ -331,9 +331,6 @@ describe('Flexible Breadcrumbs System', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
-
-      errorSpy.mockRestore();
-      warnSpy.mockRestore();
     });
 
     it('stays silent on transformer errors without debug, so a library consumer gets no unsolicited production log noise', async () => {
@@ -359,9 +356,6 @@ describe('Flexible Breadcrumbs System', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       // Transformer error yields empty data — reporter call is short-circuited.
       expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
-
-      errorSpy.mockRestore();
-      warnSpy.mockRestore();
     });
 
     it('should handle predefined transformer errors gracefully', async () => {
@@ -388,8 +382,6 @@ describe('Flexible Breadcrumbs System', () => {
         expect.any(Error),
       );
       expect(warnSpy).not.toHaveBeenCalled();
-      errorSpy.mockRestore();
-      warnSpy.mockRestore();
     });
 
     it('should handle non-object parameters for key extraction gracefully', async () => {
@@ -545,6 +537,24 @@ describe('Flexible Breadcrumbs System', () => {
           },
         }),
       );
+    });
+
+    it('records an own __proto__ key as data, so a JSON payload field is not dropped or turned into a prototype', () => {
+      const payload = JSON.parse('{"__proto__": "admin", "id": 7}') as Record<
+        string,
+        unknown
+      >;
+
+      const data = BreadcrumbExtractorUtil.extractFromKeys(payload, [
+        '__proto__',
+        'id',
+      ]);
+
+      expect(Object.keys(data)).toEqual(['__proto__', 'id']);
+      expect(Object.getOwnPropertyDescriptor(data, '__proto__')?.value).toBe(
+        'admin',
+      );
+      expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
     });
   });
 
@@ -767,7 +777,6 @@ describe('Flexible Breadcrumbs System', () => {
 
       // Extractor should run at most once for a given (exec, config) pair.
       expect(extractSpy).toHaveBeenCalledTimes(1);
-      extractSpy.mockRestore();
     });
   });
 });

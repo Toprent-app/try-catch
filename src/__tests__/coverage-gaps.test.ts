@@ -40,6 +40,18 @@ describe('coverage gaps', () => {
       expect(wrapped.stack).toBe('original-stack');
     });
 
+    it('keeps the wrapper stack when the original has no string stack, so the report still points at code', () => {
+      const original = new Error('original');
+      Object.defineProperty(original, 'stack', { value: undefined });
+
+      const wrapped = new NoopReporter().createWrappedError(
+        original,
+        'wrapped',
+      );
+
+      expect(typeof wrapped.stack).toBe('string');
+    });
+
     it('report and addBreadcrumbs are no-ops', () => {
       const reporter = new NoopReporter();
       expect(() => reporter.report(new Error('x'), { tags: {} })).not.toThrow();

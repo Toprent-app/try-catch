@@ -79,7 +79,13 @@ export class BreadcrumbExtractorUtil {
         return;
       }
       if (value !== undefined) {
-        breadcrumbData[key as string] = value;
+        // Assignment would run the `__proto__` setter; define a data property.
+        Object.defineProperty(breadcrumbData, key, {
+          value,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
       }
     });
 
