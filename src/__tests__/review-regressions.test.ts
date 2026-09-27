@@ -437,13 +437,7 @@ describe('Regression: multi-CLI review findings', () => {
       expectBreadcrumbOnly();
     });
   });
-  /**
-   * PR #50 (blocker): `normalizeThrown` passes `instanceof Error` values
-   * through untouched, so a caught error can carry a throwing `name` getter —
-   * realistically a Proxy wrapper from an ORM, mock, or observability layer.
-   * Every throw-through membership test reads that `name`, so an unguarded
-   * read escapes the terminal and breaks the never-throw contract.
-   */
+
   describe('an empty .report() message still reports', () => {
     it('reports once when the message is empty, so a computed empty message does not turn reporting off', () => {
       new Try((): string => {
@@ -479,6 +473,13 @@ describe('Regression: multi-CLI review findings', () => {
     });
   });
 
+  /**
+   * PR #50 (blocker): `normalizeThrown` passes `instanceof Error` values
+   * through untouched, so a caught error can carry a throwing `name` getter —
+   * realistically a Proxy wrapper from an ORM, mock, or observability layer.
+   * Every throw-through membership test reads that `name`, so an unguarded
+   * read escapes the terminal and breaks the never-throw contract.
+   */
   describe('hostile error.name never escapes a terminal', () => {
     class ThrowingName extends Error {
       get name(): string {
