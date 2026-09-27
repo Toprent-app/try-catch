@@ -623,7 +623,7 @@ describe('Try', () => {
       );
     });
 
-    it('keeps finally callback failures silent when debug is disabled', async () => {
+    it('keeps finally callback failures silent by default', async () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -1524,7 +1524,7 @@ describe('Try', () => {
       );
     });
 
-    it('keeps finally callback failures silent when debug is disabled', () => {
+    it('keeps finally callback failures silent by default', () => {
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
