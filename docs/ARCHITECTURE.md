@@ -100,11 +100,15 @@ The split is decided by what `fn(...args)` returns, not by how `fn` was declared
 
 Both paths cache the result in `this.exec` so that subsequent terminal method calls return the same settled value.
 
-The type system draws the line one step earlier than the runtime does, because a
-function typed `(): Promise<T>` can still throw synchronously before it builds
-its Promise. Each terminal is typed `MaybePromise<TReturn, TValue>`: a `TReturn`
-with no Promise member yields a plain `TValue`, and any `TReturn` that may be a
-Promise yields `TValue | Promise<TValue>`. `.finally()` uses a stricter test —
+The type system follows the declared return type. Each terminal is typed
+`MaybePromise<TReturn, TValue>`: a `TReturn` with no Promise member yields a
+plain `TValue`, a `TReturn` that is always Promise-like yields
+`Promise<TValue>`, and a `TReturn` that mixes both, or is `any`, yields
+`TValue | Promise<TValue>`. The runtime decides from the value that the function
+returns, so a plain function typed `(): Promise<T>` that throws before it builds
+its Promise settles synchronously while its type says `Promise<TValue>`. An
+`async` function cannot throw synchronously, so its types and its runtime always
+agree. `.finally()` uses the same test as the `Promise<TValue>` case —
 `[TReturn] extends [PromiseLike<unknown>]`, the full return type rather than a
 member of it — so it is unavailable on a sync `Try` and on one typed
 `T | Promise<T>`.

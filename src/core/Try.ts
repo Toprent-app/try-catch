@@ -71,13 +71,6 @@ type MayReturnPromise<TReturn> =
       : true;
 
 /**
- * Terminal return type: plain TValue when TReturn is sync-only; otherwise
- * TValue | Promise<TValue> so sync throws from Promise-typed functions remain sound.
- */
-type MaybePromise<TReturn, TValue> =
-  MayReturnPromise<TReturn> extends true ? TValue | Promise<TValue> : TValue;
-
-/**
  * True only when TReturn is always a Promise. `any` and `never` are not
  * always-Promise, so they do not gain `finally()`.
  */
@@ -89,6 +82,22 @@ type AlwaysReturnsPromise<TReturn> =
       : [TReturn] extends [PromiseLike<unknown>]
         ? true
         : false;
+
+/**
+ * Terminal return type: `Promise<TValue>` when TReturn is always a Promise,
+ * plain TValue when TReturn is sync-only, and `TValue | Promise<TValue>` when
+ * TReturn is `any` or mixes sync and Promise members.
+ *
+ * A function typed `(): Promise<T>` that throws before it returns a Promise
+ * settles synchronously at runtime. Mark such functions `async`, which turns
+ * every throw into a rejection.
+ */
+type MaybePromise<TReturn, TValue> =
+  AlwaysReturnsPromise<TReturn> extends true
+    ? Promise<TValue>
+    : MayReturnPromise<TReturn> extends true
+      ? TValue | Promise<TValue>
+      : TValue;
 
 /**
  * Core Try implementation for simplified async error handling.

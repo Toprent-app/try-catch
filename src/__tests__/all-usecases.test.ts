@@ -94,17 +94,11 @@ describe('Result methods', () => {
     expectTypeOf(t.unwrap()).toEqualTypeOf<number>();
   });
 
-  it('async value/error/unwrap types', () => {
-    // A Promise-typed function may still throw before it returns a promise,
-    // so the terminals are typed `T | Promise<T>`. `await` handles both.
+  it('types every terminal of an async function as a Promise', () => {
     const t = new Try(asyncNoArgs);
-    expectTypeOf(t.value()).toEqualTypeOf<
-      number | undefined | Promise<number | undefined>
-    >();
-    expectTypeOf(t.error()).toEqualTypeOf<
-      Error | undefined | Promise<Error | undefined>
-    >();
-    expectTypeOf(t.unwrap()).toEqualTypeOf<number | Promise<number>>();
+    expectTypeOf(t.value()).toEqualTypeOf<Promise<number | undefined>>();
+    expectTypeOf(t.error()).toEqualTypeOf<Promise<Error | undefined>>();
+    expectTypeOf(t.unwrap()).toEqualTypeOf<Promise<number>>();
   });
 
   it('sync value returns T', () => {
@@ -168,11 +162,9 @@ describe('.default()', () => {
     expectTypeOf(v).toEqualTypeOf<number | null>();
   });
 
-  it('default([]) narrows value to T | never[] (async)', () => {
+  it('default([]) narrows value to Promise<T | never[]> (async)', () => {
     const v = new Try(asyncNoArgs).default([]).value();
-    expectTypeOf(v).toEqualTypeOf<
-      number | never[] | Promise<number | never[]>
-    >();
+    expectTypeOf(v).toEqualTypeOf<Promise<number | never[]>>();
   });
 
   it('default(d).unwrap() still T', () => {

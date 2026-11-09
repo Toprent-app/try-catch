@@ -212,7 +212,7 @@ describe('Try', () => {
       const error = new Try(throwsBeforePromise).error();
       expect(error).not.toBeInstanceOf(Promise);
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe('boom');
+      expect(error).toHaveProperty('message', 'boom');
       await expect(Promise.resolve(error)).resolves.toBeInstanceOf(Error);
 
       expect(() => new Try(throwsBeforePromise).unwrap()).toThrow('boom');
