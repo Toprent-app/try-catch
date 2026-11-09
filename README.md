@@ -94,6 +94,7 @@ const rawString = '{"ok":true}';
 const result = new Try(JSON.parse, rawString).value();
 
 // Sync fn that returns a Promise: terminal methods still handle it.
+// It must not throw before it returns; see "Terminal return types".
 function returnsPromise(): Promise<number> {
   return Promise.resolve(42);
 }
