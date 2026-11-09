@@ -89,9 +89,7 @@ describe('Try README type safety', () => {
     const asyncValue = new Try(fetchUser, { id: 123 }).value();
     const syncValue = new Try(formatMessage, 1, 'Test', true).value();
 
-    expectTypeOf(asyncValue).toEqualTypeOf<
-      User | undefined | Promise<User | undefined>
-    >();
+    expectTypeOf(asyncValue).toEqualTypeOf<Promise<User | undefined>>();
     expectTypeOf(syncValue).toEqualTypeOf<string | undefined>();
   });
 
@@ -101,49 +99,39 @@ describe('Try README type safety', () => {
       .default('fallback')
       .value();
 
-    expectTypeOf(withDefault).toEqualTypeOf<
-      User | null | Promise<User | null>
-    >();
+    expectTypeOf(withDefault).toEqualTypeOf<Promise<User | null>>();
     expectTypeOf(syncDefault).toEqualTypeOf<string>();
   });
 
-  it('keeps error() typed as Error | undefined (or MaybePromise for async)', () => {
+  it('keeps error() typed as Error | undefined (Promise for async)', () => {
     const errorValue = new Try(fetchUser, { id: 123 })
       .report('Failed to fetch user')
       .error();
     const syncError = new Try(formatMessage, 1, 'Test', true).error();
 
-    expectTypeOf(errorValue).toEqualTypeOf<
-      Error | undefined | Promise<Error | undefined>
-    >();
+    expectTypeOf(errorValue).toEqualTypeOf<Promise<Error | undefined>>();
     expectTypeOf(syncError).toEqualTypeOf<Error | undefined>();
   });
 
-  it('keeps unwrap() typed as Awaited<T> (or MaybePromise for async)', () => {
+  it('keeps unwrap() typed as Awaited<T> (Promise for async)', () => {
     const receipt = new Try(chargeCard, { amount: 1000, currency: 'USD' })
       .report('Payment failed')
       .unwrap();
     const syncUnwrap = new Try(formatMessage, 1, 'Test', true).unwrap();
 
-    expectTypeOf(receipt).toEqualTypeOf<Receipt | Promise<Receipt>>();
+    expectTypeOf(receipt).toEqualTypeOf<Promise<Receipt>>();
     expectTypeOf(syncUnwrap).toEqualTypeOf<string>();
   });
 
-  it('types Promise-typed sync-throw terminals as MaybePromise unions', () => {
+  it('types terminals by the declared Promise return type, even for a non-async function', () => {
     function syncThrow(): Promise<number> {
       throw new Error('x');
     }
 
     const attempt = new Try(syncThrow);
-    expectTypeOf(attempt.error()).toEqualTypeOf<
-      Error | undefined | Promise<Error | undefined>
-    >();
-    expectTypeOf(attempt.value()).toEqualTypeOf<
-      number | undefined | Promise<number | undefined>
-    >();
-    expectTypeOf(attempt.unwrap).returns.toEqualTypeOf<
-      number | Promise<number>
-    >();
+    expectTypeOf(attempt.error()).toEqualTypeOf<Promise<Error | undefined>>();
+    expectTypeOf(attempt.value()).toEqualTypeOf<Promise<number | undefined>>();
+    expectTypeOf(attempt.unwrap).returns.toEqualTypeOf<Promise<number>>();
   });
 
   it('exposes finally only for fully Promise-like return types', () => {
@@ -181,7 +169,7 @@ describe('Try README type safety', () => {
     // `default()` narrows `.value()` on the object it returns.
     expectTypeOf(
       new Try(failingFetch, { id: 123 }).default(null).value(),
-    ).toEqualTypeOf<User | null | Promise<User | null>>();
+    ).toEqualTypeOf<Promise<User | null>>();
 
     // The fluent methods carry `TDefault`, so a method called after
     // `default()` keeps the narrowed `value()` type.
@@ -189,24 +177,20 @@ describe('Try README type safety', () => {
       .default(null)
       .tag('module', 'payment');
 
-    expectTypeOf(rechained.value()).toEqualTypeOf<
-      User | null | Promise<User | null>
-    >();
+    expectTypeOf(rechained.value()).toEqualTypeOf<Promise<User | null>>();
 
-    const _narrowed: User | null | Promise<User | null> = rechained.value();
+    const _narrowed: Promise<User | null> = rechained.value();
 
     expect(await rechained.value()).toBeNull();
   });
 
-  it('rejects assigning MaybePromise terminals to Promise without await', () => {
+  it('assigns async terminals to a Promise and chains .then() without await', () => {
     const terminal = new Try(fetchUser, { id: 123 }).value();
 
-    // @ts-expect-error Promise-typed terminals may settle sync
     const _p: Promise<User | undefined> = terminal;
+    const _chained: Promise<string | undefined> = terminal.then((u) => u?.name);
 
-    expectTypeOf(terminal).toEqualTypeOf<
-      User | undefined | Promise<User | undefined>
-    >();
+    expectTypeOf(terminal).toEqualTypeOf<Promise<User | undefined>>();
     expectTypeOf<Awaited<typeof terminal>>().toEqualTypeOf<User | undefined>();
   });
 
@@ -217,7 +201,7 @@ describe('Try README type safety', () => {
     new Try(fetchUser, { id: 123 }).breadcrumbs(['missingKey']);
 
     expectTypeOf(withBreadcrumbs.value()).toEqualTypeOf<
-      User | undefined | Promise<User | undefined>
+      Promise<User | undefined>
     >();
   });
 
@@ -324,7 +308,7 @@ describe('Try README type safety', () => {
     >();
     expectTypeOf(
       new Try(chargeCard, { amount: 1000, currency: 'USD' }).value(),
-    ).toEqualTypeOf<Receipt | undefined | Promise<Receipt | undefined>>();
+    ).toEqualTypeOf<Promise<Receipt | undefined>>();
   });
 
   it('rejects misspelled keys while typing transformers from their argument positions', async () => {
@@ -369,7 +353,7 @@ describe('Try README type safety', () => {
     const asyncFn = async (): Promise<number> => 1;
     expectTypeOf(new Try(syncFn).result()).toEqualTypeOf<TryResult<number>>();
     expectTypeOf(new Try(asyncFn).result()).toEqualTypeOf<
-      TryResult<number> | Promise<TryResult<number>>
+      Promise<TryResult<number>>
     >();
   });
 });

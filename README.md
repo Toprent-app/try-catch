@@ -462,7 +462,7 @@ raw return type of the wrapped function:
 | Return type of the wrapped function | Type of `.value()` / `.error()` / `.result()` |
 | --- | --- |
 | Sync-only `T` | `TValue` |
-| `Promise<T>` | `TValue \| Promise<TValue>` |
+| `Promise<T>` | `Promise<TValue>` |
 | `T \| Promise<T>` | `TValue \| Promise<TValue>` |
 | `any` | `TValue \| Promise<TValue>` |
 
@@ -479,21 +479,27 @@ const text = new Try(formatMessage, 1, 'Test', true).unwrap(); // string
 const failure = new Try(formatMessage, 1, 'Test', true).error(); // Error | undefined
 ```
 
-A function whose return type contains a Promise member yields
-`TValue | Promise<TValue>`, because such a function can throw synchronously
-before it ever creates a Promise. `await` accepts both shapes:
+A function whose return type is always a Promise yields `Promise<TValue>` from
+every terminal. You can `await` the result, chain `.then()`, or assign it to a
+`Promise<T>`:
 
 ```typescript
 const user = await new Try(fetchUser, { id: 123 }).value(); // User | undefined
-const error = await new Try(fetchUser, { id: 123 }).error(); // Error | undefined
+const pending: Promise<User | undefined> = new Try(fetchUser, { id: 123 }).value();
+new Try(fetchUser, { id: 123 }).value().then(handleUser);
 ```
 
-Callers that need an actual `Promise` — to chain `.then()`, or to satisfy a
-`Promise<T>` annotation — normalize explicitly:
+A function whose return type mixes sync and Promise members, such as
+`T | Promise<T>` or `any`, yields `TValue | Promise<TValue>`. `await` accepts
+both shapes.
 
-```typescript
-Promise.resolve(new Try(fetchUser, { id: 123 }).value()).then(handleUser);
-```
+> [!WARNING]
+> Mark each function that returns a Promise as `async`. A plain function typed
+> `(): Promise<T>` can throw before it creates a Promise. Then the terminals
+> settle synchronously, and `.then()` on the result throws a `TypeError`. An
+> `async` function turns every throw into a rejected Promise. The
+> `@typescript-eslint/promise-function-async` lint rule finds functions that
+> need `async`.
 
 ## Examples
 
@@ -607,7 +613,7 @@ const result = await new Try(complexOperation, data)
 
 ## Features
 
-- 🚀 **Sync and async in one API** - Terminals return a plain value for sync functions and `T | Promise<T>` when the return type may be a Promise; `await` covers both
+- 🚀 **Sync and async in one API** - Terminals return a plain value for sync functions, a `Promise` for async functions, and `T | Promise<T>` when the return type mixes both
 - 🔍 **Opt-in Sentry integration** - Errors are reported when `.report('message')` is in the chain
 - 🧱 **Non-Error normalization** — strings, numbers, objects thrown by callers become real `Error` instances with `.cause`
 - 🍞 **Consistent breadcrumbs** — recorded on every terminal method
